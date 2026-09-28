@@ -194,8 +194,11 @@ body{
 
 <p class="bottom-note">© <span id="year"></span> <b>Comexta</b> · Soluções em importação</p>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script src="/js/supabase-client.js"></script>
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
+const sb = window.comextaSupabase;
 
 const form = document.getElementById('senhaForm');
 const btn = form.querySelector('.btn-enter');
@@ -203,28 +206,36 @@ const erroEl = document.getElementById('senhaError');
 const okEl = document.getElementById('senhaOk');
 function mostrarErro(msg){ erroEl.textContent = msg; erroEl.hidden = !msg; }
 
+let usuario = null;
+sb.auth.getSession().then(({ data }) => {
+  if(!data.session){ window.location.replace('/login/'); return; }
+  usuario = data.session.user;
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   mostrarErro(''); okEl.hidden = true;
+  if(!usuario) return;
   const senhaAtual = document.getElementById('senhaAtual').value;
   const novaSenha = document.getElementById('novaSenha').value;
   if(novaSenha.length < 8) return mostrarErro('A nova senha precisa ter pelo menos 8 caracteres.');
   if(novaSenha !== document.getElementById('novaSenha2').value) return mostrarErro('As novas senhas não conferem.');
+  if(novaSenha === senhaAtual) return mostrarErro('A nova senha precisa ser diferente da atual.');
 
   btn.disabled = true;
   btn.textContent = 'Salvando…';
-  try{
-    const res = await fetch('/api/trocar-senha', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ senhaAtual, novaSenha }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if(res.status === 401){ window.location.href = '/login/'; return; }
-    if(res.ok && data.ok){ form.reset(); okEl.hidden = false; }
-    else mostrarErro(data.erro || 'Não foi possível trocar a senha. Tente novamente.');
-  }catch(err){
-    mostrarErro('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
+  // Confere a senha atual antes de trocar.
+  const confere = await sb.auth.signInWithPassword({ email: usuario.email, password: senhaAtual });
+  if(confere.error){
+    mostrarErro(confere.error.code==='invalid_credentials' ? 'A senha atual está incorreta.' : comextaErroAuth(confere.error));
+  }else{
+    const { error } = await sb.auth.updateUser({ password: novaSenha });
+    if(error) mostrarErro(comextaErroAuth(error));
+    else{
+      // Encerra as sessões abertas em outros aparelhos.
+      await sb.auth.signOut({ scope: 'others' });
+      form.reset(); okEl.hidden = false;
+    }
   }
   btn.disabled = false;
   btn.textContent = 'Salvar nova senha';

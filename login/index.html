@@ -244,14 +244,29 @@ body{
       <p class="form-error" id="signupError" role="alert" hidden></p>
       <button type="button" class="btn-secondary" id="sendSignup">Criar conta e entrar</button>
       </div>
+      <p class="form-ok" id="signupOk" role="status" hidden></p>
     </div>
   </div>
 </div>
 
 <p class="bottom-note">© <span id="year"></span> <b>Comexta</b> · Soluções em importação</p>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script src="/js/supabase-client.js"></script>
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
+const sb = window.comextaSupabase;
+
+// Já está logado? Vai direto para o ERP.
+sb.auth.getSession().then(({ data }) => { if(data.session) window.location.replace('/erp/'); });
+
+// "Lembrar-me" desmarcado: a sessão termina quando o navegador for fechado (o ERP confere isso).
+function marcarSessao(lembrar){
+  try{
+    localStorage.setItem('comexta-lembrar', lembrar ? '1' : '0');
+    sessionStorage.setItem('comexta-sessao-ativa', '1');
+  }catch(e){}
+}
 
 // Mostrar/ocultar senha
 const pwInput = document.getElementById('senha');
@@ -265,43 +280,31 @@ pwToggle.addEventListener('click', () => {
     : '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a18.5 18.5 0 0 1 4.22-5.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
 });
 
-// Login: valida no servidor (/api/login) e, com cadastro aprovado, abre o ERP
+function mostrar(el, msg){ el.textContent = msg || ''; el.hidden = !msg; }
+function ocupado(btn, texto){ btn.dataset.textoOriginal ||= btn.textContent; btn.disabled = !!texto; btn.textContent = texto || btn.dataset.textoOriginal; }
+
+// Entrar (Supabase Auth)
 const loginForm = document.getElementById('loginForm');
 const loginError = document.getElementById('loginError');
 const btnEnter = loginForm.querySelector('.btn-enter');
-function showLoginError(msg){
-  loginError.textContent = msg;
-  loginError.hidden = !msg;
-}
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  showLoginError('');
-  btnEnter.disabled = true;
-  btnEnter.textContent = 'Entrando…';
-  try{
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        email: document.getElementById('email').value.trim(),
-        senha: pwInput.value,
-        lembrar: loginForm.elements.lembrar.checked,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if(res.ok && data.ok){
-      window.location.href = data.redirect || '/erp/';
-      return;
-    }
-    showLoginError(data.erro || 'Não foi possível entrar. Tente novamente.');
-  }catch(err){
-    showLoginError('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
+  mostrar(loginError, '');
+  ocupado(btnEnter, 'Entrando…');
+  const { error } = await sb.auth.signInWithPassword({
+    email: document.getElementById('email').value.trim(),
+    password: pwInput.value,
+  });
+  if(!error){
+    marcarSessao(loginForm.elements.lembrar.checked);
+    window.location.href = '/erp/';
+    return;
   }
-  btnEnter.disabled = false;
-  btnEnter.textContent = 'Entrar';
+  mostrar(loginError, comextaErroAuth(error));
+  ocupado(btnEnter);
 });
 
-// "Esqueci minha senha": pede o link de redefinição, enviado ao e-mail da pessoa
+// "Esqueci minha senha": o Supabase envia ao e-mail da pessoa o link para /conta/redefinir/
 const resetPanel = document.getElementById('resetPanel');
 const resetError = document.getElementById('resetError');
 const resetOk = document.getElementById('resetOk');
@@ -317,74 +320,57 @@ document.getElementById('forgotLink').addEventListener('click', () => {
 });
 btnReset.addEventListener('click', async () => {
   const email = document.getElementById('resetEmail').value.trim();
-  resetError.hidden = true; resetOk.hidden = true;
-  if(!email){ resetError.textContent = 'Informe seu e-mail.'; resetError.hidden = false; return; }
-  btnReset.disabled = true;
-  btnReset.textContent = 'Enviando…';
-  try{
-    const res = await fetch('/api/esqueci-senha', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if(res.ok && data.ok){ resetOk.textContent = data.mensagem; resetOk.hidden = false; }
-    else { resetError.textContent = data.erro || 'Não foi possível enviar o link. Tente novamente.'; resetError.hidden = false; }
-  }catch(err){
-    resetError.textContent = 'Sem conexão com o servidor. Verifique sua internet e tente novamente.';
-    resetError.hidden = false;
-  }
-  btnReset.disabled = false;
-  btnReset.textContent = 'Enviar link de redefinição';
+  mostrar(resetError, ''); mostrar(resetOk, '');
+  if(!email) return mostrar(resetError, 'Informe seu e-mail.');
+  ocupado(btnReset, 'Enviando…');
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/conta/redefinir/',
+  });
+  if(error) mostrar(resetError, comextaErroAuth(error));
+  else mostrar(resetOk, 'Se este e-mail tiver cadastro, você vai receber em instantes um link para criar uma nova senha. Confira também a caixa de spam.');
+  ocupado(btnReset);
 });
 
-// Alternar painel de criação de conta
+// Painel de criação de conta
 const signupPanel = document.getElementById('signupPanel');
-const formTitle = document.getElementById('formTitle');
-const formSub = document.getElementById('formSub');
 document.getElementById('signupLink').addEventListener('click', () => {
   const opening = !signupPanel.classList.contains('open');
   signupPanel.classList.toggle('open');
   if(opening){ signupPanel.scrollIntoView({behavior:'smooth', block:'nearest'}); }
 });
 
-// Criar conta (/api/cadastro): a conta fica ativa na hora e a pessoa entra direto no ERP
+// Criar conta (Supabase Auth): sem aprovação; nome, empresa e telefone ficam no perfil do usuário
 const btnSignup = document.getElementById('sendSignup');
 const signupError = document.getElementById('signupError');
-function showSignupError(msg){
-  signupError.textContent = msg;
-  signupError.hidden = !msg;
-}
+const signupOk = document.getElementById('signupOk');
 btnSignup.addEventListener('click', async () => {
   const val = id => document.getElementById(id).value.trim();
-  const dados = {
-    nome: val('suNome'), empresa: val('suEmpresa'), email: val('suEmail'), telefone: val('suTelefone'),
-    senha: document.getElementById('suSenha').value, site: val('suSite'),
-  };
-  if(!dados.nome || !dados.empresa || !dados.email) return showSignupError('Preencha nome, empresa e e-mail.');
-  if(dados.senha.length < 8) return showSignupError('A senha precisa ter pelo menos 8 caracteres.');
-  if(dados.senha !== document.getElementById('suSenha2').value) return showSignupError('As senhas não conferem.');
+  const d = { nome: val('suNome'), empresa: val('suEmpresa'), email: val('suEmail'), telefone: val('suTelefone'), senha: document.getElementById('suSenha').value };
+  if(val('suSite')) return; // campo invisível preenchido: robô
+  if(!d.nome || !d.empresa || !d.email) return mostrar(signupError, 'Preencha nome, empresa e e-mail.');
+  if(d.senha.length < 8) return mostrar(signupError, 'A senha precisa ter pelo menos 8 caracteres.');
+  if(d.senha !== document.getElementById('suSenha2').value) return mostrar(signupError, 'As senhas não conferem.');
 
-  showSignupError('');
-  btnSignup.disabled = true;
-  btnSignup.textContent = 'Criando conta…';
-  try{
-    const res = await fetch('/api/cadastro', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(dados),
-    });
-    const data = await res.json().catch(() => ({}));
-    if(res.ok && data.ok){
-      window.location.href = data.redirect || '/erp/';
-      return;
-    }
-    showSignupError(data.erro || 'Não foi possível criar a conta. Tente novamente.');
-  }catch(err){
-    showSignupError('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
+  mostrar(signupError, '');
+  ocupado(btnSignup, 'Criando conta…');
+  const { data, error } = await sb.auth.signUp({
+    email: d.email,
+    password: d.senha,
+    options: {
+      data: { nome: d.nome, empresa: d.empresa, telefone: d.telefone },
+      emailRedirectTo: window.location.origin + '/erp/',
+    },
+  });
+  if(error){ mostrar(signupError, comextaErroAuth(error)); ocupado(btnSignup); return; }
+  if(data.session){
+    marcarSessao(false);
+    window.location.href = '/erp/';
+    return;
   }
-  btnSignup.disabled = false;
-  btnSignup.textContent = 'Criar conta e entrar';
+  // Com "Confirm email" ligado no Supabase, a conta só entra depois de clicar no link do e-mail.
+  // (Se o e-mail já existir, o Supabase também cai aqui, sem revelar isso.)
+  document.getElementById('signupFields').hidden = true;
+  mostrar(signupOk, 'Conta criada! Enviamos um link de confirmação para ' + d.email + '. Abra o e-mail e clique no link para entrar no ERP.');
 });
 </script>
 </body>

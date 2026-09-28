@@ -12,6 +12,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script src="/js/supabase-client.js"></script>
 <style>
 :root{
   --paper:#F7F5F0;
@@ -522,24 +524,37 @@ function toast(msg, kind){
 }
 
 /* ------------------------------ Storage --------------------------------- */
-// Cotações, simulações e cadastros ficam no servidor, na conta de cada usuário (/api/dados):
-// cada pessoa só vê os próprios dados, em qualquer computador. Rascunhos (":draft") ficam só
-// neste navegador, também separados por usuário.
+// Cotações, simulações e cadastros ficam no Supabase (tabela erp_dados), na conta de cada usuário:
+// as regras do banco (RLS) só deixam cada pessoa ver e alterar as próprias linhas, em qualquer
+// computador. Rascunhos (":draft") ficam só neste navegador, também separados por usuário.
+const sb = window.comextaSupabase;
 const CHAVE_LOCAL = /:draft$/;
 const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','filtrosTodas:fixado'];
 let usuarioAtual = null; // { id, email, nome, empresa } — preenchido por carregarUsuario()
-const chaveLocal = key => 'comexta:u:' + usuarioAtual.id.slice(0,24) + ':' + key;
+const chaveLocal = key => 'comexta:u:' + usuarioAtual.id + ':' + key;
 const filasGravacao = {};   // grava cada chave em ordem, para uma gravação antiga não sobrescrever uma nova
 let gravacoesPendentes = 0;
 
 function sessaoExpirada(){ window.location.href = '/login/'; }
+const erroDeSessao = error => error && (error.code==='PGRST301' || error.code==='PGRST303' || /jwt/i.test(error.message||''));
 
 async function carregarUsuario(){
-  const res = await fetch('/api/eu', { cache:'no-store' });
-  if(res.status===401){ sessaoExpirada(); return false; }
-  if(!res.ok) throw new Error('Falha ao identificar usuário: ' + res.status);
-  usuarioAtual = await res.json();
+  const { data } = await sb.auth.getSession();
+  const session = data.session;
+  if(!session){ sessaoExpirada(); return false; }
+  // "Lembrar-me" desmarcado no login: a sessão acaba quando o navegador é fechado.
+  let lembrar = '1', sessaoAtiva = '1';
+  try{ lembrar = localStorage.getItem('comexta-lembrar') || '1'; sessaoAtiva = sessionStorage.getItem('comexta-sessao-ativa'); }catch(e){}
+  if(lembrar==='0' && !sessaoAtiva){ await sb.auth.signOut({ scope:'local' }); sessaoExpirada(); return false; }
+  const u = session.user, meta = u.user_metadata || {};
+  usuarioAtual = { id: u.id, email: u.email, nome: meta.nome || '', empresa: meta.empresa || '' };
+  sb.auth.onAuthStateChange((evento, sessao)=>{ if(evento==='SIGNED_OUT' || !sessao) sessaoExpirada(); });
   return true;
+}
+
+async function sair(){
+  await sb.auth.signOut({ scope:'local' });
+  window.location.href = '/login/';
 }
 
 async function storeGetMany(keys){
@@ -550,26 +565,27 @@ async function storeGetMany(keys){
   }
   const remotas = keys.filter(k=>!CHAVE_LOCAL.test(k));
   if(remotas.length){
-    const res = await fetch('/api/dados?chaves=' + encodeURIComponent(remotas.join(',')), { cache:'no-store' });
-    if(res.status===401){ sessaoExpirada(); throw new Error('Sessão expirada'); }
-    if(!res.ok) throw new Error('Falha ao carregar dados: ' + res.status);
-    Object.assign(valores, (await res.json()).valores);
+    const { data, error } = await sb.from('erp_dados').select('chave, valor').in('chave', remotas);
+    if(erroDeSessao(error)){ sessaoExpirada(); throw new Error('Sessão expirada'); }
+    if(error) throw new Error('Falha ao carregar dados: ' + error.message);
+    remotas.forEach(k=>{ valores[k] = null; });
+    data.forEach(l=>{ valores[l.chave] = l.valor; });
   }
   return valores;
 }
 async function storeGet(key){ return (await storeGetMany([key]))[key]; }
 
-function gravarNoServidor(key, metodo, corpo){
+function gravarNoServidor(key, operacao){
   gravacoesPendentes++;
   const tarefa = (filasGravacao[key] || Promise.resolve()).then(async ()=>{
     try{
-      const res = await fetch('/api/dados?chave=' + encodeURIComponent(key), {
-        method: metodo, headers: { 'content-type':'application/json' }, body: corpo,
-      });
-      if(res.status===401){ sessaoExpirada(); return false; }
-      if(!res.ok){
-        const d = await res.json().catch(()=>({}));
-        toast(d.erro || 'Não foi possível salvar no servidor. Tente novamente.');
+      const { error } = await operacao();
+      if(erroDeSessao(error)){ sessaoExpirada(); return false; }
+      if(error){
+        console.error('storage set failed', key, error);
+        toast(/too large|payload|413/i.test(error.message||'')
+          ? 'Os dados ficaram grandes demais para salvar. Remova anexos ou fotos muito pesados.'
+          : 'Não foi possível salvar no servidor. Tente novamente.');
         return false;
       }
       return true;
@@ -587,14 +603,16 @@ async function storeSet(key, value){
     try{ localStorage.setItem(chaveLocal(key), JSON.stringify(value)); return true; }
     catch(e){ console.error('storage set failed', key, e); return false; }
   }
-  return gravarNoServidor(key, 'PUT', JSON.stringify(value));
+  const valor = JSON.parse(JSON.stringify(value)); // fotografia do valor no momento da chamada
+  return gravarNoServidor(key, ()=>sb.from('erp_dados').upsert(
+    { user_id: usuarioAtual.id, chave: key, valor }, { onConflict:'user_id,chave' }));
 }
 async function storeDelete(key){
   if(CHAVE_LOCAL.test(key)){
     try{ localStorage.removeItem(chaveLocal(key)); return true; }
     catch(e){ return false; }
   }
-  return gravarNoServidor(key, 'DELETE');
+  return gravarNoServidor(key, ()=>sb.from('erp_dados').delete().eq('chave', key));
 }
 window.addEventListener('beforeunload', (e)=>{
   if(gravacoesPendentes>0){ e.preventDefault(); e.returnValue = ''; }
@@ -1328,7 +1346,7 @@ function topbarHtml(){
       <div class="logo-chip"><img src="${COMEXTA_LOGO_URI}" alt="Comexta — comércio exterior inteligente"></div>
     </div>
     <a class="pill-btn" href="/conta/senha/" title="Trocar sua senha" style="text-decoration:none;">Trocar senha</a>
-    <a class="pill-btn" href="/api/logout" title="Sair (${esc(usuarioAtual ? usuarioAtual.email : '')})" style="text-decoration:none;">Sair</a>
+    <a class="pill-btn" href="/login/" onclick="event.preventDefault(); sair();" title="Sair (${esc(usuarioAtual ? usuarioAtual.email : '')})" style="text-decoration:none;">Sair</a>
   </div>`;
 }
 function sideNavHtml(){

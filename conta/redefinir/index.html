@@ -191,21 +191,35 @@ body{
 
 <p class="bottom-note">© <span id="year"></span> <b>Comexta</b> · Soluções em importação</p>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script src="/js/supabase-client.js"></script>
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
-
-// O token vem no fragmento (#t=...); guarda em memória e tira da barra de endereço.
-const token = new URLSearchParams(location.hash.slice(1)).get('t');
-history.replaceState(null, '', location.pathname);
 
 const form = document.getElementById('redefinirForm');
 const btn = form.querySelector('.btn-enter');
 const erroEl = document.getElementById('redefinirError');
 function mostrarErro(msg){ erroEl.textContent = msg; erroEl.hidden = !msg; }
-
-if(!token){
+function bloquear(msg){
   form.querySelectorAll('input, button').forEach(el => el.disabled = true);
-  mostrarErro('Link incompleto. Abra o link exatamente como veio no e-mail ou peça um novo em "Esqueci minha senha".');
+  mostrarErro(msg);
+}
+
+// O link do e-mail traz a sessão de recuperação no fragmento (#access_token=...&type=recovery);
+// o client do Supabase lê e limpa o endereço sozinho. Link vencido chega como #error=...
+const hash = new URLSearchParams(location.hash.slice(1));
+const erroNoLink = hash.get('error_code') || hash.get('error');
+const sb = window.comextaSupabase;
+
+if(erroNoLink){
+  history.replaceState(null, '', location.pathname);
+  bloquear(hash.get('error_code')==='otp_expired'
+    ? 'Este link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".'
+    : 'Link inválido. Peça um novo em "Esqueci minha senha".');
+}else{
+  sb.auth.getSession().then(({ data }) => {
+    if(!data.session) bloquear('Link incompleto ou expirado. Abra o link exatamente como veio no e-mail ou peça um novo em "Esqueci minha senha".');
+  });
 }
 
 form.addEventListener('submit', async (e) => {
@@ -217,18 +231,14 @@ form.addEventListener('submit', async (e) => {
 
   btn.disabled = true;
   btn.textContent = 'Salvando…';
-  try{
-    const res = await fetch('/api/redefinir-senha', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ t: token, novaSenha }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if(res.ok && data.ok){ window.location.href = data.redirect || '/erp/'; return; }
-    mostrarErro(data.erro || 'Não foi possível salvar a nova senha. Tente novamente.');
-  }catch(err){
-    mostrarErro('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
+  const { error } = await sb.auth.updateUser({ password: novaSenha });
+  if(!error){
+    await sb.auth.signOut({ scope: 'others' });
+    try{ localStorage.setItem('comexta-lembrar', '0'); sessionStorage.setItem('comexta-sessao-ativa', '1'); }catch(err){}
+    window.location.href = '/erp/';
+    return;
   }
+  mostrarErro(comextaErroAuth(error));
   btn.disabled = false;
   btn.textContent = 'Salvar e entrar';
 });
