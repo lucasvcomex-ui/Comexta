@@ -109,6 +109,11 @@ body{
 }
 .btn-enter:hover{background:var(--accent-deep);}
 .btn-enter:active{transform:translateY(1px);}
+.btn-enter:disabled{opacity:.7; cursor:wait;}
+.form-error{
+  margin:0 0 14px; padding:10px 12px; border-radius:10px; font-size:13px; line-height:1.45;
+  background:#FBEAEA; color:#9B2C2C; border:1px solid #F1CACA;
+}
 
 .foot-links{display:flex; justify-content:center; gap:8px; margin-top:22px; font-size:13.5px; color:var(--ink-soft);}
 
@@ -179,6 +184,7 @@ body{
         <a class="link" id="forgotLink">Esqueci minha senha</a>
       </div>
 
+      <p class="form-error" id="loginError" role="alert" hidden></p>
       <button type="submit" class="btn-enter">Entrar</button>
     </form>
 
@@ -188,7 +194,7 @@ body{
 
     <div class="signup-panel" id="signupPanel">
       <div class="sp-title">Solicitar nova conta</div>
-      <p class="sp-note">Preencha os dados abaixo. Seu pedido será enviado para a equipe da Comexta por e-mail para aprovação do cadastro.</p>
+      <p class="sp-note">Preencha os dados abaixo. Seu pedido será enviado para a equipe da Comexta por e-mail. Após a aprovação, você recebe uma senha provisória para entrar.</p>
 
       <div class="field">
         <label for="suNome">Nome completo</label>
@@ -229,10 +235,40 @@ pwToggle.addEventListener('click', () => {
     : '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a18.5 18.5 0 0 1 4.22-5.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
 });
 
-// Login: sem backend real -> apenas orienta visualmente (evita simular sucesso falso)
-document.getElementById('loginForm').addEventListener('submit', (e) => {
+// Login: valida no servidor (/api/login) e, com cadastro aprovado, abre o ERP
+const loginForm = document.getElementById('loginForm');
+const loginError = document.getElementById('loginError');
+const btnEnter = loginForm.querySelector('.btn-enter');
+function showLoginError(msg){
+  loginError.textContent = msg;
+  loginError.hidden = !msg;
+}
+loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  alert('Esta é uma página de demonstração de layout. Para funcionar de verdade, o botão "Entrar" precisa ser conectado ao sistema de autenticação da Comexta.');
+  showLoginError('');
+  btnEnter.disabled = true;
+  btnEnter.textContent = 'Entrando…';
+  try{
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('email').value.trim(),
+        senha: pwInput.value,
+        lembrar: loginForm.elements.lembrar.checked,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if(res.ok && data.ok){
+      window.location.href = data.redirect || '/erp/';
+      return;
+    }
+    showLoginError(data.erro || 'Não foi possível entrar. Tente novamente.');
+  }catch(err){
+    showLoginError('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
+  }
+  btnEnter.disabled = false;
+  btnEnter.textContent = 'Entrar';
 });
 
 document.getElementById('forgotLink').addEventListener('click', () => {
