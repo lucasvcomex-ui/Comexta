@@ -522,19 +522,109 @@ function toast(msg, kind){
 }
 
 /* ------------------------------ Storage --------------------------------- */
-async function storeGet(key){
-  try{
-    const raw = localStorage.getItem('comexta:'+key);
-    return raw!==null ? JSON.parse(raw) : null;
-  }catch(e){ return null; }
+// Cotações, simulações e cadastros ficam no servidor, na conta de cada usuário (/api/dados):
+// cada pessoa só vê os próprios dados, em qualquer computador. Rascunhos (":draft") ficam só
+// neste navegador, também separados por usuário.
+const CHAVE_LOCAL = /:draft$/;
+const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','filtrosTodas:fixado'];
+let usuarioAtual = null; // { id, email, nome, empresa } — preenchido por carregarUsuario()
+const chaveLocal = key => 'comexta:u:' + usuarioAtual.id.slice(0,24) + ':' + key;
+const filasGravacao = {};   // grava cada chave em ordem, para uma gravação antiga não sobrescrever uma nova
+let gravacoesPendentes = 0;
+
+function sessaoExpirada(){ window.location.href = '/login/'; }
+
+async function carregarUsuario(){
+  const res = await fetch('/api/eu', { cache:'no-store' });
+  if(res.status===401){ sessaoExpirada(); return false; }
+  if(!res.ok) throw new Error('Falha ao identificar usuário: ' + res.status);
+  usuarioAtual = await res.json();
+  return true;
+}
+
+async function storeGetMany(keys){
+  const valores = {};
+  for(const k of keys.filter(k=>CHAVE_LOCAL.test(k))){
+    try{ const raw = localStorage.getItem(chaveLocal(k)); valores[k] = raw!==null ? JSON.parse(raw) : null; }
+    catch(e){ valores[k] = null; }
+  }
+  const remotas = keys.filter(k=>!CHAVE_LOCAL.test(k));
+  if(remotas.length){
+    const res = await fetch('/api/dados?chaves=' + encodeURIComponent(remotas.join(',')), { cache:'no-store' });
+    if(res.status===401){ sessaoExpirada(); throw new Error('Sessão expirada'); }
+    if(!res.ok) throw new Error('Falha ao carregar dados: ' + res.status);
+    Object.assign(valores, (await res.json()).valores);
+  }
+  return valores;
+}
+async function storeGet(key){ return (await storeGetMany([key]))[key]; }
+
+function gravarNoServidor(key, metodo, corpo){
+  gravacoesPendentes++;
+  const tarefa = (filasGravacao[key] || Promise.resolve()).then(async ()=>{
+    try{
+      const res = await fetch('/api/dados?chave=' + encodeURIComponent(key), {
+        method: metodo, headers: { 'content-type':'application/json' }, body: corpo,
+      });
+      if(res.status===401){ sessaoExpirada(); return false; }
+      if(!res.ok){
+        const d = await res.json().catch(()=>({}));
+        toast(d.erro || 'Não foi possível salvar no servidor. Tente novamente.');
+        return false;
+      }
+      return true;
+    }catch(e){
+      console.error('storage set failed', key, e);
+      toast('Sem conexão: as últimas alterações não foram salvas no servidor.');
+      return false;
+    }finally{ gravacoesPendentes--; }
+  });
+  filasGravacao[key] = tarefa;
+  return tarefa;
 }
 async function storeSet(key, value){
-  try{ localStorage.setItem('comexta:'+key, JSON.stringify(value)); return true; }
-  catch(e){ console.error('storage set failed', key, e); return false; }
+  if(CHAVE_LOCAL.test(key)){
+    try{ localStorage.setItem(chaveLocal(key), JSON.stringify(value)); return true; }
+    catch(e){ console.error('storage set failed', key, e); return false; }
+  }
+  return gravarNoServidor(key, 'PUT', JSON.stringify(value));
 }
 async function storeDelete(key){
-  try{ localStorage.removeItem('comexta:'+key); return true; }
-  catch(e){ return false; }
+  if(CHAVE_LOCAL.test(key)){
+    try{ localStorage.removeItem(chaveLocal(key)); return true; }
+    catch(e){ return false; }
+  }
+  return gravarNoServidor(key, 'DELETE');
+}
+window.addEventListener('beforeunload', (e)=>{
+  if(gravacoesPendentes>0){ e.preventDefault(); e.returnValue = ''; }
+});
+
+// Antes do login por usuário, os dados ficavam soltos no navegador ("comexta:<chave>").
+// Se a conta ainda estiver vazia, oferece importar esses dados — só com confirmação, porque
+// o navegador pode ser compartilhado e os dados podem ser de outra pessoa.
+async function importarDadosAntigos(valores){
+  const todas = [...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft'];
+  const antigos = {};
+  for(const k of todas){
+    try{ const raw = localStorage.getItem('comexta:'+k); if(raw!==null) antigos[k] = JSON.parse(raw); }catch(e){}
+  }
+  if(!CHAVES_SERVIDOR.some(k=>antigos[k]!=null)) return false;
+  if(CHAVES_SERVIDOR.some(k=>valores[k]!=null)) return false;
+  const ok = confirm('Encontramos cotações e cadastros salvos neste navegador antes do login por usuário.\n\n'
+    + 'Deseja importá-los para a conta ' + usuarioAtual.email + '?\n\n'
+    + 'Clique em Cancelar se esses dados não forem seus.');
+  if(!ok) return false;
+  const resultados = await Promise.all(CHAVES_SERVIDOR.filter(k=>antigos[k]!=null).map(k=>storeSet(k, antigos[k])));
+  if(resultados.some(r=>!r)){ toast('Não foi possível importar tudo. Tente recarregar a página.'); return false; }
+  for(const k of todas){
+    if(antigos[k]==null) continue;
+    if(CHAVE_LOCAL.test(k)) await storeSet(k, antigos[k]);
+    else valores[k] = antigos[k];
+    localStorage.removeItem('comexta:'+k);
+  }
+  toast('Dados importados para a sua conta.', 'ok');
+  return true;
 }
 
 /* -------------------------------- Icones --------------------------------- */
@@ -1109,13 +1199,15 @@ const saveDraftFormal = debounce(async ()=>{ await storeSet('dadosFormal:draft',
 const saveDraftSimulacao = debounce(async ()=>{ await storeSet('simulacao:draft', state.simulacao); }, 500);
 
 async function loadInitialData(){
-  const [draft, idx, cli, forn, prod, draftF, idxF, draftS, idxS, filtrosSalvos] = await Promise.all([
-    storeGet('dados:draft'), storeGet('cotacoes:index'),
-    storeGet('clientes:list'), storeGet('fornecedores:list'), storeGet('produtos:list'),
-    storeGet('dadosFormal:draft'), storeGet('cotacoesFormal:index'),
-    storeGet('simulacao:draft'), storeGet('simulacoes:index'),
-    storeGet('filtrosTodas:fixado'),
-  ]);
+  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft']);
+  await importarDadosAntigos(v);
+  const [draft, idx, cli, forn, prod, draftF, idxF, draftS, idxS, filtrosSalvos] = [
+    v['dados:draft'], v['cotacoes:index'],
+    v['clientes:list'], v['fornecedores:list'], v['produtos:list'],
+    v['dadosFormal:draft'], v['cotacoesFormal:index'],
+    v['simulacao:draft'], v['simulacoes:index'],
+    v['filtrosTodas:fixado'],
+  ];
   if(draft) state.dados = normalizeDados(draft);
   if(idx) state.cotacoesIndex = idx;
   if(cli) state.clientes = cli;
@@ -1236,7 +1328,7 @@ function topbarHtml(){
       <div class="logo-chip"><img src="${COMEXTA_LOGO_URI}" alt="Comexta — comércio exterior inteligente"></div>
     </div>
     <a class="pill-btn" href="/conta/senha/" title="Trocar sua senha" style="text-decoration:none;">Trocar senha</a>
-    <a class="pill-btn" href="/api/logout" title="Sair do sistema" style="text-decoration:none;">Sair</a>
+    <a class="pill-btn" href="/api/logout" title="Sair (${esc(usuarioAtual ? usuarioAtual.email : '')})" style="text-decoration:none;">Sair</a>
   </div>`;
 }
 function sideNavHtml(){
@@ -5815,7 +5907,18 @@ async function init(){
       renderApp();
     }
   });
-  await loadInitialData();
+  try{
+    if(!(await carregarUsuario())) return;
+    await loadInitialData();
+  }catch(err){
+    // Sem os dados do servidor não renderiza o ERP: salvar em cima de listas vazias apagaria as cotações.
+    console.error('Falha ao carregar dados:', err);
+    document.getElementById('app').innerHTML = `<div style="max-width:460px;margin:80px auto;padding:0 16px;text-align:center;font-family:var(--font-body);">
+      <h2 style="font-family:var(--font-display);color:var(--navy);">Não foi possível carregar seus dados</h2>
+      <p style="color:var(--ink-soft);line-height:1.5;">Verifique sua conexão com a internet e tente novamente.</p>
+      <button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></div>`;
+    return;
+  }
   renderApp();
 }
 init();

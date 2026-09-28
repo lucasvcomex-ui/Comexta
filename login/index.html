@@ -211,8 +211,8 @@ body{
     </div>
 
     <div class="signup-panel" id="signupPanel">
-      <div class="sp-title">Solicitar nova conta</div>
-      <p class="sp-note">Preencha os dados abaixo e escolha sua senha. A equipe da Comexta recebe o pedido por e-mail; assim que for aprovado, você entra com este e-mail e esta senha.</p>
+      <div class="sp-title">Criar nova conta</div>
+      <p class="sp-note">Preencha os dados abaixo e escolha sua senha. Sua conta é criada na hora e você já entra no ERP. Suas cotações ficam visíveis só para você.</p>
 
       <div id="signupFields">
       <div class="field">
@@ -242,9 +242,8 @@ body{
       <input type="text" id="suSite" name="site" tabindex="-1" autocomplete="off" aria-hidden="true" class="hp">
 
       <p class="form-error" id="signupError" role="alert" hidden></p>
-      <button type="button" class="btn-secondary" id="sendSignup">Enviar solicitação de cadastro</button>
+      <button type="button" class="btn-secondary" id="sendSignup">Criar conta e entrar</button>
       </div>
-      <p class="form-ok" id="signupOk" role="status" hidden></p>
     </div>
   </div>
 </div>
@@ -349,7 +348,7 @@ document.getElementById('signupLink').addEventListener('click', () => {
   if(opening){ signupPanel.scrollIntoView({behavior:'smooth', block:'nearest'}); }
 });
 
-// Enviar solicitação de cadastro (/api/cadastro avisa a equipe Comexta por e-mail para aprovação)
+// Criar conta (/api/cadastro): a conta fica ativa na hora e a pessoa entra direto no ERP
 const btnSignup = document.getElementById('sendSignup');
 const signupError = document.getElementById('signupError');
 function showSignupError(msg){
@@ -368,7 +367,7 @@ btnSignup.addEventListener('click', async () => {
 
   showSignupError('');
   btnSignup.disabled = true;
-  btnSignup.textContent = 'Enviando…';
+  btnSignup.textContent = 'Criando conta…';
   try{
     const res = await fetch('/api/cadastro', {
       method: 'POST',
@@ -377,18 +376,15 @@ btnSignup.addEventListener('click', async () => {
     });
     const data = await res.json().catch(() => ({}));
     if(res.ok && data.ok){
-      document.getElementById('signupFields').hidden = true;
-      const ok = document.getElementById('signupOk');
-      ok.textContent = 'Solicitação enviada! A equipe da Comexta vai analisar seu cadastro. Assim que for aprovado, entre com ' + dados.email + ' e a senha que você escolheu.';
-      ok.hidden = false;
+      window.location.href = data.redirect || '/erp/';
       return;
     }
-    showSignupError(data.erro || 'Não foi possível enviar a solicitação. Tente novamente.');
+    showSignupError(data.erro || 'Não foi possível criar a conta. Tente novamente.');
   }catch(err){
     showSignupError('Sem conexão com o servidor. Verifique sua internet e tente novamente.');
   }
   btnSignup.disabled = false;
-  btnSignup.textContent = 'Enviar solicitação de cadastro';
+  btnSignup.textContent = 'Criar conta e entrar';
 });
 </script>
 </body>

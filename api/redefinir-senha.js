@@ -1,6 +1,6 @@
 // Recebe o token do link de redefinição e a nova senha; em caso de sucesso já entra no ERP.
 import { createSessionToken, novaSenhaHash, sessionCookie, sessionMaxAge, validarSenha, verifyToken } from '../lib/auth.js';
-import { lerUsuario } from '../lib/usuarios.js';
+import { ativo, lerUsuario } from '../lib/usuarios.js';
 import { salvarUsuario } from '../lib/usuarios-escrita.js';
 import { json, lerJson } from '../lib/respostas.js';
 
@@ -14,7 +14,7 @@ export async function POST(request){
   const data = await verifyToken(body.t, secret);
   if(!data || data.t!=='r' || !data.e) return json(400, { ok:false, erro:LINK_INVALIDO });
   const usuario = await lerUsuario(data.e);
-  if(!usuario || usuario.status!=='aprovado' || (usuario.versao||0)!==data.v){
+  if(!ativo(usuario) || (usuario.versao||0)!==data.v){
     return json(400, { ok:false, erro:LINK_INVALIDO });
   }
 

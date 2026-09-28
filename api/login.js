@@ -1,5 +1,5 @@
 import { createSessionToken, normalizeEmail, sessionCookie, sessionMaxAge, verifyPassword } from '../lib/auth.js';
-import { lerUsuario } from '../lib/usuarios.js';
+import { ativo, lerUsuario } from '../lib/usuarios.js';
 import { json, lerJson } from '../lib/respostas.js';
 
 export async function POST(request){
@@ -14,12 +14,9 @@ export async function POST(request){
   if(!email || !senha) return json(400, { ok:false, erro:'Informe e-mail e senha.' });
 
   const usuario = await lerUsuario(normalizeEmail(email));
-  if(!(await verifyPassword(usuario, senha)) || usuario.status==='recusado'){
+  if(!(await verifyPassword(usuario, senha)) || !ativo(usuario)){
     await new Promise(r=>setTimeout(r, 400)); // desacelera tentativas repetidas
     return json(401, { ok:false, erro:'E-mail ou senha incorretos.' });
-  }
-  if(usuario.status!=='aprovado'){
-    return json(403, { ok:false, erro:'Seu cadastro ainda está aguardando aprovação da equipe Comexta.' });
   }
 
   const token = await createSessionToken(usuario, secret, lembrar);

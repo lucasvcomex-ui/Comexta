@@ -1,14 +1,14 @@
 // "Esqueci minha senha": envia ao e-mail da pessoa um link de redefinição válido por 1 hora.
 // A resposta é a mesma exista ou não o cadastro, para não revelar quais e-mails estão registrados.
 import { isEmail, normalizeEmail, signToken } from '../lib/auth.js';
-import { lerUsuario } from '../lib/usuarios.js';
+import { ativo, lerUsuario } from '../lib/usuarios.js';
 import { salvarUsuario } from '../lib/usuarios-escrita.js';
 import { emailConfigurado, enviarEmail, esc } from '../lib/email.js';
 import { json, lerJson } from '../lib/respostas.js';
 
 const VALIDADE = 60*60;          // 1 hora
 const INTERVALO_MINIMO = 2*60*1000; // evita encher a caixa de alguém com pedidos seguidos
-const RESPOSTA = { ok:true, mensagem:'Se este e-mail tiver cadastro aprovado, você vai receber em instantes um link para criar uma nova senha. Confira também a caixa de spam.' };
+const RESPOSTA = { ok:true, mensagem:'Se este e-mail tiver cadastro, você vai receber em instantes um link para criar uma nova senha. Confira também a caixa de spam.' };
 
 export async function POST(request){
   const secret = process.env.COMEXTA_SECRET;
@@ -21,7 +21,7 @@ export async function POST(request){
   if(!isEmail(email)) return json(400, { ok:false, erro:'Informe um e-mail válido.' });
 
   const usuario = await lerUsuario(email);
-  if(!usuario || usuario.status!=='aprovado') return json(200, RESPOSTA);
+  if(!ativo(usuario)) return json(200, RESPOSTA);
   if(usuario.resetPedidoEm && Date.now()-Date.parse(usuario.resetPedidoEm) < INTERVALO_MINIMO) return json(200, RESPOSTA);
 
   usuario.resetPedidoEm = new Date().toISOString();
