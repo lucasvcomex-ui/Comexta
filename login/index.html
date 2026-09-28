@@ -33,6 +33,7 @@ body{
     radial-gradient(1100px 620px at 85% -10%, rgba(255,255,255,0.06) 0%, transparent 60%),
     linear-gradient(165deg, var(--navy) 0%, var(--navy-deep) 100%);
   display:flex;
+  flex-direction:column;
   align-items:center;
   justify-content:center;
   padding:32px 20px;
@@ -85,6 +86,7 @@ body{
 .field input:focus{border-color:var(--accent); background:var(--white); box-shadow:0 0 0 4px rgba(47,111,196,0.14);}
 
 .pw-row{position:relative;}
+.pw-row input{width:100%; padding-right:44px;}
 .pw-toggle{
   position:absolute; right:6px; top:50%; transform:translateY(-50%);
   background:none; border:none; cursor:pointer; padding:6px; color:var(--ink-soft);
