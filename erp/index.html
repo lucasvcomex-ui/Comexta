@@ -507,6 +507,35 @@ td.num-mono, th.num-mono{text-align:right;}
 .completar-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 16px;
   background:linear-gradient(165deg,var(--navy) 0%, var(--navy-deep) 100%);}
 .completar-card{max-width:620px; width:100%; margin:0;}
+
+/* ---------- Personalização ---------- */
+.pers-tabs{display:inline-flex; gap:4px; padding:4px; background:var(--paper-2); border-radius:999px; margin-bottom:18px; flex-wrap:wrap;}
+.pers-tab{border:none; background:transparent; padding:8px 16px; border-radius:999px; font-weight:700; font-size:13px; color:var(--ink-soft); cursor:pointer; font-family:inherit;}
+.pers-tab.active{background:var(--surface); color:var(--navy); box-shadow:var(--shadow);}
+.pers-grid{display:grid; grid-template-columns:1.1fr 1fr; gap:28px; align-items:start;}
+@media (max-width:980px){ .pers-grid{grid-template-columns:1fr;} }
+.cor-campo{display:flex; gap:8px; align-items:center;}
+.cor-campo input[type=color]{width:46px; height:42px; padding:3px; border:1px solid var(--line); border-radius:var(--radius-sm); background:#fff; cursor:pointer;}
+.cor-campo input:not([type=color]){flex:1; font-family:var(--font-mono); text-transform:uppercase;}
+.logo-campo{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+.logo-amostra{height:58px; min-width:120px; max-width:220px; padding:8px 12px; border:1px dashed var(--line); border-radius:var(--radius-sm); background:#fff; display:flex; align-items:center; justify-content:center;}
+.logo-amostra img{max-height:42px; max-width:196px; display:block;}
+.pdf-previa{border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:var(--shadow); aspect-ratio:1.414/1;}
+.pp-cabecalho{display:flex; align-items:center; gap:12px; padding:10px 12px;}
+.pp-logo{background:#fff; border-radius:4px; padding:4px 7px; display:flex; align-items:center;}
+.pp-logo img{height:22px; max-width:110px; display:block;}
+.pp-titulo{display:flex; flex-direction:column; line-height:1.2;}
+.pp-titulo b{font-size:12.5px;} .pp-titulo small{font-size:10px; opacity:0.85;}
+.pp-corpo{padding:14px;}
+.pp-tabela{border:1px solid rgba(0,0,0,0.12); border-radius:3px; overflow:hidden; background:#fff;}
+.pp-th{font-size:10px; font-weight:700; padding:6px 8px;}
+.pp-td{height:14px; border-top:1px solid rgba(0,0,0,0.08);}
+.pessoas-lista{border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; max-width:760px;}
+.pl-head, .pl-row{display:grid; grid-template-columns:1.4fr 1fr 40px; gap:10px; align-items:center; padding:8px 12px;}
+.pl-head{background:var(--navy-100); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--navy-deep);}
+.pl-row{border-top:1px solid var(--line-soft);}
+.pl-row input{border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13.5px; font-family:var(--font-body); min-width:0;}
+.field select[data-bind]{border:1px solid var(--line); background:#fff; border-radius:var(--radius-sm); padding:10px 12px; font-size:14px; font-family:var(--font-body); color:var(--ink);}
 </style>
 </head>
 <body>
@@ -958,9 +987,12 @@ function renderConfig(){
   const abas = [
     { id:'perfil', label:'Meu perfil' },
     { id:'empresa', label:'Empresa' },
-    ...(souAdmin() ? [{ id:'equipe', label:'Equipe e permissões' }] : []),
+    ...(souAdmin() ? [{ id:'equipe', label:'Equipe e permissões' }, { id:'personalizacao', label:'Personalização' }] : []),
   ];
-  let conteudo = aba==='empresa' ? renderConfigEmpresa() : aba==='equipe' && souAdmin() ? renderConfigEquipe() : renderConfigPerfil();
+  let conteudo = aba==='empresa' ? renderConfigEmpresa()
+    : aba==='equipe' && souAdmin() ? renderConfigEquipe()
+    : aba==='personalizacao' && souAdmin() ? renderConfigPersonalizacao()
+    : renderConfigPerfil();
   return `
   <div class="page-title">Configurações</div>
   <div class="page-sub">${esc(usuarioAtual.nome || usuarioAtual.email)} · ${esc(nomeEmpresa())} · ${souAdmin() ? 'Administrador' : 'Membro da equipe'}</div>
@@ -1287,9 +1319,10 @@ async function cancelarConvite(id){
   renderApp();
 }
 
-function acaoConfig(cmd, a1){
+function acaoConfig(cmd, a1, a2){
+  if(cmd.startsWith('cfg-pers') && acaoPersonalizacao(cmd, a1, a2)) return;
   switch(cmd){
-    case 'cfg-aba': state.configTab = a1; state.cfgConviteGerado = null; renderApp(); break;
+    case 'cfg-aba': state.configTab = a1; state.cfgConviteGerado = null; state.cfgEstilo = null; state.cfgPessoas = null; renderApp(); break;
     case 'cfg-remover-foto': state.cfgFotoNova = null; renderApp(); break;
     case 'cfg-salvar-perfil': salvarPerfil(false); break;
     case 'cfg-completar-perfil': salvarPerfil(true); break;
@@ -1304,11 +1337,14 @@ function acaoConfig(cmd, a1){
 }
 // Campos da tela de configurações que reagem enquanto se digita.
 function onConfigInput(el){
+  if(onPersonalizacaoInput(el)) return true;
   if(el.id==='emp-cnpj'){ el.value = mascaraCnpj(el.value); return true; }
   if(el.id==='emp-cep'){ el.value = el.value.replace(/\D/g,'').slice(0,8).replace(/^(\d{5})(\d)/,'$1-$2'); if(el.value.length===9) buscarCep(el.value); return true; }
   return false;
 }
 function onConfigChange(el){
+  if(el.id==='pers-logo-input'){ onPersonalizacaoChange(el); return true; }
+  if(/^pers-(cor|hex)-/.test(el.id||'')) return true;
   if(el.id==='cfg-foto-input'){ onFotoSelecionada(el); return true; }
   if(el.id==='cv-papel'){ const box = document.getElementById('cv-perms'); if(box) box.hidden = el.value==='admin'; return true; }
   if(el.hasAttribute('data-papel')){
@@ -1341,6 +1377,267 @@ function renderCompletarPerfil(){
     <div class="btn-row" style="margin-top:22px;"><button class="btn btn-primary" data-action="cfg-completar-perfil">Salvar e começar</button>
     <button class="btn btn-ghost" onclick="sair()">Sair</button></div>
   </div></div>`;
+}
+
+/* ------------------------------ Personalização ----------------------------- */
+// Guardada na empresa (empresas.personalizacao). Todos leem; só administradores alteram.
+//   cotacao: cores do cabeçalho e do fundo do PDF da cotação e logo da empresa
+//   responsaveis / vendedores: listas usadas nos campos da Nova Cotação (Simplificada e Formal)
+const ESTILO_PADRAO = { corCabecalho:'#173A5E', corFundo:'#FFFFFF' };
+const TIPOS_PESSOA = {
+  responsaveis:{ titulo:'Responsáveis', singular:'responsável', campo:'responsavel', texto:'Pessoas responsáveis pela cotação. Aparecem na lista do campo "Responsável" da Nova Cotação (Simplificada e Formal).' },
+  vendedores:{ titulo:'Vendedores', singular:'vendedor', campo:'vendedor', texto:'Pessoas responsáveis pela venda. Aparecem na lista do campo "Nome do Vendedor" da Nova Cotação (Simplificada e Formal).' },
+};
+
+function personalizacao(){ return (empresaAtual && empresaAtual.personalizacao) || {}; }
+function estiloCotacao(){
+  const c = personalizacao().cotacao || {};
+  return { corCabecalho: c.corCabecalho || ESTILO_PADRAO.corCabecalho, corFundo: c.corFundo || ESTILO_PADRAO.corFundo,
+           logo: c.logo || null, logoLargura: c.logoLargura || 0, logoAltura: c.logoAltura || 0 };
+}
+function hexParaRgb(hex){
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex||'').trim());
+  if(!m) return [255,255,255];
+  const n = parseInt(m[1], 16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
+// Texto branco ou escuro, o que tiver mais contraste com a cor de fundo.
+function corTextoSobre(rgb){
+  const lin = v => { v /= 255; return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+  const L = 0.2126*lin(rgb[0]) + 0.7152*lin(rgb[1]) + 0.0722*lin(rgb[2]);
+  return (1.05)/(L+0.05) >= (L+0.05)/(0.05) ? [255,255,255] : [20,30,40];
+}
+const corCabecalhoPdf = () => hexParaRgb(estiloCotacao().corCabecalho);
+const corTextoCabecalhoPdf = () => corTextoSobre(corCabecalhoPdf());
+
+// Pinta o fundo de todas as páginas do PDF, inclusive as criadas automaticamente pelas tabelas.
+function prepararFundoPdf(doc){
+  const cor = hexParaRgb(estiloCotacao().corFundo);
+  if(cor.join()==='255,255,255') return;
+  const pintar = ()=>{
+    const w = doc.internal.pageSize.getWidth(), h = doc.internal.pageSize.getHeight();
+    doc.setFillColor(cor[0], cor[1], cor[2]);
+    doc.rect(0, 0, w, h, 'F');
+  };
+  pintar();
+  const addPageOriginal = doc.addPage.bind(doc);
+  doc.addPage = function(){ const r = addPageOriginal.apply(null, arguments); pintar(); return r; };
+}
+
+function listaPessoas(tipo){ return (personalizacao()[tipo] || []).filter(p=>p && p.nome); }
+
+// Campo da Nova Cotação: com lista cadastrada vira seleção ("Nome — Cargo"); sem lista, texto livre.
+function campoPessoaHtml(tipo, valor, placeholder){
+  const campo = TIPOS_PESSOA[tipo].campo;
+  const lista = listaPessoas(tipo);
+  if(!lista.length) return `<input data-bind="${campo}" value="${esc(valor)}" placeholder="${esc(placeholder)}">`;
+  const naLista = lista.some(p=>p.nome===valor);
+  return `<select data-bind="${campo}">
+    <option value="">Selecione…</option>
+    ${lista.map(p=>`<option value="${esc(p.nome)}" ${p.nome===valor?'selected':''}>${esc(p.nome)}${p.cargo ? ' — '+esc(p.cargo) : ''}</option>`).join('')}
+    ${valor && !naLista ? `<option value="${esc(valor)}" selected>${esc(valor)} (fora da lista)</option>` : ''}
+  </select>`;
+}
+
+// --------- Tela (Configurações → Personalização) ---------
+function renderConfigPersonalizacao(){
+  const sub = state.cfgPersTab || 'cotacoes';
+  const abas = [['cotacoes','Cotações'], ['responsaveis','Responsáveis'], ['vendedores','Vendedor']];
+  return `<div class="pers-tabs">
+    ${abas.map(([id, rot])=>`<button class="pers-tab ${sub===id?'active':''}" data-action="cfg-pers-aba:${id}">${rot}</button>`).join('')}
+  </div>
+  ${sub==='cotacoes' ? renderPersCotacao() : renderPersPessoas(sub)}`;
+}
+
+function renderPersCotacao(){
+  if(!state.cfgEstilo) state.cfgEstilo = estiloCotacao();
+  const e = state.cfgEstilo;
+  const logo = e.logo || COMEXTA_LOGO_URI;
+  const [r,g,b] = corTextoSobre(hexParaRgb(e.corCabecalho));
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">01</span> Visual da cotação</div>
+    <p class="page-sub" style="margin:0 0 18px;">As cores e o logo são usados nos PDFs gerados pelo ERP (Numerário Simplificado e Formal e Relatório de Simulação), para toda a equipe.</p>
+    <div class="pers-grid">
+      <div>
+        <div class="field-row grid-2">
+          <div class="field"><label for="pers-cor-cabecalho">Cor do cabeçalho</label>
+            <div class="cor-campo"><input type="color" id="pers-cor-cabecalho" value="${esc(e.corCabecalho)}"><input id="pers-hex-cabecalho" value="${esc(e.corCabecalho.toUpperCase())}" maxlength="7"></div>
+            <span class="hint">Faixa do topo e cabeçalhos das tabelas.</span></div>
+          <div class="field"><label for="pers-cor-fundo">Cor do fundo das páginas</label>
+            <div class="cor-campo"><input type="color" id="pers-cor-fundo" value="${esc(e.corFundo)}"><input id="pers-hex-fundo" value="${esc(e.corFundo.toUpperCase())}" maxlength="7"></div>
+            <span class="hint">Prefira tons claros para manter a leitura.</span></div>
+        </div>
+        <div class="field" style="margin-top:18px;"><label>Logo da empresa</label>
+          <div class="logo-campo">
+            <div class="logo-amostra"><img src="${esc(logo)}" alt=""></div>
+            <div class="btn-row">
+              <label class="btn btn-ghost btn-sm" for="pers-logo-input" style="cursor:pointer;">${e.logo ? 'Trocar logo' : 'Enviar logo da empresa'}</label>
+              ${e.logo ? `<button class="btn btn-danger btn-sm" data-action="cfg-pers-remover-logo">Voltar ao logo Comexta</button>` : ''}
+            </div>
+          </div>
+          <input type="file" id="pers-logo-input" accept="image/png,image/jpeg,image/webp" hidden>
+          <span class="hint">PNG (fundo transparente) ou JPG. A imagem é reduzida automaticamente.</span>
+        </div>
+      </div>
+      <div>
+        <div class="dash-title" style="margin-bottom:8px;">Prévia do PDF</div>
+        <div class="pdf-previa" id="pdf-previa" style="background:${esc(e.corFundo)};">
+          <div class="pp-cabecalho" id="pp-cabecalho" style="background:${esc(e.corCabecalho)}; color:rgb(${r},${g},${b});">
+            <span class="pp-logo"><img src="${esc(logo)}" alt=""></span>
+            <span class="pp-titulo"><b>Numerário e Rateio de Custo</b><small>Cotação Nº 0001</small></span>
+          </div>
+          <div class="pp-corpo">
+            <div class="pp-tabela"><div class="pp-th" id="pp-th" style="background:${esc(e.corCabecalho)}; color:rgb(${r},${g},${b});">Produto · Qtd · Valor</div>
+              <div class="pp-td"></div><div class="pp-td"></div><div class="pp-td"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:20px;">
+      <button class="btn btn-primary" data-action="cfg-pers-salvar-estilo">Salvar visual da cotação</button>
+      <button class="btn btn-ghost" data-action="cfg-pers-padrao">Restaurar padrão Comexta</button>
+    </div>
+  </div>`;
+}
+
+function renderPersPessoas(tipo){
+  const info = TIPOS_PESSOA[tipo];
+  if(!state.cfgPessoas) state.cfgPessoas = {};
+  if(!state.cfgPessoas[tipo]) state.cfgPessoas[tipo] = JSON.parse(JSON.stringify(personalizacao()[tipo] || []));
+  const lista = state.cfgPessoas[tipo];
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">01</span> ${info.titulo}</div>
+    <p class="page-sub" style="margin:0 0 16px;">${info.texto}</p>
+    ${lista.length ? `<div class="pessoas-lista" data-pessoas="${tipo}">
+      <div class="pl-head"><span>Nome completo</span><span>Cargo</span><span></span></div>
+      ${lista.map((p, i)=>`<div class="pl-row">
+        <input data-pessoa="${tipo}:${i}:nome" value="${esc(p.nome)}" placeholder="Nome completo" autocomplete="off">
+        <input data-pessoa="${tipo}:${i}:cargo" value="${esc(p.cargo)}" placeholder="Cargo" autocomplete="off">
+        <button class="row-remove" title="Remover" data-action="cfg-pers-remover:${tipo}:${i}">${ICONS.trash || '✕'}</button>
+      </div>`).join('')}
+    </div>` : `<p class="page-sub" style="margin:0 0 6px;">Nenhum ${info.singular} cadastrado. Enquanto a lista estiver vazia, o campo da cotação continua aceitando texto livre.</p>`}
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn btn-ghost" data-action="cfg-pers-adicionar:${tipo}">+ Adicionar ${info.singular}</button>
+      <button class="btn btn-primary" data-action="cfg-pers-salvar-pessoas:${tipo}">Salvar lista</button>
+    </div>
+  </div>`;
+}
+
+// Copia o que foi digitado na lista para o rascunho (antes de redesenhar ou salvar).
+function lerPessoasDigitadas(tipo){
+  const lista = (state.cfgPessoas && state.cfgPessoas[tipo]) || [];
+  document.querySelectorAll(`[data-pessoa^="${tipo}:"]`).forEach(el=>{
+    const [, i, campo] = el.getAttribute('data-pessoa').split(':');
+    if(lista[i]) lista[i][campo] = el.value.trim();
+  });
+  return lista;
+}
+
+async function salvarPersonalizacao(alteracao, mensagem){
+  const nova = { ...personalizacao(), ...alteracao };
+  const { error } = await sb.from('empresas').update({ personalizacao: nova, atualizado_em: new Date().toISOString() }).eq('id', empresaAtual.id);
+  if(error){
+    console.error(error);
+    toast(/check constraint|tamanho/i.test(error.message||'') ? 'A personalização ficou grande demais. Use um logo menor.' : 'Não foi possível salvar a personalização.');
+    return false;
+  }
+  empresaAtual.personalizacao = nova;
+  toast(mensagem, 'ok');
+  return true;
+}
+
+async function salvarPessoas(tipo){
+  const lista = lerPessoasDigitadas(tipo);
+  const limpa = lista.filter(p=>p.nome || p.cargo);
+  if(limpa.some(p=>!p.nome)) return toast('Informe o nome completo de todas as pessoas da lista.');
+  const nomes = limpa.map(p=>p.nome.toLowerCase());
+  if(new Set(nomes).size !== nomes.length) return toast('Há nomes repetidos na lista.');
+  if(await salvarPersonalizacao({ [tipo]: limpa }, `Lista de ${TIPOS_PESSOA[tipo].titulo.toLowerCase()} salva.`)){
+    state.cfgPessoas[tipo] = JSON.parse(JSON.stringify(limpa));
+    renderApp();
+  }
+}
+
+// Logo: até 600×200 px, mantendo a proporção; PNG continua PNG (transparência), o resto vira JPEG.
+function reduzirLogo(arquivo){
+  return new Promise((resolve, reject)=>{
+    if(!arquivo || !/^image\//.test(arquivo.type)) return reject(new Error('Escolha um arquivo de imagem (PNG ou JPG).'));
+    const img = new Image(), url = URL.createObjectURL(arquivo);
+    img.onload = ()=>{
+      const escala = Math.min(1, 600/img.width, 200/img.height);
+      const w = Math.max(1, Math.round(img.width*escala)), h = Math.max(1, Math.round(img.height*escala));
+      const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const png = arquivo.type==='image/png';
+      if(!png){ ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, w, h); }
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve({ logo: canvas.toDataURL(png ? 'image/png' : 'image/jpeg', 0.9), logoLargura: w, logoAltura: h });
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Não foi possível ler esta imagem.')); };
+    img.src = url;
+  });
+}
+
+function atualizarPreviaEstilo(){
+  const e = state.cfgEstilo; if(!e) return;
+  const [r,g,b] = corTextoSobre(hexParaRgb(e.corCabecalho));
+  const previa = document.getElementById('pdf-previa'); if(previa) previa.style.background = e.corFundo;
+  for(const id of ['pp-cabecalho','pp-th']){
+    const el = document.getElementById(id);
+    if(el){ el.style.background = e.corCabecalho; el.style.color = `rgb(${r},${g},${b})`; }
+  }
+}
+
+function acaoPersonalizacao(cmd, a1, a2){
+  switch(cmd){
+    case 'cfg-pers-aba':
+      if(state.cfgPersTab && state.cfgPersTab!=='cotacoes') lerPessoasDigitadas(state.cfgPersTab);
+      state.cfgPersTab = a1; renderApp(); return true;
+    case 'cfg-pers-salvar-estilo': {
+      const e = state.cfgEstilo;
+      salvarPersonalizacao({ cotacao: { corCabecalho:e.corCabecalho, corFundo:e.corFundo, logo:e.logo, logoLargura:e.logoLargura, logoAltura:e.logoAltura } },
+        'Visual da cotação salvo. Os próximos PDFs já saem com ele.').then(ok=>{ if(ok) renderApp(); });
+      return true;
+    }
+    case 'cfg-pers-padrao':
+      state.cfgEstilo = { ...ESTILO_PADRAO, logo:null, logoLargura:0, logoAltura:0 };
+      renderApp(); toast('Padrão Comexta aplicado na prévia. Clique em "Salvar" para confirmar.'); return true;
+    case 'cfg-pers-remover-logo':
+      state.cfgEstilo = { ...state.cfgEstilo, logo:null, logoLargura:0, logoAltura:0 }; renderApp(); return true;
+    case 'cfg-pers-adicionar':
+      lerPessoasDigitadas(a1).push({ id: uid(), nome:'', cargo:'' }); renderApp();
+      { const campos = document.querySelectorAll(`[data-pessoa$=":nome"][data-pessoa^="${a1}:"]`); if(campos.length) campos[campos.length-1].focus(); }
+      return true;
+    case 'cfg-pers-remover':
+      lerPessoasDigitadas(a1).splice(Number(a2), 1); renderApp(); return true;
+    case 'cfg-pers-salvar-pessoas': salvarPessoas(a1); return true;
+  }
+  return false;
+}
+
+// Campos de cor: o seletor e o código (#RRGGBB) ficam sincronizados e a prévia muda na hora.
+function onPersonalizacaoInput(el){
+  const m = /^pers-(cor|hex)-(cabecalho|fundo)$/.exec(el.id || '');
+  if(!m || !state.cfgEstilo) return false;
+  const chave = m[2]==='cabecalho' ? 'corCabecalho' : 'corFundo';
+  let valor = el.value.trim();
+  if(m[1]==='hex'){
+    if(!valor.startsWith('#')) valor = '#' + valor;
+    if(!/^#[0-9a-f]{6}$/i.test(valor)) return true;
+    const seletor = document.getElementById('pers-cor-'+m[2]); if(seletor) seletor.value = valor.toLowerCase();
+  }else{
+    const hex = document.getElementById('pers-hex-'+m[2]); if(hex) hex.value = valor.toUpperCase();
+  }
+  state.cfgEstilo[chave] = valor.toUpperCase();
+  atualizarPreviaEstilo();
+  return true;
+}
+async function onPersonalizacaoChange(el){
+  if(el.id!=='pers-logo-input') return false;
+  try{ Object.assign(state.cfgEstilo, await reduzirLogo(el.files && el.files[0])); renderApp(); }
+  catch(err){ toast(err.message); }
+  return true;
 }
 
 /* -------------------------------- Icones --------------------------------- */
@@ -2174,7 +2471,7 @@ function renderDados(){
     <div class="card">
       <div class="field-row grid-3">
         <div class="field"><label>Responsável</label>
-          <input data-bind="responsavel" value="${esc(d.responsavel)}" placeholder="Nome do responsável pela cotação">
+          ${campoPessoaHtml('responsaveis', d.responsavel, 'Nome do responsável pela cotação')}
         </div>
       </div>
     </div>
@@ -2189,7 +2486,7 @@ function renderDados(){
           <input data-ac="clienteCnpj" data-bind="clienteCnpjCpf" value="${esc(d.clienteCnpjCpf)}" placeholder="00.000.000/0000-00" autocomplete="off">
         </div>
         <div class="field"><label>Nome do Vendedor</label>
-          <input data-bind="vendedor" value="${esc(d.vendedor)}" placeholder="Nome do vendedor responsável">
+          ${campoPessoaHtml('vendedores', d.vendedor, 'Nome do vendedor responsável')}
         </div>
       </div>
       <div class="field-row grid-3" style="margin-top:16px;">
@@ -2475,7 +2772,7 @@ function renderDadosFormal(){
     <div class="card">
       <div class="field-row grid-3">
         <div class="field"><label>Responsável</label>
-          <input data-bind="responsavel" value="${esc(d.responsavel)}" placeholder="Nome do responsável pela cotação">
+          ${campoPessoaHtml('responsaveis', d.responsavel, 'Nome do responsável pela cotação')}
         </div>
       </div>
     </div>
@@ -2494,7 +2791,7 @@ function renderDadosFormal(){
       <div class="field-row grid-3" style="margin-top:16px;">
         <div class="field"><label>Data da Cotação</label><input type="date" data-bind="dataCotacao" value="${esc(d.dataCotacao)}"></div>
         <div class="field"><label>Validade da Cotação</label><input type="date" data-bind="validadeCotacao" value="${esc(d.validadeCotacao)}"></div>
-        <div class="field"><label>Nome do Vendedor</label><input data-bind="vendedor" value="${esc(d.vendedor)}" placeholder="Nome do vendedor responsável"></div>
+        <div class="field"><label>Nome do Vendedor</label>${campoPessoaHtml('vendedores', d.vendedor, 'Nome do vendedor responsável')}</div>
       </div>
     </div>
 
@@ -4409,6 +4706,7 @@ async function gerarRelatorioSimulacaoPDF(id){
     }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
+    prepararFundoPdf(doc);
     const sim = normalizeSimulacao(item.dados);
 
     const offscreen = document.createElement('div');
@@ -4500,7 +4798,7 @@ async function gerarRelatorioSimulacaoPDF(id){
                 fmtNum(cx.qtyNesteContainer*cx.volumeUnitM3,3),
               ];
             }),
-            theme:'grid', styles:{fontSize:7.5, cellPadding:4}, headStyles:{fillColor:[23,58,94], fontSize:7},
+            theme:'grid', styles:{fontSize:7.5, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:7},
             columnStyles:{1:{cellWidth:34}},
             didDrawCell: function(data){
               if(data.section==='body' && data.column.index===1){
@@ -5323,18 +5621,25 @@ function renderAnexosBlock(d, suffix){
 /* --------------------------------- PDF -------------------------------------- */
 function pdfHeader(doc, titulo, subtitulo, meta){
   const pageW = doc.internal.pageSize.getWidth();
-  doc.setFillColor(23,58,94);
+  const estilo = estiloCotacao();
+  const cab = hexParaRgb(estilo.corCabecalho), txt = corTextoSobre(cab);
+  doc.setFillColor(cab[0], cab[1], cab[2]);
   doc.rect(0,0,pageW,58,'F');
+  // Logo da empresa (Personalização) ou, sem ele, o da Comexta. Altura fixa, largura pela proporção.
+  const logoH = 34;
+  let logoW = logoH*(378/144);
   try{
-    if(typeof COMEXTA_LOGO_URI==='string' && COMEXTA_LOGO_URI.indexOf('data:image')===0){
-      const logoH = 34, logoW = logoH*(378/144);
+    const logo = estilo.logo || COMEXTA_LOGO_URI;
+    if(typeof logo==='string' && logo.indexOf('data:image')===0){
+      if(estilo.logo && estilo.logoLargura && estilo.logoAltura) logoW = Math.min(170, logoH*estilo.logoLargura/estilo.logoAltura);
+      const formato = /^data:image\/png/.test(logo) ? 'PNG' : 'JPEG';
       doc.setFillColor(255,255,255);
       doc.roundedRect(20, 12, logoW+14, logoH+10, 4, 4, 'F');
-      doc.addImage(COMEXTA_LOGO_URI, 'JPEG', 27, 17, logoW, logoH);
+      doc.addImage(logo, formato, 27, 17, logoW, logoH);
     }
   }catch(e){ console.error('Falha ao inserir logo no PDF:', e); }
-  const textX = 20 + 34*(378/144) + 14 + 14;
-  doc.setTextColor(255,255,255);
+  const textX = 20 + logoW + 14 + 14;
+  doc.setTextColor(txt[0], txt[1], txt[2]);
   doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text(titulo, textX, 27);
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
@@ -5389,6 +5694,7 @@ async function gerarDashboardPDF(dados, meta){
     }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
+    prepararFundoPdf(doc);
     if(typeof doc.autoTable!=='function'){
       toast('Não foi possível carregar o plugin de tabelas do PDF. Verifique sua conexão e recarregue a página.');
       console.error('gerarDashboardPDF: doc.autoTable indisponível — script jspdf.plugin.autotable.min.js não carregou.');
@@ -5468,7 +5774,7 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
       ['Seguro', fmtUSD(c.seguroExtD), fmtBRL(c.seguroBRL), fmtNum(num(dados.cambioFrete),4)],
       ['Valor Aduaneiro', fmtUSD(c.valorAduaneiroExt), fmtBRL(r.totais.valorAduaneiroProduto), fmtNum(num(dados.cambioDesembaraco),4)],
     ],
-    theme:'grid', styles:{fontSize:8, cellPadding:4}, headStyles:{fillColor:[23,58,94]},
+    theme:'grid', styles:{fontSize:8, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf()},
     columnStyles:{2:{halign:'right'},3:{halign:'right'}},
     tableWidth: 300,
   });
@@ -5488,7 +5794,7 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
     foot:[['TOTAL','', fmtNum(r.totais.qty), '', fmtNum(r.totais.peso), fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL), fmtBRL(r.totais.rateioFrete),
       fmtBRL(r.totais.rateioSeguro), fmtBRL(r.totais.valorAduaneiroProduto), fmtBRL(r.totais.rateioII), fmtBRL(r.totais.rateioBcIcms), fmtBRL(r.totais.rateioIcms),
       fmtBRL(r.totais.rateioDespExtra), fmtBRL(r.totais.custoTotalSimples), '', fmtBRL(r.totais.custoTotalLucroReal), '']],
-    theme:'grid', styles:{fontSize:6.6, cellPadding:3}, headStyles:{fillColor:[23,58,94], fontSize:6.3},
+    theme:'grid', styles:{fontSize:6.6, cellPadding:3}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:6.3},
     footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
   });
 
@@ -5671,6 +5977,7 @@ async function gerarDashboardPDFFormal(dados, meta){
     }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
+    prepararFundoPdf(doc);
     if(typeof doc.autoTable!=='function'){
       toast('Não foi possível carregar o plugin de tabelas do PDF. Verifique sua conexão e recarregue a página.');
       return;
@@ -5727,7 +6034,7 @@ async function gerarDashboardPDFFormal(dados, meta){
       startY:y, margin:{left:28,right:28},
       head:[['Despesa','Moeda Ext.','Moeda R$']],
       body: resumoBody,
-      theme:'grid', styles:{fontSize:7.5, cellPadding:3}, headStyles:{fillColor:[23,58,94], fontSize:7},
+      theme:'grid', styles:{fontSize:7.5, cellPadding:3}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:7},
       columnStyles:{1:{halign:'right', cellWidth:80}, 2:{halign:'right', cellWidth:90}},
     });
     y = doc.lastAutoTable.finalY + 20;
@@ -5758,7 +6065,7 @@ async function gerarDashboardPDFFormal(dados, meta){
         fmtBRL(r.totais.rateioFreteTabela), fmtBRL(r.totais.rateioAcrescimo), fmtBRL(r.totais.valorAduaneiro), fmtBRL(r.totais.rateioArmazenagemTabela), fmtBRL(r.totais.rateioOutrasTabela),
         '', fmtBRL(r.totais.ii), '', fmtBRL(r.totais.ipi), '', fmtBRL(r.totais.pis), '', fmtBRL(r.totais.cofins), '', fmtBRL(r.totais.icms),
         fmtBRL(r.totais.rateioAfrmmTabela), fmtBRL(r.totais.custoTotalComCredito), fmtBRL(r.totais.custoTotalSemCredito)]],
-      theme:'grid', styles:{fontSize:5.8, cellPadding:2.5}, headStyles:{fillColor:[23,58,94], fontSize:5.6},
+      theme:'grid', styles:{fontSize:5.8, cellPadding:2.5}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:5.6},
       footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
     });
 
@@ -6292,7 +6599,7 @@ function onAppClick(e){
   const action = t.getAttribute('data-action');
   if(!acaoPermitida(action)){ avisoSemPermissao(action); return; }
   const [cmd, a1, a2] = action.split(':');
-  if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1); return; }
+  if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
   switch(cmd){
     case 'go': navigate(a1); break;
     case 'toggle-module':

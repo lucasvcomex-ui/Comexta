@@ -32,6 +32,13 @@ create table if not exists public.empresas (
   atualizado_em      timestamptz not null default now()
 );
 
+-- Personalização (Configurações → Personalização, só administradores):
+--   { "cotacao": { "corCabecalho": "#173A5E", "corFundo": "#FFFFFF", "logo": "data:image/...", "logoLargura": 300, "logoAltura": 100 },
+--     "responsaveis": [ { "id", "nome", "cargo" } ], "vendedores": [ { "id", "nome", "cargo" } ] }
+alter table public.empresas add column if not exists personalizacao jsonb not null default '{}'::jsonb;
+alter table public.empresas drop constraint if exists empresas_personalizacao_tamanho;
+alter table public.empresas add constraint empresas_personalizacao_tamanho check (octet_length(personalizacao::text) < 1500000);
+
 create table if not exists public.perfis (
   user_id     uuid primary key references auth.users (id) on delete cascade,
   empresa_id  uuid not null references public.empresas (id),
@@ -335,7 +342,7 @@ grant update (nome, telefone, cargo, foto) on public.perfis to authenticated;
 revoke insert, delete on public.empresas from authenticated;
 grant select on public.empresas to authenticated;
 grant update (nome_fantasia, razao_social, cnpj, inscricao_estadual, telefone, email, site,
-              cep, logradouro, numero, complemento, bairro, cidade, uf, pais, atualizado_em) on public.empresas to authenticated;
+              cep, logradouro, numero, complemento, bairro, cidade, uf, pais, atualizado_em, personalizacao) on public.empresas to authenticated;
 grant select, insert, delete on public.convites to authenticated;
 grant select, insert, update, delete on public.dados_empresa to authenticated;
 

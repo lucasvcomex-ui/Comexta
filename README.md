@@ -24,6 +24,10 @@ Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
 - **Regras no banco (RLS)**: cada pessoa só vê a própria empresa; ler exige "visualizar", gravar exige "criar" ou
   "editar", apagar exige "editar"; papel, permissões e empresa só mudam pelas funções de administrador.
   A diferença entre criar e editar dentro de uma mesma lista é aplicada pelo ERP.
+- **Personalização** (Configurações → Personalização, só administradores; quem for promovido a administrador
+  também pode editar): cores do cabeçalho e do fundo e logo da empresa nos PDFs da cotação, e as listas de
+  Responsáveis e Vendedores (nome completo e cargo) usadas nos campos da Nova Cotação (Simplificada e Formal).
+  Fica em `empresas.personalizacao`.
 - **Rascunhos e filtros** ficam só no navegador, separados por usuário.
 - A chave publishable em `js/supabase-client.js` é pública por natureza; a proteção dos dados vem das regras RLS.
 
