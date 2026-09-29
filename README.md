@@ -10,14 +10,21 @@ Projeto web da Comexta (importação). Site estático na Vercel + Supabase (logi
 - `erp/index.html` — ERP de Importação (arquivo único): Importação Simplificada e Formal, Cotações Salvas (lista e Kanban),
   Simulador de Carga (3D) e Cadastros
 - `js/supabase-client.js` — conexão com o Supabase usada por todas as páginas
-- `supabase/schema.sql` — tabela `erp_dados` e regras de acesso (RLS)
+- `supabase/schema.sql` — empresas, perfis, convites, dados da empresa e regras de acesso (RLS)
 
 ## Supabase
 Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
-- **Login**: Supabase Auth (e-mail e senha). Nome, empresa e telefone ficam no perfil do usuário (`user_metadata`).
-- **Dados**: tabela `erp_dados` — uma linha por usuário e chave (cotações, simulações, clientes, fornecedores,
-  produtos, filtros), com o valor em JSON. As regras RLS só deixam cada usuário ler e alterar as próprias linhas.
-- **Rascunhos** ficam só no navegador, separados por usuário.
+- **Login**: Supabase Auth (e-mail e senha).
+- **Empresas e equipe**: quem cria conta sem convite vira administrador de uma empresa nova. O administrador
+  convida outras pessoas em **Configurações → Equipe e permissões** (link com token, válido por 14 dias, só para o
+  e-mail convidado) e define, por área (Cadastros, Cotações, Simulador), se cada pessoa pode visualizar, criar e editar.
+  Quem entra por convite completa telefone, cargo e foto no primeiro acesso.
+- **Dados**: tabela `dados_empresa` — cotações, simulações, clientes, fornecedores e produtos da empresa, com versão.
+  Se duas pessoas salvam ao mesmo tempo, o ERP mescla as alterações item a item (e renumera cotações com número repetido).
+- **Regras no banco (RLS)**: cada pessoa só vê a própria empresa; ler exige "visualizar", gravar exige "criar" ou
+  "editar", apagar exige "editar"; papel, permissões e empresa só mudam pelas funções de administrador.
+  A diferença entre criar e editar dentro de uma mesma lista é aplicada pelo ERP.
+- **Rascunhos e filtros** ficam só no navegador, separados por usuário.
 - A chave publishable em `js/supabase-client.js` é pública por natureza; a proteção dos dados vem das regras RLS.
 
 ### Configuração no painel do Supabase

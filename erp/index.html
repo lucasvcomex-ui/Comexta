@@ -471,6 +471,42 @@ td.num-mono, th.num-mono{text-align:right;}
   .topbar .pill-btn{padding:7px 11px;}
   .crumbs{display:none;}
 }
+
+/* ---------- Usuário, configurações e equipe ---------- */
+.avatar{display:inline-flex; align-items:center; justify-content:center; border-radius:50%; overflow:hidden; flex-shrink:0;
+  background:var(--amber-100); color:var(--amber-deep); font-weight:700; font-family:var(--font-display);}
+.avatar img{width:100%; height:100%; object-fit:cover; display:block;}
+.user-btn{display:inline-flex; align-items:center; gap:9px; background:rgba(255,255,255,0.08); color:#fff;
+  border:1px solid rgba(255,255,255,0.18); border-radius:999px; padding:4px 12px 4px 4px; cursor:pointer; font-family:inherit;
+  transition:background .15s ease; max-width:260px;}
+.user-btn:hover, .user-btn.active{background:rgba(255,255,255,0.16);}
+.user-btn svg{width:16px; height:16px; opacity:0.85; flex-shrink:0;}
+.user-btn-txt{display:flex; flex-direction:column; line-height:1.15; text-align:left; min-width:0;}
+.user-btn-txt b{font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.user-btn-txt small{font-size:10.5px; color:#B9C9DA; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+@media (max-width:760px){ .user-btn-txt{display:none;} .user-btn{padding:3px 8px 3px 3px;} }
+.foto-perfil{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
+.foto-perfil .hint{font-size:11.5px; color:var(--ink-soft);}
+.field select{border:1px solid var(--line); background:#fff; border-radius:var(--radius-sm); padding:10px 12px; font-size:14px; font-family:var(--font-body);}
+.perm-matrix{border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; max-width:560px;}
+.pm-head, .pm-row{display:grid; grid-template-columns:1.8fr repeat(3, 1fr); align-items:center; gap:8px; padding:9px 14px;}
+.pm-head{background:var(--navy-100); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--navy-deep);}
+.pm-head span:not(:first-child), .pm-row .pm-check{text-align:center;}
+.pm-row{border-top:1px solid var(--line-soft); font-size:13.5px;}
+.pm-check input{width:17px; height:17px; accent-color:var(--navy); cursor:pointer;}
+.pm-check input:disabled{cursor:default;}
+.membro{border:1px solid var(--line-soft); border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:12px;}
+.membro-head{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px;}
+.membro-info{flex:1; min-width:200px;}
+.membro-nome{font-weight:700; color:var(--navy-deep); display:flex; align-items:center; gap:8px;}
+.membro-sub{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+.convite-linha{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 0; border-top:1px solid var(--line-soft);}
+.convite-linha:first-child{border-top:none; padding-top:0;}
+.convite-gerado{margin-top:18px; padding:14px 16px; border-radius:var(--radius-sm); background:var(--green-100); display:flex; flex-direction:column; gap:10px; font-size:13.5px;}
+.convite-gerado input{border:1px solid var(--line); border-radius:8px; padding:9px 11px; font-family:var(--font-mono); font-size:12.5px; background:#fff !important; color:var(--ink) !important;}
+.completar-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 16px;
+  background:linear-gradient(165deg,var(--navy) 0%, var(--navy-deep) 100%);}
+.completar-card{max-width:620px; width:100%; margin:0;}
 </style>
 </head>
 <body>
@@ -524,16 +560,47 @@ function toast(msg, kind){
 }
 
 /* ------------------------------ Storage --------------------------------- */
-// Cotações, simulações e cadastros ficam no Supabase (tabela erp_dados), na conta de cada usuário:
-// as regras do banco (RLS) só deixam cada pessoa ver e alterar as próprias linhas, em qualquer
-// computador. Rascunhos (":draft") ficam só neste navegador, também separados por usuário.
+// Cotações, simulações e cadastros são da EMPRESA (tabela dados_empresa no Supabase), compartilhados
+// pela equipe conforme as permissões de cada pessoa (as regras do banco conferem tudo de novo).
+// Rascunhos e filtros ficam só neste navegador, separados por usuário.
+// Cada chave tem uma versão: se outra pessoa salvou antes, as alterações são mescladas item a item.
 const sb = window.comextaSupabase;
-const CHAVE_LOCAL = /:draft$/;
-const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','filtrosTodas:fixado'];
-let usuarioAtual = null; // { id, email, nome, empresa } — preenchido por carregarUsuario()
+const CHAVE_LOCAL = /:draft$|^filtrosTodas:/;
+const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list'];
+const SECAO_DA_CHAVE = {
+  'cotacoes:index':'cotacoes', 'cotacoesFormal:index':'cotacoes', 'simulacoes:index':'simulador',
+  'clientes:list':'cadastros', 'fornecedores:list':'cadastros', 'produtos:list':'cadastros',
+};
+const ESTADO_DA_CHAVE = {
+  'cotacoes:index':'cotacoesIndex', 'cotacoesFormal:index':'cotacoesFormalIndex', 'simulacoes:index':'simulacoesIndex',
+  'clientes:list':'clientes', 'fornecedores:list':'fornecedores', 'produtos:list':'produtos',
+};
+// Itens numerados em sequência: se dois usuários criarem o mesmo número ao mesmo tempo, o segundo é renumerado.
+const NUMERACAO_DA_CHAVE = {
+  'cotacoes:index':{ prefixo:'COT-', atual:'currentCotacaoId' },
+  'cotacoesFormal:index':{ prefixo:'COTF-', atual:'currentCotacaoFormalId' },
+  'simulacoes:index':{ prefixo:'SIM-', atual:'currentSimulacaoId' },
+};
+const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga' };
+
+let usuarioAtual = null; // { id, email, nome, telefone, cargo, foto, papel, permissoes, convidado, empresa_id }
+let empresaAtual = null;
 const chaveLocal = key => 'comexta:u:' + usuarioAtual.id + ':' + key;
-const filasGravacao = {};   // grava cada chave em ordem, para uma gravação antiga não sobrescrever uma nova
+const versoes = {};        // versão no servidor de cada chave carregada
+const bases = {};          // último valor lido/gravado no servidor (base da mescla)
+const filasGravacao = {};  // grava cada chave em ordem
+// A base precisa ser uma cópia própria: o ERP altera as listas do estado no lugar.
+const copia = v => v==null ? v : JSON.parse(JSON.stringify(v));
 let gravacoesPendentes = 0;
+
+function pode(secao, acao){
+  if(!usuarioAtual) return false;
+  if(usuarioAtual.papel==='admin') return true;
+  const p = (usuarioAtual.permissoes||{})[secao] || {};
+  if(acao==='ver') return !!(p.ver || p.criar || p.editar);
+  return !!p[acao];
+}
+const souAdmin = () => !!usuarioAtual && usuarioAtual.papel==='admin';
 
 function sessaoExpirada(){ window.location.href = '/login/'; }
 const erroDeSessao = error => error && (error.code==='PGRST301' || error.code==='PGRST303' || /jwt/i.test(error.message||''));
@@ -546,10 +613,21 @@ async function carregarUsuario(){
   let lembrar = '1', sessaoAtiva = '1';
   try{ lembrar = localStorage.getItem('comexta-lembrar') || '1'; sessaoAtiva = sessionStorage.getItem('comexta-sessao-ativa'); }catch(e){}
   if(lembrar==='0' && !sessaoAtiva){ await sb.auth.signOut({ scope:'local' }); sessaoExpirada(); return false; }
-  const u = session.user, meta = u.user_metadata || {};
-  usuarioAtual = { id: u.id, email: u.email, nome: meta.nome || '', empresa: meta.empresa || '' };
+
+  await carregarPerfilEEmpresa(session.user.id);
   sb.auth.onAuthStateChange((evento, sessao)=>{ if(evento==='SIGNED_OUT' || !sessao) sessaoExpirada(); });
   return true;
+}
+
+async function carregarPerfilEEmpresa(userId){
+  const { data: perfil, error } = await sb.from('perfis').select('*').eq('user_id', userId || usuarioAtual.id).maybeSingle();
+  if(erroDeSessao(error)){ sessaoExpirada(); throw new Error('Sessão expirada'); }
+  if(error) throw new Error('Falha ao carregar perfil: ' + error.message);
+  if(!perfil) throw new Error('Perfil não encontrado: rode supabase/schema.sql no Supabase.');
+  usuarioAtual = { id: perfil.user_id, ...perfil };
+  const { data: empresa, error: e2 } = await sb.from('empresas').select('*').eq('id', perfil.empresa_id).maybeSingle();
+  if(e2) throw new Error('Falha ao carregar empresa: ' + e2.message);
+  empresaAtual = empresa || { id: perfil.empresa_id };
 }
 
 async function sair(){
@@ -563,32 +641,103 @@ async function storeGetMany(keys){
     try{ const raw = localStorage.getItem(chaveLocal(k)); valores[k] = raw!==null ? JSON.parse(raw) : null; }
     catch(e){ valores[k] = null; }
   }
-  const remotas = keys.filter(k=>!CHAVE_LOCAL.test(k));
+  const remotas = keys.filter(k=>!CHAVE_LOCAL.test(k) && pode(SECAO_DA_CHAVE[k], 'ver'));
+  keys.filter(k=>!CHAVE_LOCAL.test(k)).forEach(k=>{ valores[k] = null; });
   if(remotas.length){
-    const { data, error } = await sb.from('erp_dados').select('chave, valor').in('chave', remotas);
+    const { data, error } = await sb.from('dados_empresa').select('chave, valor, versao').in('chave', remotas);
     if(erroDeSessao(error)){ sessaoExpirada(); throw new Error('Sessão expirada'); }
     if(error) throw new Error('Falha ao carregar dados: ' + error.message);
-    remotas.forEach(k=>{ valores[k] = null; });
-    data.forEach(l=>{ valores[l.chave] = l.valor; });
+    remotas.forEach(k=>{ versoes[k] = 0; bases[k] = null; });
+    data.forEach(l=>{ valores[l.chave] = l.valor; versoes[l.chave] = l.versao; bases[l.chave] = copia(l.valor); });
   }
   return valores;
 }
 async function storeGet(key){ return (await storeGetMany([key]))[key]; }
 
-function gravarNoServidor(key, operacao){
+// Mescla de listas de itens com "id": parte do que está no servidor agora e aplica o que este
+// usuário mudou em relação à base (itens novos, alterados e excluídos).
+function mesclarListas(key, base, local, remoto){
+  const temIds = a => Array.isArray(a) && a.every(x=>x && x.id!=null);
+  if(!temIds(local) || !temIds(remoto) || (base!=null && !temIds(base))) return { valor: local, renumerados: [] };
+  const porId = a => new Map((a||[]).map(x=>[String(x.id), x]));
+  const B = porId(base), L = porId(local), R = porId(remoto);
+  const igual = (a,b) => JSON.stringify(a)===JSON.stringify(b);
+  const numeracao = NUMERACAO_DA_CHAVE[key];
+  const renumerados = [];
+  let maxSeq = Math.max(0, ...remoto.map(x=>x.seq||0), ...local.map(x=>x.seq||0));
+  const resultado = remoto.filter(x=>{
+    const id = String(x.id);
+    return !(B.has(id) && !L.has(id)); // excluído por este usuário
+  }).map(x=>{
+    const id = String(x.id), meu = L.get(id), b = B.get(id);
+    return (meu && b && !igual(meu, b)) ? meu : x; // alterado por este usuário
+  });
+  for(const item of local){
+    const id = String(item.id);
+    if(B.has(id)) continue;                 // já existia: tratado acima
+    if(!R.has(id)){ resultado.push(item); continue; }   // novo deste usuário
+    if(igual(R.get(id), item)) continue;
+    // Mesmo id criado pelos dois ao mesmo tempo
+    if(numeracao){
+      maxSeq += 1;
+      const novoId = numeracao.prefixo + String(maxSeq).padStart(4,'0');
+      renumerados.push({ de:item.id, para:novoId });
+      resultado.push({ ...item, id:novoId, seq:maxSeq });
+    }else{
+      resultado.push({ ...item, id: item.id + '-' + uid() });
+    }
+  }
+  return { valor: resultado, renumerados };
+}
+
+function aplicarNoEstado(key, valor){
+  const campo = ESTADO_DA_CHAVE[key];
+  if(!campo) return;
+  if(key==='produtos:list') state.produtos = (valor||[]).map(normalizeProdutoCadastro);
+  else state[campo] = valor || [];
+}
+
+function gravarNoServidor(key){
   gravacoesPendentes++;
   const tarefa = (filasGravacao[key] || Promise.resolve()).then(async ()=>{
     try{
-      const { error } = await operacao();
-      if(erroDeSessao(error)){ sessaoExpirada(); return false; }
-      if(error){
-        console.error('storage set failed', key, error);
-        toast(/too large|payload|413/i.test(error.message||'')
-          ? 'Os dados ficaram grandes demais para salvar. Remova anexos ou fotos muito pesados.'
-          : 'Não foi possível salvar no servidor. Tente novamente.');
-        return false;
+      // Usa o valor mais recente do estado no momento em que chega a vez desta gravação.
+      let valor = JSON.parse(JSON.stringify(state[ESTADO_DA_CHAVE[key]] ?? null));
+      let mesclou = false;
+      for(let tentativa=0; tentativa<5; tentativa++){
+        const { data: nova, error } = await sb.rpc('salvar_dado', { p_chave:key, p_valor:valor, p_versao:versoes[key]||0 });
+        if(erroDeSessao(error)){ sessaoExpirada(); return false; }
+        if(error){
+          console.error('storage set failed', key, error);
+          toast(/sem_permissao/.test(error.message) ? 'Você não tem permissão para salvar nesta área.'
+            : /too large|payload|413/i.test(error.message||'') ? 'Os dados ficaram grandes demais para salvar. Remova anexos ou fotos muito pesados.'
+            : 'Não foi possível salvar no servidor. Tente novamente.');
+          return false;
+        }
+        if(nova){
+          versoes[key] = nova; bases[key] = copia(valor);
+          if(mesclou){
+            aplicarNoEstado(key, copia(valor));
+            renderApp();
+          }
+          return true;
+        }
+        // Conflito: alguém salvou antes. Busca a versão nova e mescla.
+        const { data: linha, error: e2 } = await sb.from('dados_empresa').select('valor, versao').eq('chave', key).maybeSingle();
+        if(e2) throw e2;
+        const { valor: mesclado, renumerados } = mesclarListas(key, bases[key], valor, linha ? linha.valor : null);
+        const numeracao = NUMERACAO_DA_CHAVE[key];
+        for(const r of renumerados){
+          if(numeracao && state[numeracao.atual]===r.de) state[numeracao.atual] = r.para;
+          toast(`O número ${r.de} já tinha sido usado por outra pessoa. Seu registro foi salvo como ${r.para}.`, 'ok');
+        }
+        valor = mesclado;
+        versoes[key] = linha ? linha.versao : 0;
+        bases[key] = linha ? copia(linha.valor) : null;
+        mesclou = true;
       }
-      return true;
+      toast('Muitas alterações simultâneas. Recarregue a página e tente de novo.');
+      return false;
     }catch(e){
       console.error('storage set failed', key, e);
       toast('Sem conexão: as últimas alterações não foram salvas no servidor.');
@@ -603,25 +752,49 @@ async function storeSet(key, value){
     try{ localStorage.setItem(chaveLocal(key), JSON.stringify(value)); return true; }
     catch(e){ console.error('storage set failed', key, e); return false; }
   }
-  const valor = JSON.parse(JSON.stringify(value)); // fotografia do valor no momento da chamada
-  return gravarNoServidor(key, ()=>sb.from('erp_dados').upsert(
-    { user_id: usuarioAtual.id, chave: key, valor }, { onConflict:'user_id,chave' }));
+  const secao = SECAO_DA_CHAVE[key];
+  if(!(pode(secao, 'criar') || pode(secao, 'editar'))){
+    toast('Você não tem permissão para salvar em ' + SECOES[secao] + '.');
+    return false;
+  }
+  if(ESTADO_DA_CHAVE[key] && state[ESTADO_DA_CHAVE[key]]!==value) aplicarNoEstado(key, value);
+  return gravarNoServidor(key);
 }
 async function storeDelete(key){
   if(CHAVE_LOCAL.test(key)){
     try{ localStorage.removeItem(chaveLocal(key)); return true; }
     catch(e){ return false; }
   }
-  return gravarNoServidor(key, ()=>sb.from('erp_dados').delete().eq('chave', key));
+  aplicarNoEstado(key, []);
+  return storeSet(key, state[ESTADO_DA_CHAVE[key]]);
 }
 window.addEventListener('beforeunload', (e)=>{
   if(gravacoesPendentes>0){ e.preventDefault(); e.returnValue = ''; }
 });
 
+// Traz alterações feitas por outras pessoas da equipe (ao voltar para a aba e a cada 90 s).
+async function atualizarDaEquipe(){
+  if(!usuarioAtual || gravacoesPendentes>0 || document.hidden) return;
+  const visiveis = CHAVES_SERVIDOR.filter(k=>pode(SECAO_DA_CHAVE[k], 'ver'));
+  if(!visiveis.length) return;
+  const { data, error } = await sb.from('dados_empresa').select('chave, versao').in('chave', visiveis);
+  if(error || !data) return;
+  const mudaram = data.filter(l=>l.versao!==(versoes[l.chave]||0)).map(l=>l.chave);
+  if(!mudaram.length) return;
+  const { data: linhas, error: e2 } = await sb.from('dados_empresa').select('chave, valor, versao').in('chave', mudaram);
+  if(e2 || !linhas || gravacoesPendentes>0) return;
+  linhas.forEach(l=>{ versoes[l.chave] = l.versao; bases[l.chave] = copia(l.valor); aplicarNoEstado(l.chave, l.valor); });
+  // Não redesenha com um formulário de cadastro aberto, para não atrapalhar quem está digitando.
+  if(!state.cadFormOpen) renderApp();
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) atualizarDaEquipe(); });
+setInterval(atualizarDaEquipe, 90000);
+
 // Antes do login por usuário, os dados ficavam soltos no navegador ("comexta:<chave>").
-// Se a conta ainda estiver vazia, oferece importar esses dados — só com confirmação, porque
-// o navegador pode ser compartilhado e os dados podem ser de outra pessoa.
+// Se a empresa ainda estiver vazia, oferece ao administrador importar esses dados — só com
+// confirmação, porque o navegador pode ser compartilhado e os dados podem ser de outra pessoa.
 async function importarDadosAntigos(valores){
+  if(!souAdmin()) return false;
   const todas = [...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft'];
   const antigos = {};
   for(const k of todas){
@@ -630,10 +803,11 @@ async function importarDadosAntigos(valores){
   if(!CHAVES_SERVIDOR.some(k=>antigos[k]!=null)) return false;
   if(CHAVES_SERVIDOR.some(k=>valores[k]!=null)) return false;
   const ok = confirm('Encontramos cotações e cadastros salvos neste navegador antes do login por usuário.\n\n'
-    + 'Deseja importá-los para a conta ' + usuarioAtual.email + '?\n\n'
+    + 'Deseja importá-los para a empresa ' + (empresaAtual.nome_fantasia || '') + ' (conta ' + usuarioAtual.email + ')?\n\n'
     + 'Clique em Cancelar se esses dados não forem seus.');
   if(!ok) return false;
-  const resultados = await Promise.all(CHAVES_SERVIDOR.filter(k=>antigos[k]!=null).map(k=>storeSet(k, antigos[k])));
+  for(const k of CHAVES_SERVIDOR.filter(k=>antigos[k]!=null)) aplicarNoEstado(k, antigos[k]);
+  const resultados = await Promise.all(CHAVES_SERVIDOR.filter(k=>antigos[k]!=null).map(k=>gravarNoServidor(k)));
   if(resultados.some(r=>!r)){ toast('Não foi possível importar tudo. Tente recarregar a página.'); return false; }
   for(const k of todas){
     if(antigos[k]==null) continue;
@@ -641,12 +815,537 @@ async function importarDadosAntigos(valores){
     else valores[k] = antigos[k];
     localStorage.removeItem('comexta:'+k);
   }
-  toast('Dados importados para a sua conta.', 'ok');
+  toast('Dados importados para a empresa.', 'ok');
   return true;
+}
+
+/* ----------------------------- Permissões na tela ---------------------------- */
+// Ação (data-action) → [área, ação necessária]. 'salvar' decide entre criar e editar na hora do clique.
+const PERMISSAO_DA_ACAO = {
+  'toggle-nav:imp':['cotacoes','ver'], 'toggle-module:imp':['cotacoes','ver'], 'go:cotacoesTodas':['cotacoes','ver'],
+  'go:numerario':['cotacoes','ver'], 'go:numerarioFormal':['cotacoes','ver'],
+  'abrir-cotacao':['cotacoes','ver'], 'abrir-cotacao-formal':['cotacoes','ver'],
+  'go:dados':['cotacoes','criar'], 'go:dadosFormal':['cotacoes','criar'],
+  'nova-cotacao':['cotacoes','criar'], 'nova-cotacao-formal':['cotacoes','criar'],
+  'duplicar-cotacao':['cotacoes','criar'], 'duplicar-cotacao-formal':['cotacoes','criar'],
+  'excluir-cotacao':['cotacoes','editar'], 'excluir-cotacao-formal':['cotacoes','editar'],
+  'save-calculo':['cotacoes','salvar'], 'save-calculo-formal':['cotacoes','salvar'],
+
+  'toggle-nav:sim':['simulador','ver'], 'go:simInicio':['simulador','ver'], 'abrir-simulacao':['simulador','ver'],
+  'nova-simulacao':['simulador','criar'], 'salvar-simulacao':['simulador','salvar'],
+  'excluir-simulacao':['simulador','editar'], 'renomear-simulacao':['simulador','editar'], 'salvar-nome-simulacao':['simulador','editar'],
+
+  'toggle-nav:cad':['cadastros','ver'], 'toggle-module:cad':['cadastros','ver'],
+  'go:cad-cliente':['cadastros','ver'], 'go:cad-fornecedor':['cadastros','ver'], 'go:cad-produto':['cadastros','ver'],
+  'cad-view':['cadastros','ver'], 'cad-open-form':['cadastros','criar'],
+  'cad-edit':['cadastros','editar'], 'cad-view-edit':['cadastros','editar'], 'cad-delete':['cadastros','editar'],
+  'cad-save':['cadastros','salvar'],
+};
+const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros' };
+
+function permissaoDaAcao(action){
+  return PERMISSAO_DA_ACAO[action] || PERMISSAO_DA_ACAO[action.split(':')[0]] || null;
+}
+// "Salvar": novo registro exige criar; registro já salvo exige editar.
+function acaoDeSalvar(action){
+  if(action.startsWith('save-calculo-formal')) return state.currentCotacaoFormalId ? 'editar' : 'criar';
+  if(action.startsWith('save-calculo')) return state.currentCotacaoId ? 'editar' : 'criar';
+  if(action.startsWith('salvar-simulacao')) return state.currentSimulacaoId ? 'editar' : 'criar';
+  if(action.startsWith('cad-save')) return (state.cadEdit && state.cadEdit.id) ? 'editar' : 'criar';
+  return 'editar';
+}
+function acaoPermitida(action){
+  const p = permissaoDaAcao(action);
+  if(!p) return true;
+  const [secao, acao] = p;
+  if(acao==='salvar') return pode(secao, acaoDeSalvar(action));
+  return pode(secao, acao);
+}
+const NOME_ACAO = { ver:'visualizar', criar:'criar', editar:'editar' };
+function avisoSemPermissao(action){
+  const [secao, acao] = permissaoDaAcao(action);
+  const a = acao==='salvar' ? acaoDeSalvar(action) : acao;
+  toast(`Você não tem permissão para ${NOME_ACAO[a]} em ${SECOES[secao]}. Fale com o administrador da empresa.`);
+}
+
+// Esconde o que o usuário não pode usar (menus, cartões e botões).
+function aplicarPermissoesNaTela(){
+  const app = document.getElementById('app');
+  for(const el of app.querySelectorAll('[data-action]')){
+    const action = el.getAttribute('data-action');
+    const p = permissaoDaAcao(action);
+    if(!p) continue;
+    const [secao, acao] = p;
+    const visivel = acao==='salvar' ? (pode(secao,'criar') || pode(secao,'editar')) : pode(secao, acao);
+    if(!visivel) el.style.display = 'none';
+  }
+  for(const [grupo, secao] of Object.entries(SECAO_DO_GRUPO)){
+    if(pode(secao, 'ver')) continue;
+    const card = app.querySelector('#mod-'+grupo);
+    if(card) card.style.display = 'none';
+    const btn = app.querySelector(`[data-action="toggle-nav:${grupo}"]`);
+    if(btn && btn.closest('.nav-group')) btn.closest('.nav-group').style.display = 'none';
+  }
+  // Submenus que ficaram vazios (ex.: "Importação Simplificada" sem "Nova Cotação")
+  for(const pai of app.querySelectorAll('.nav-drop-item-parent')){
+    const itens = [...pai.querySelectorAll('.nav-drop-item')];
+    if(itens.length && itens.every(i=>i.style.display==='none')) pai.style.display = 'none';
+  }
+}
+
+// Rotas: quem não vê a área não entra; "Nova Cotação" sem ter uma cotação aberta exige criar.
+function rotaPermitida(route){
+  const meta = ROUTE_META[route];
+  if(!meta || !meta.group) return true;
+  const secao = SECAO_DO_GRUPO[meta.group];
+  if(!pode(secao, 'ver')) return false;
+  if(route==='dados' && !state.currentCotacaoId && !pode('cotacoes','criar')) return false;
+  if(route==='dadosFormal' && !state.currentCotacaoFormalId && !pode('cotacoes','criar')) return false;
+  return true;
+}
+
+/* ------------------------------ Configurações ------------------------------ */
+// Meu perfil (dados e foto), Empresa (CNPJ, endereço...) e Equipe (convites e permissões — só administrador).
+const CFG_ACOES = ['ver','criar','editar'];
+
+function avatarHtml(perfil, tamanho){
+  const t = tamanho || 34;
+  const estilo = `width:${t}px;height:${t}px;font-size:${Math.round(t*0.38)}px;`;
+  if(perfil && perfil.foto) return `<span class="avatar" style="${estilo}"><img src="${esc(perfil.foto)}" alt=""></span>`;
+  return `<span class="avatar" style="${estilo}">${esc(initials((perfil && (perfil.nome || perfil.email)) || '?'))}</span>`;
+}
+function nomeEmpresa(){ return (empresaAtual && (empresaAtual.nome_fantasia || empresaAtual.razao_social)) || 'Minha empresa'; }
+function perfilIncompleto(){ return !!usuarioAtual && usuarioAtual.convidado && (!usuarioAtual.telefone || !usuarioAtual.cargo); }
+
+function permissoesPadraoConvite(){
+  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false} };
+}
+function matrizPermissoesHtml(prefixo, permissoes, desabilitada){
+  const p = permissoes || {};
+  return `<div class="perm-matrix">
+    <div class="pm-head"><span>Área</span>${CFG_ACOES.map(a=>`<span>${a==='ver'?'Visualizar':a==='criar'?'Criar':'Editar'}</span>`).join('')}</div>
+    ${Object.entries(SECOES).map(([secao, rotulo])=>`
+      <div class="pm-row"><span>${esc(rotulo)}</span>
+        ${CFG_ACOES.map(a=>`<label class="pm-check"><input type="checkbox" data-perm="${prefixo}:${secao}:${a}"
+          ${(p[secao]||{})[a] ? 'checked' : ''} ${desabilitada ? 'disabled' : ''}></label>`).join('')}
+      </div>`).join('')}
+  </div>`;
+}
+function lerMatriz(prefixo){
+  const p = {};
+  for(const secao of Object.keys(SECOES)){
+    p[secao] = {};
+    for(const a of CFG_ACOES){
+      const el = document.querySelector(`[data-perm="${prefixo}:${secao}:${a}"]`);
+      p[secao][a] = !!(el && el.checked);
+    }
+    if(p[secao].criar || p[secao].editar) p[secao].ver = true;
+  }
+  return p;
+}
+function resumoPermissoes(perfil){
+  if(perfil.papel==='admin') return 'Acesso total';
+  const partes = Object.entries(SECOES).map(([secao, rotulo])=>{
+    const p = (perfil.permissoes||{})[secao] || {};
+    const acoes = [p.ver||p.criar||p.editar ? 'ver' : null, p.criar ? 'criar' : null, p.editar ? 'editar' : null].filter(Boolean);
+    return acoes.length ? `${rotulo.split(' ')[0]}: ${acoes.join(', ')}` : null;
+  }).filter(Boolean);
+  return partes.length ? partes.join(' · ') : 'Sem acesso às áreas';
+}
+
+function renderConfig(){
+  const aba = state.configTab || 'perfil';
+  const abas = [
+    { id:'perfil', label:'Meu perfil' },
+    { id:'empresa', label:'Empresa' },
+    ...(souAdmin() ? [{ id:'equipe', label:'Equipe e permissões' }] : []),
+  ];
+  let conteudo = aba==='empresa' ? renderConfigEmpresa() : aba==='equipe' && souAdmin() ? renderConfigEquipe() : renderConfigPerfil();
+  return `
+  <div class="page-title">Configurações</div>
+  <div class="page-sub">${esc(usuarioAtual.nome || usuarioAtual.email)} · ${esc(nomeEmpresa())} · ${souAdmin() ? 'Administrador' : 'Membro da equipe'}</div>
+  <div class="form-tabs" style="margin-top:22px;">
+    ${abas.map(t=>`<div class="form-tab ${aba===t.id?'active':''}" data-action="cfg-aba:${t.id}">${t.label}</div>`).join('')}
+  </div>
+  ${conteudo}`;
+}
+
+function campoCfg(id, rotulo, valor, opts){
+  const o = opts || {};
+  return `<div class="field"${o.span ? ` style="grid-column:span ${o.span};"` : ''}>
+    <label for="${id}">${rotulo}${o.obrigatorio ? ' *' : ''}</label>
+    <input id="${id}" value="${esc(valor||'')}" ${o.readonly ? 'readonly' : ''} ${o.placeholder ? `placeholder="${esc(o.placeholder)}"` : ''}
+      ${o.type ? `type="${o.type}"` : ''} ${o.maxlength ? `maxlength="${o.maxlength}"` : ''} autocomplete="${o.autocomplete||'off'}">
+    ${o.hint ? `<span class="hint">${o.hint}</span>` : ''}
+  </div>`;
+}
+
+function blocoFotoHtml(perfil){
+  const foto = state.cfgFotoNova !== undefined ? state.cfgFotoNova : perfil.foto;
+  return `<div class="foto-perfil">
+    ${avatarHtml({ ...perfil, foto }, 84)}
+    <div>
+      <div class="btn-row">
+        <label class="btn btn-ghost btn-sm" for="cfg-foto-input" style="cursor:pointer;">${ICONS.upload||''} ${foto ? 'Trocar foto' : 'Adicionar foto'}</label>
+        ${foto ? `<button class="btn btn-danger btn-sm" data-action="cfg-remover-foto">Remover</button>` : ''}
+      </div>
+      <input type="file" id="cfg-foto-input" accept="image/*" hidden>
+      <div class="hint" style="margin-top:6px;">JPG ou PNG. A imagem é reduzida automaticamente.</div>
+    </div>
+  </div>`;
+}
+
+function renderConfigPerfil(){
+  const u = usuarioAtual;
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:18px;"><span class="num">01</span> Dados do usuário</div>
+    ${blocoFotoHtml(u)}
+    <div class="field-row grid-2" style="margin-top:18px;">
+      ${campoCfg('cfg-nome', 'Nome completo', u.nome, { obrigatorio:true, autocomplete:'name' })}
+      ${campoCfg('cfg-email', 'E-mail de acesso', u.email, { readonly:true })}
+      ${campoCfg('cfg-telefone', 'Telefone', u.telefone, { placeholder:'(00) 00000-0000', type:'tel', autocomplete:'tel' })}
+      ${campoCfg('cfg-cargo', 'Cargo', u.cargo, { placeholder:'Ex.: Analista de importação', autocomplete:'organization-title' })}
+    </div>
+    <div class="btn-row" style="margin-top:20px;">
+      <button class="btn btn-primary" data-action="cfg-salvar-perfil">Salvar meus dados</button>
+      <a class="btn btn-ghost" href="/conta/senha/" style="text-decoration:none;">Trocar senha</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:12px;"><span class="num">02</span> Meu acesso</div>
+    <p class="page-sub" style="margin:0 0 14px;">Empresa: <b>${esc(nomeEmpresa())}</b> · ${souAdmin() ? 'Administrador (acesso total)' : 'Permissões definidas pelo administrador'}</p>
+    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
+  </div>`;
+}
+
+function renderConfigEmpresa(){
+  const e = empresaAtual || {};
+  const ro = !souAdmin();
+  const c = (id, rot, campo, o) => campoCfg('emp-'+id, rot, e[campo], { ...(o||{}), readonly: ro || (o&&o.readonly) });
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:18px;"><span class="num">01</span> Dados da empresa</div>
+    ${ro ? `<p class="page-sub" style="margin:-6px 0 16px;">Somente o administrador pode alterar os dados da empresa.</p>` : ''}
+    <div class="field-row grid-2">
+      ${c('nome_fantasia', 'Nome fantasia', 'nome_fantasia', { obrigatorio:true })}
+      ${c('razao_social', 'Razão social', 'razao_social')}
+      ${c('cnpj', 'CNPJ', 'cnpj', { placeholder:'00.000.000/0000-00', maxlength:18 })}
+      ${c('inscricao_estadual', 'Inscrição estadual', 'inscricao_estadual')}
+      ${c('telefone', 'Telefone', 'telefone', { placeholder:'(00) 0000-0000', type:'tel' })}
+      ${c('email', 'E-mail', 'email', { type:'email', placeholder:'contato@empresa.com.br' })}
+      ${c('site', 'Site', 'site', { placeholder:'www.empresa.com.br' })}
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:18px;"><span class="num">02</span> Endereço</div>
+    <div class="field-row grid-4">
+      ${c('cep', 'CEP', 'cep', { placeholder:'00000-000', maxlength:9, hint: ro ? '' : 'Preenche o endereço automaticamente.' })}
+      ${c('logradouro', 'Logradouro', 'logradouro', { span:2 })}
+      ${c('numero', 'Número', 'numero')}
+      ${c('complemento', 'Complemento', 'complemento')}
+      ${c('bairro', 'Bairro', 'bairro')}
+      ${c('cidade', 'Cidade', 'cidade')}
+      ${c('uf', 'UF', 'uf', { maxlength:2 })}
+      ${c('pais', 'País', 'pais')}
+    </div>
+    ${ro ? '' : `<div class="btn-row" style="margin-top:20px;"><button class="btn btn-primary" data-action="cfg-salvar-empresa">Salvar dados da empresa</button></div>`}
+  </div>`;
+}
+
+function renderConfigEquipe(){
+  const equipe = state.cfgEquipe;
+  const convites = state.cfgConvites;
+  if(!equipe || !convites){
+    carregarEquipe();
+    return `<div class="card"><p class="page-sub" style="margin:0;">Carregando equipe…</p></div>`;
+  }
+  const membros = equipe.map(m=>{
+    const eu = m.user_id===usuarioAtual.id;
+    return `<div class="membro" data-membro="${m.user_id}">
+      <div class="membro-head">
+        ${avatarHtml(m, 42)}
+        <div class="membro-info">
+          <div class="membro-nome">${esc(m.nome || m.email)} ${eu ? '<span class="badge badge-navy">Você</span>' : ''}</div>
+          <div class="membro-sub">${esc(m.email)}${m.cargo ? ' · '+esc(m.cargo) : ''}${m.telefone ? ' · '+esc(m.telefone) : ''}</div>
+          <div class="membro-sub">${esc(resumoPermissoes(m))}</div>
+        </div>
+        <div class="field" style="min-width:150px;">
+          <select data-papel="${m.user_id}">
+            <option value="membro" ${m.papel!=='admin'?'selected':''}>Membro</option>
+            <option value="admin" ${m.papel==='admin'?'selected':''}>Administrador</option>
+          </select>
+        </div>
+      </div>
+      <div class="membro-perms" ${m.papel==='admin' ? 'hidden' : ''}>${matrizPermissoesHtml('m-'+m.user_id, m.permissoes, false)}</div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="btn btn-primary btn-sm" data-action="cfg-salvar-acesso:${m.user_id}">Salvar acesso</button>
+        ${eu ? '' : `<button class="btn btn-danger btn-sm" data-action="cfg-remover-membro:${m.user_id}">Remover da equipe</button>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  const pendentes = convites.filter(c=>!c.aceito_em);
+  const listaConvites = pendentes.length ? pendentes.map(c=>{
+    const expirado = new Date(c.expira_em) < new Date();
+    return `<div class="convite-linha">
+      <div><b>${esc(c.email)}</b><div class="membro-sub">${c.papel==='admin' ? 'Administrador' : esc(resumoPermissoes(c))} · ${expirado ? '<span style="color:var(--red)">expirado</span>' : 'válido até ' + new Date(c.expira_em).toLocaleDateString('pt-BR')}</div></div>
+      <div class="btn-row">
+        ${expirado ? '' : `<button class="btn btn-ghost btn-sm" data-action="cfg-copiar-convite:${c.id}">Copiar link</button>
+        <button class="btn btn-ghost btn-sm" data-action="cfg-email-convite:${c.id}">Enviar por e-mail</button>`}
+        <button class="btn btn-danger btn-sm" data-action="cfg-cancelar-convite:${c.id}">Cancelar</button>
+      </div>
+    </div>`;
+  }).join('') : `<p class="page-sub" style="margin:0;">Nenhum convite pendente.</p>`;
+
+  const novo = state.cfgConviteNovo || { papel:'membro', permissoes: permissoesPadraoConvite() };
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">01</span> Convidar pessoa</div>
+    <p class="page-sub" style="margin:0 0 16px;">A pessoa recebe um link para criar a conta (ou entrar, se já tiver uma) e passa a ver o conteúdo da empresa conforme as permissões abaixo. Depois ela completa telefone, cargo e foto.</p>
+    <div class="field-row grid-2">
+      ${campoCfg('cv-email', 'E-mail da pessoa', novo.email, { type:'email', placeholder:'nome@empresa.com.br', obrigatorio:true })}
+      <div class="field"><label for="cv-papel">Perfil</label>
+        <select id="cv-papel"><option value="membro" ${novo.papel!=='admin'?'selected':''}>Membro (permissões abaixo)</option><option value="admin" ${novo.papel==='admin'?'selected':''}>Administrador (acesso total)</option></select>
+      </div>
+    </div>
+    <div id="cv-perms" style="margin-top:16px;" ${novo.papel==='admin' ? 'hidden' : ''}>${matrizPermissoesHtml('cv', novo.permissoes, false)}</div>
+    <div class="btn-row" style="margin-top:18px;"><button class="btn btn-primary" data-action="cfg-convidar">Gerar convite</button></div>
+    ${state.cfgConviteGerado ? `<div class="convite-gerado">
+      <div><b>Convite criado para ${esc(state.cfgConviteGerado.email)}.</b> Envie o link abaixo para a pessoa (vale 14 dias e só funciona com este e-mail):</div>
+      <input readonly value="${esc(linkConvite(state.cfgConviteGerado))}" id="cv-link" onclick="this.select()">
+      <div class="btn-row"><button class="btn btn-ghost btn-sm" data-action="cfg-copiar-convite:${state.cfgConviteGerado.id}">Copiar link</button>
+      <button class="btn btn-ghost btn-sm" data-action="cfg-email-convite:${state.cfgConviteGerado.id}">Enviar por e-mail</button></div>
+    </div>` : ''}
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:14px;"><span class="num">02</span> Convites pendentes</div>
+    ${listaConvites}
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:14px;"><span class="num">03</span> Equipe (${equipe.length})</div>
+    ${membros}
+  </div>`;
+}
+
+function linkConvite(c){ return window.location.origin + '/login/?convite=' + encodeURIComponent(c.token); }
+
+async function carregarEquipe(){
+  if(state.cfgCarregandoEquipe) return;
+  state.cfgCarregandoEquipe = true;
+  try{
+    const [{ data: equipe, error: e1 }, { data: convites, error: e2 }] = await Promise.all([
+      sb.from('perfis').select('user_id, email, nome, telefone, cargo, foto, papel, permissoes, criado_em').order('criado_em'),
+      sb.from('convites').select('*').is('aceito_em', null).order('criado_em', { ascending:false }),
+    ]);
+    if(e1 || e2) throw (e1 || e2);
+    state.cfgEquipe = equipe; state.cfgConvites = convites;
+  }catch(err){
+    console.error(err);
+    toast('Não foi possível carregar a equipe.');
+    state.cfgEquipe = state.cfgEquipe || []; state.cfgConvites = state.cfgConvites || [];
+  }finally{
+    state.cfgCarregandoEquipe = false;
+    if(state.route==='config') renderApp();
+  }
+}
+
+// Reduz a foto para 256×256 (recorte central) em JPEG, para guardar leve no perfil.
+function reduzirFoto(arquivo){
+  return new Promise((resolve, reject)=>{
+    if(!arquivo || !/^image\//.test(arquivo.type)) return reject(new Error('Escolha um arquivo de imagem.'));
+    const img = new Image();
+    const url = URL.createObjectURL(arquivo);
+    img.onload = ()=>{
+      const lado = 256, menor = Math.min(img.width, img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = lado; canvas.height = lado;
+      canvas.getContext('2d').drawImage(img, (img.width-menor)/2, (img.height-menor)/2, menor, menor, 0, 0, lado, lado);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Não foi possível ler esta imagem.')); };
+    img.src = url;
+  });
+}
+async function onFotoSelecionada(input){
+  try{ state.cfgFotoNova = await reduzirFoto(input.files && input.files[0]); renderApp(); }
+  catch(err){ toast(err.message); }
+}
+
+const valorCampo = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+
+async function salvarPerfil(obrigarContato){
+  const dados = { nome: valorCampo('cfg-nome'), telefone: valorCampo('cfg-telefone'), cargo: valorCampo('cfg-cargo') };
+  if(state.cfgFotoNova !== undefined) dados.foto = state.cfgFotoNova;
+  if(!dados.nome) return toast('Informe seu nome.');
+  if(obrigarContato && (!dados.telefone || !dados.cargo)) return toast('Informe telefone e cargo para continuar.');
+  const { error } = await sb.from('perfis').update(dados).eq('user_id', usuarioAtual.id);
+  if(error){ console.error(error); return toast('Não foi possível salvar seus dados.'); }
+  Object.assign(usuarioAtual, dados);
+  delete state.cfgFotoNova;
+  toast('Dados salvos.', 'ok');
+  if(obrigarContato) navigate('home'); else renderApp();
+}
+
+async function salvarEmpresa(){
+  const campos = ['nome_fantasia','razao_social','cnpj','inscricao_estadual','telefone','email','site','cep','logradouro','numero','complemento','bairro','cidade','uf','pais'];
+  const dados = Object.fromEntries(campos.map(c=>[c, valorCampo('emp-'+c)]));
+  dados.uf = dados.uf.toUpperCase();
+  if(!dados.nome_fantasia) return toast('Informe o nome fantasia da empresa.');
+  const cnpjNum = dados.cnpj.replace(/\D/g,'');
+  if(cnpjNum && !cnpjValido(cnpjNum)) return toast('CNPJ inválido. Confira os números.');
+  dados.atualizado_em = new Date().toISOString();
+  const { error } = await sb.from('empresas').update(dados).eq('id', empresaAtual.id);
+  if(error){ console.error(error); return toast('Não foi possível salvar os dados da empresa.'); }
+  Object.assign(empresaAtual, dados);
+  toast('Dados da empresa salvos.', 'ok');
+  renderApp();
+}
+
+function cnpjValido(c){
+  if(!/^\d{14}$/.test(c) || /^(\d)\1{13}$/.test(c)) return false;
+  const calc = (base) => {
+    let soma = 0, peso = base.length - 7;
+    for(let i=0;i<base.length;i++){ soma += Number(base[i]) * peso--; if(peso < 2) peso = 9; }
+    const r = soma % 11; return r < 2 ? 0 : 11 - r;
+  };
+  const d1 = calc(c.slice(0,12)), d2 = calc(c.slice(0,12) + d1);
+  return c.endsWith(String(d1) + String(d2));
+}
+function mascaraCnpj(v){
+  const d = v.replace(/\D/g,'').slice(0,14);
+  return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3')
+          .replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2');
+}
+async function buscarCep(cep){
+  const d = cep.replace(/\D/g,'');
+  if(d.length!==8) return;
+  try{
+    const r = await fetch('https://viacep.com.br/ws/'+d+'/json/').then(r=>r.json());
+    if(r.erro) return toast('CEP não encontrado.');
+    const set = (id, v) => { const el = document.getElementById('emp-'+id); if(el && v && !el.value) el.value = v; };
+    set('logradouro', r.logradouro); set('bairro', r.bairro); set('cidade', r.localidade); set('uf', r.uf);
+    const num = document.getElementById('emp-numero'); if(num) num.focus();
+  }catch(e){ /* sem internet: segue preenchimento manual */ }
+}
+
+async function salvarAcesso(userId){
+  const papelEl = document.querySelector(`[data-papel="${userId}"]`);
+  const papel = papelEl ? papelEl.value : 'membro';
+  const permissoes = lerMatriz('m-'+userId);
+  const { error } = await sb.rpc('definir_acesso', { p_user:userId, p_papel:papel, p_permissoes:permissoes });
+  if(error){
+    console.error(error);
+    return toast(/ultimo_admin/.test(error.message) ? 'A empresa precisa de pelo menos um administrador.' : 'Não foi possível salvar o acesso.');
+  }
+  toast('Acesso atualizado.', 'ok');
+  if(userId===usuarioAtual.id){ await carregarPerfilEEmpresa(); }
+  state.cfgEquipe = null; renderApp();
+}
+async function removerMembro(userId){
+  const m = (state.cfgEquipe||[]).find(x=>x.user_id===userId);
+  if(!confirm(`Remover ${m ? (m.nome || m.email) : 'esta pessoa'} da equipe? Ela perde o acesso ao conteúdo da empresa na hora.`)) return;
+  const { error } = await sb.rpc('remover_membro', { p_user:userId });
+  if(error){ console.error(error); return toast(/ultimo_admin/.test(error.message) ? 'A empresa precisa de pelo menos um administrador.' : 'Não foi possível remover.'); }
+  toast('Pessoa removida da equipe.', 'ok');
+  state.cfgEquipe = null; renderApp();
+}
+async function criarConvite(){
+  const email = valorCampo('cv-email').toLowerCase();
+  const papel = (document.getElementById('cv-papel')||{}).value || 'membro';
+  const permissoes = lerMatriz('cv');
+  state.cfgConviteNovo = { email, papel, permissoes };
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast('Informe um e-mail válido.');
+  if((state.cfgEquipe||[]).some(m=>m.email.toLowerCase()===email)) return toast('Esta pessoa já faz parte da equipe.');
+  const { data, error } = await sb.from('convites')
+    .insert({ empresa_id: empresaAtual.id, email, papel, permissoes, convidado_por: usuarioAtual.id })
+    .select('*').single();
+  if(error){ console.error(error); return toast('Não foi possível criar o convite.'); }
+  state.cfgConviteGerado = data;
+  state.cfgConviteNovo = null;
+  state.cfgConvites = [data, ...(state.cfgConvites||[])];
+  toast('Convite criado. Envie o link para a pessoa.', 'ok');
+  renderApp();
+}
+function conviteDoId(id){ return (state.cfgConvites||[]).find(c=>c.id===id) || (state.cfgConviteGerado && state.cfgConviteGerado.id===id ? state.cfgConviteGerado : null); }
+async function copiarConvite(id){
+  const c = conviteDoId(id); if(!c) return;
+  try{ await navigator.clipboard.writeText(linkConvite(c)); toast('Link copiado.', 'ok'); }
+  catch(e){ prompt('Copie o link do convite:', linkConvite(c)); }
+}
+function emailConvite(id){
+  const c = conviteDoId(id); if(!c) return;
+  const assunto = `Convite para a equipe ${nomeEmpresa()} na Comexta`;
+  const corpo = `Olá!\n\n${usuarioAtual.nome || usuarioAtual.email} convidou você para acessar o ERP de importação da ${nomeEmpresa()} na Comexta.\n\n`
+    + `Para aceitar, abra o link abaixo e crie sua conta com este e-mail (${c.email}):\n${linkConvite(c)}\n\nO convite vale até ${new Date(c.expira_em).toLocaleDateString('pt-BR')}.`;
+  window.location.href = 'mailto:' + encodeURIComponent(c.email) + '?subject=' + encodeURIComponent(assunto) + '&body=' + encodeURIComponent(corpo);
+}
+async function cancelarConvite(id){
+  if(!confirm('Cancelar este convite? O link deixa de funcionar.')) return;
+  const { error } = await sb.from('convites').delete().eq('id', id);
+  if(error){ console.error(error); return toast('Não foi possível cancelar o convite.'); }
+  state.cfgConvites = (state.cfgConvites||[]).filter(c=>c.id!==id);
+  if(state.cfgConviteGerado && state.cfgConviteGerado.id===id) state.cfgConviteGerado = null;
+  renderApp();
+}
+
+function acaoConfig(cmd, a1){
+  switch(cmd){
+    case 'cfg-aba': state.configTab = a1; state.cfgConviteGerado = null; renderApp(); break;
+    case 'cfg-remover-foto': state.cfgFotoNova = null; renderApp(); break;
+    case 'cfg-salvar-perfil': salvarPerfil(false); break;
+    case 'cfg-completar-perfil': salvarPerfil(true); break;
+    case 'cfg-salvar-empresa': salvarEmpresa(); break;
+    case 'cfg-salvar-acesso': salvarAcesso(a1); break;
+    case 'cfg-remover-membro': removerMembro(a1); break;
+    case 'cfg-convidar': criarConvite(); break;
+    case 'cfg-copiar-convite': copiarConvite(a1); break;
+    case 'cfg-email-convite': emailConvite(a1); break;
+    case 'cfg-cancelar-convite': cancelarConvite(a1); break;
+  }
+}
+// Campos da tela de configurações que reagem enquanto se digita.
+function onConfigInput(el){
+  if(el.id==='emp-cnpj'){ el.value = mascaraCnpj(el.value); return true; }
+  if(el.id==='emp-cep'){ el.value = el.value.replace(/\D/g,'').slice(0,8).replace(/^(\d{5})(\d)/,'$1-$2'); if(el.value.length===9) buscarCep(el.value); return true; }
+  return false;
+}
+function onConfigChange(el){
+  if(el.id==='cfg-foto-input'){ onFotoSelecionada(el); return true; }
+  if(el.id==='cv-papel'){ const box = document.getElementById('cv-perms'); if(box) box.hidden = el.value==='admin'; return true; }
+  if(el.hasAttribute('data-papel')){
+    const box = el.closest('.membro').querySelector('.membro-perms'); if(box) box.hidden = el.value==='admin'; return true;
+  }
+  if(el.hasAttribute('data-perm')){
+    // Marcar criar/editar marca visualizar; desmarcar visualizar desmarca criar/editar.
+    const [prefixo, secao, acao] = el.getAttribute('data-perm').split(':');
+    const q = a => document.querySelector(`[data-perm="${prefixo}:${secao}:${a}"]`);
+    if(acao!=='ver' && el.checked && q('ver')) q('ver').checked = true;
+    if(acao==='ver' && !el.checked){ if(q('criar')) q('criar').checked = false; if(q('editar')) q('editar').checked = false; }
+    return true;
+  }
+  return false;
+}
+
+// Primeiro acesso de quem entrou por convite: completar telefone, cargo e (opcional) foto.
+function renderCompletarPerfil(){
+  const u = usuarioAtual;
+  return `<div class="completar-wrap"><div class="card completar-card">
+    <div class="page-title" style="font-size:23px;">Bem-vindo(a) à equipe ${esc(nomeEmpresa())}!</div>
+    <div class="page-sub" style="margin-bottom:20px;">Antes de começar, complete seu cadastro. Seu telefone e cargo aparecem para o administrador da empresa.</div>
+    ${blocoFotoHtml(u)}
+    <div class="field-row grid-2" style="margin-top:18px;">
+      ${campoCfg('cfg-nome', 'Nome completo', u.nome, { obrigatorio:true, autocomplete:'name' })}
+      ${campoCfg('cfg-email', 'E-mail', u.email, { readonly:true })}
+      ${campoCfg('cfg-telefone', 'Telefone', u.telefone, { obrigatorio:true, placeholder:'(00) 00000-0000', type:'tel', autocomplete:'tel' })}
+      ${campoCfg('cfg-cargo', 'Cargo', u.cargo, { obrigatorio:true, placeholder:'Ex.: Analista de importação', autocomplete:'organization-title' })}
+    </div>
+    <div class="btn-row" style="margin-top:22px;"><button class="btn btn-primary" data-action="cfg-completar-perfil">Salvar e começar</button>
+    <button class="btn btn-ghost" onclick="sair()">Sair</button></div>
+  </div></div>`;
 }
 
 /* -------------------------------- Icones --------------------------------- */
 const ICONS = {
+  gear:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`,
   home:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>`,
   ship:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18l-2 4H5l-2-4Z"/><path d="M5 17V9h14v8"/><path d="M9 9V4h6v5"/><path d="M12 2v2"/></svg>`,
   scale:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M5 8 2 15a3 3 0 0 0 6 0L5 8Z"/><path d="M19 8l-3 7a3 3 0 0 0 6 0l-3-7Z"/><path d="M8 21h8"/></svg>`,
@@ -1217,7 +1916,7 @@ const saveDraftFormal = debounce(async ()=>{ await storeSet('dadosFormal:draft',
 const saveDraftSimulacao = debounce(async ()=>{ await storeSet('simulacao:draft', state.simulacao); }, 500);
 
 async function loadInitialData(){
-  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft']);
+  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado']);
   await importarDadosAntigos(v);
   const [draft, idx, cli, forn, prod, draftF, idxF, draftS, idxS, filtrosSalvos] = [
     v['dados:draft'], v['cotacoes:index'],
@@ -1265,10 +1964,16 @@ const ROUTE_META = {
   'cad-cliente':    {group:'cad', label:'Cliente'},
   'cad-fornecedor': {group:'cad', label:'Fornecedor'},
   'cad-produto':    {group:'cad', label:'Produto'},
+  'config':         {group:null, label:'Configurações'},
 };
 const SIM_PROTECTED_ROUTES = ['simCarga','simCarregando','simPaletes','simEquipamentos','simEmbalagem','simResultado'];
 function navigate(route){
   hideAutocomplete();
+  if(!ROUTE_META[route]) route = 'home';
+  if(!rotaPermitida(route)){
+    toast('Você não tem acesso a esta área. Fale com o administrador da empresa.');
+    route = 'home';
+  }
   if(SIM_PROTECTED_ROUTES.includes(route) && !(state.simulacao.nome||'').trim()){
     toast('Digite o nome da simulação antes de continuar.');
     route = 'simInicio';
@@ -1345,7 +2050,9 @@ function topbarHtml(){
     <div class="brand" data-action="go:home" title="Comexta — comércio exterior inteligente">
       <div class="logo-chip"><img src="${COMEXTA_LOGO_URI}" alt="Comexta — comércio exterior inteligente"></div>
     </div>
-    <a class="pill-btn" href="/conta/senha/" title="Trocar sua senha" style="text-decoration:none;">Trocar senha</a>
+    <button class="user-btn ${state.route==='config'?'active':''}" data-action="go:config" title="Configurações — ${esc(usuarioAtual ? usuarioAtual.email : '')}">
+      ${avatarHtml(usuarioAtual, 30)}<span class="user-btn-txt"><b>${esc(usuarioAtual ? (usuarioAtual.nome || usuarioAtual.email) : '')}</b><small>${esc(nomeEmpresa())}</small></span>${ICONS.gear}
+    </button>
     <a class="pill-btn" href="/login/" onclick="event.preventDefault(); sair();" title="Sair (${esc(usuarioAtual ? usuarioAtual.email : '')})" style="text-decoration:none;">Sair</a>
   </div>`;
 }
@@ -1402,11 +2109,13 @@ function viewFor(route){
     case 'cad-cliente': return renderCadastro('cliente');
     case 'cad-fornecedor': return renderCadastro('fornecedor');
     case 'cad-produto': return renderCadastro('produto');
+    case 'config': return renderConfig();
     default: return renderHome();
   }
 }
 function renderApp(){
   const app = document.getElementById('app');
+  if(perfilIncompleto()){ app.innerHTML = renderCompletarPerfil(); return; }
   const wide = state.route==='home' ? 'wide' : '';
   const crumbs = state.route==='home' ? '' : `<div class="crumbs">${crumbsHtml()}</div>`;
   const lightbox = state.lightboxSrc ? `<div class="lightbox-overlay" data-action="fechar-lightbox"><img src="${state.lightboxSrc}" alt="" data-action="noop"></div>` : '';
@@ -1424,6 +2133,7 @@ function renderApp(){
   if(state.route==='simCarga') patchComputedSimCarga();
   if(state.route==='simResultado') initResultado3D();
   if(state.lightbox3D) initLightbox3D();
+  aplicarPermissoesNaTela();
   if(state.route==='home') renderHomeCharts();
 }
 
@@ -2501,6 +3211,7 @@ function cotacoesTodasFiltradas(ignorarStatus){
   }).sort((a,b)=> new Date(b.cot.criadoEm) - new Date(a.cot.criadoEm));
 }
 async function moverCotacaoStatus(id, tipo, novoStatus){
+  if(!pode('cotacoes','editar')){ toast('Você não tem permissão para editar cotações.'); renderApp(); return; }
   const lista = tipo==='Simplificada' ? state.cotacoesIndex : state.cotacoesFormalIndex;
   const item = lista.find(x=>x.id===id);
   if(!item) return;
@@ -5579,7 +6290,9 @@ function onAppClick(e){
   const t = e.target.closest('[data-action]');
   if(!t) return;
   const action = t.getAttribute('data-action');
+  if(!acaoPermitida(action)){ avisoSemPermissao(action); return; }
   const [cmd, a1, a2] = action.split(':');
+  if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1); return; }
   switch(cmd){
     case 'go': navigate(a1); break;
     case 'toggle-module':
@@ -5778,6 +6491,7 @@ function onAppClick(e){
 
 function onAppInput(e){
   const el = e.target;
+  if(onConfigInput(el)) return;
   const bind = el.getAttribute('data-bind');
   if(!bind) return;
   const inCadForm = !!el.closest('#cad-rich-form');
@@ -5818,6 +6532,7 @@ function onAppInput(e){
 }
 function onAppChange(e){
   const el = e.target;
+  if(onConfigChange(el)) return;
   if(el.id==='icms-input' || el.id==='icms-input-formal') return; // handled by input
   if(el.id==='doc-file-input'){ handleFilesSelected(el.files); return; }
   if(el.id==='anexo-file-input'){ handleAnexoFilesSelected(el.files); return; }
