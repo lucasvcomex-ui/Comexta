@@ -163,7 +163,7 @@ button{font-family:inherit;}
 .side-link svg{width:16px;height:16px; flex-shrink:0;}
 .side-link:hover{background:rgba(23,58,94,0.07); color:var(--navy);}
 .side-link.active{background:var(--surface); color:var(--navy); border-color:var(--line); box-shadow:var(--shadow);}
-.main{flex:1; padding:30px 34px 70px; max-width:1280px;}
+.main{flex:1; min-width:0; padding:30px 34px 70px; max-width:1280px;}
 .main.wide{max-width:none;}
 
 /* ---------- Typography ---------- */
@@ -536,6 +536,30 @@ td.num-mono, th.num-mono{text-align:right;}
 .pl-row{border-top:1px solid var(--line-soft);}
 .pl-row input{border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13.5px; font-family:var(--font-body); min-width:0;}
 .field select[data-bind]{border:1px solid var(--line); background:#fff; border-radius:var(--radius-sm); padding:10px 12px; font-size:14px; font-family:var(--font-body); color:var(--ink);}
+
+/* ---------- Processos ---------- */
+.proc-topo{display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-top:18px;}
+.proc-topo .field{min-width:230px;}
+.field textarea{border:1px solid var(--line); background:#fff; border-radius:var(--radius-sm); padding:10px 12px; font-size:14px;
+  font-family:var(--font-body); color:var(--ink); outline:none; resize:vertical;}
+.field textarea:focus{border-color:var(--navy); box-shadow:0 0 0 3px rgba(23,58,94,0.12);}
+.proc-itens td input{min-width:120px;}
+.proc-itens td input.num-mono{min-width:80px;}
+.proc-resumo{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:18px;}
+@media (max-width:760px){ .proc-resumo{grid-template-columns:1fr;} }
+.proc-total-tributos{margin-top:14px; font-size:14px; color:var(--ink-soft);}
+.proc-total-tributos b{color:var(--navy-deep); font-family:var(--font-mono); font-size:15px;}
+.proc-leitura input:disabled, .proc-leitura select:disabled, .proc-leitura textarea:disabled{background:var(--paper-2); color:var(--ink); cursor:default;}
+.canal{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;}
+.canal::before{content:''; width:9px; height:9px; border-radius:50%; background:currentColor;}
+.canal-verde{color:#2F6B4F;} .canal-amarelo{color:#B8860B;} .canal-vermelho{color:#B23A32;} .canal-cinza{color:#6B7280;}
+@media (max-width:760px){
+  /* Em uma coluna só, campos largos (span 2/3) não podem criar colunas extras */
+  .field-row > .field{grid-column:auto !important; min-width:0;}
+  .proc-topo, .proc-topo .field{width:100%;}
+  .proc-topo .btn-row{width:100%;}
+  .proc-topo .field{min-width:0;}
+}
 </style>
 </head>
 <body>
@@ -595,22 +619,25 @@ function toast(msg, kind){
 // Cada chave tem uma versão: se outra pessoa salvou antes, as alterações são mescladas item a item.
 const sb = window.comextaSupabase;
 const CHAVE_LOCAL = /:draft$|^filtrosTodas:/;
-const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list'];
+const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','processos:index'];
 const SECAO_DA_CHAVE = {
   'cotacoes:index':'cotacoes', 'cotacoesFormal:index':'cotacoes', 'simulacoes:index':'simulador',
   'clientes:list':'cadastros', 'fornecedores:list':'cadastros', 'produtos:list':'cadastros',
+  'processos:index':'processos',
 };
 const ESTADO_DA_CHAVE = {
   'cotacoes:index':'cotacoesIndex', 'cotacoesFormal:index':'cotacoesFormalIndex', 'simulacoes:index':'simulacoesIndex',
   'clientes:list':'clientes', 'fornecedores:list':'fornecedores', 'produtos:list':'produtos',
+  'processos:index':'processosIndex',
 };
 // Itens numerados em sequência: se dois usuários criarem o mesmo número ao mesmo tempo, o segundo é renumerado.
 const NUMERACAO_DA_CHAVE = {
   'cotacoes:index':{ prefixo:'COT-', atual:'currentCotacaoId' },
   'cotacoesFormal:index':{ prefixo:'COTF-', atual:'currentCotacaoFormalId' },
   'simulacoes:index':{ prefixo:'SIM-', atual:'currentSimulacaoId' },
+  'processos:index':{ prefixo:'PRC-', atual:'currentProcessoId' },
 };
-const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga' };
+const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga', processos:'Processos' };
 
 let usuarioAtual = null; // { id, email, nome, telefone, cargo, foto, papel, permissoes, convidado, empresa_id }
 let empresaAtual = null;
@@ -869,8 +896,12 @@ const PERMISSAO_DA_ACAO = {
   'cad-view':['cadastros','ver'], 'cad-open-form':['cadastros','criar'],
   'cad-edit':['cadastros','editar'], 'cad-view-edit':['cadastros','editar'], 'cad-delete':['cadastros','editar'],
   'cad-save':['cadastros','salvar'],
+
+  'toggle-nav:proc':['processos','ver'], 'toggle-module:proc':['processos','ver'], 'go:processos':['processos','ver'],
+  'go:processoForm':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
+  'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'],
 };
-const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros' };
+const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos' };
 
 function permissaoDaAcao(action){
   return PERMISSAO_DA_ACAO[action] || PERMISSAO_DA_ACAO[action.split(':')[0]] || null;
@@ -881,6 +912,7 @@ function acaoDeSalvar(action){
   if(action.startsWith('save-calculo')) return state.currentCotacaoId ? 'editar' : 'criar';
   if(action.startsWith('salvar-simulacao')) return state.currentSimulacaoId ? 'editar' : 'criar';
   if(action.startsWith('cad-save')) return (state.cadEdit && state.cadEdit.id) ? 'editar' : 'criar';
+  if(action.startsWith('proc-salvar')) return state.currentProcessoId ? 'editar' : 'criar';
   return 'editar';
 }
 function acaoPermitida(action){
@@ -930,6 +962,7 @@ function rotaPermitida(route){
   if(!pode(secao, 'ver')) return false;
   if(route==='dados' && !state.currentCotacaoId && !pode('cotacoes','criar')) return false;
   if(route==='dadosFormal' && !state.currentCotacaoFormalId && !pode('cotacoes','criar')) return false;
+  if(route==='processoForm' && !state.currentProcessoId && !pode('processos','criar')) return false;
   return true;
 }
 
@@ -947,7 +980,7 @@ function nomeEmpresa(){ return (empresaAtual && (empresaAtual.nome_fantasia || e
 function perfilIncompleto(){ return !!usuarioAtual && usuarioAtual.convidado && (!usuarioAtual.telefone || !usuarioAtual.cargo); }
 
 function permissoesPadraoConvite(){
-  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false} };
+  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false}, processos:{ver:true,criar:false,editar:false} };
 }
 function matrizPermissoesHtml(prefixo, permissoes, desabilitada){
   const p = permissoes || {};
@@ -1046,7 +1079,7 @@ function renderConfigPerfil(){
   <div class="card">
     <div class="section-title" style="margin-bottom:12px;"><span class="num">02</span> Meu acesso</div>
     <p class="page-sub" style="margin:0 0 14px;">Empresa: <b>${esc(nomeEmpresa())}</b> · ${souAdmin() ? 'Administrador (acesso total)' : 'Permissões definidas pelo administrador'}</p>
-    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
+    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1}, processos:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
   </div>`;
 }
 
@@ -1640,8 +1673,472 @@ async function onPersonalizacaoChange(el){
   return true;
 }
 
+/* ------------------------------- Processos ---------------------------------- */
+// Processos de importação da empresa (dados_empresa, chave 'processos:index'), numerados PRC-0001...
+// "Cadastrar Novo Processo" tem as janelas Cliente, Produto, Transporte, Financeiro e Desembaraço.
+// O processo em edição fica como rascunho neste navegador até ser salvo.
+const PROC_ABAS = [
+  { id:'cliente', label:'Cliente' }, { id:'produto', label:'Produto' }, { id:'transporte', label:'Transporte' },
+  { id:'financeiro', label:'Financeiro' }, { id:'desembaraco', label:'Desembaraço' },
+];
+const PROC_STATUS = {
+  aberto:{ label:'Aberto', cls:'badge-navy' }, producao:{ label:'Em produção', cls:'badge-amber' },
+  transito:{ label:'Em trânsito', cls:'badge-amber' }, chegada:{ label:'Chegou ao destino', cls:'badge-amber' },
+  desembaraco:{ label:'Em desembaraço', cls:'badge-amber' }, desembaracado:{ label:'Desembaraçado', cls:'badge-green' },
+  entregue:{ label:'Entregue', cls:'badge-green' }, cancelado:{ label:'Cancelado', cls:'badge-red' },
+};
+const PROC_MODAIS = { maritimo:'Marítimo', aereo:'Aéreo', rodoviario:'Rodoviário', ferroviario:'Ferroviário', multimodal:'Multimodal' };
+const PROC_CANAIS = { '':'—', verde:'Verde', amarelo:'Amarelo', vermelho:'Vermelho', cinza:'Cinza' };
+const PROC_MOEDAS = ['USD','EUR','CNY','GBP','JPY','BRL'];
+const PROC_INCOTERMS = ['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DAP','DPU','DDP'];
+const PROC_TRIBUTOS = [['ii','II'],['ipi','IPI'],['pis','PIS'],['cofins','COFINS'],['icms','ICMS'],['siscomex','Taxa Siscomex'],['afrmm','AFRMM'],['armazenagem','Armazenagem']];
+
+const hojeISO = () => new Date().toISOString().slice(0,10);
+function novoItemProcesso(){ return { id:uid(), produto:'', ncm:'', descricao:'', quantidade:'', unidade:'', valorUnit:'', pesoLiquido:'' }; }
+function novaParcelaProcesso(){ return { id:uid(), descricao:'', vencimento:'', valor:'', moeda:'USD', pago:false }; }
+function novoProcesso(){
+  return {
+    id:null, seq:null, status:'aberto',
+    cliente:{ nome:'', cnpjCpf:'', contato:'', email:'', telefone:'', referenciaCliente:'', modalidade:'conta_propria',
+              responsavel:'', vendedor:'', dataAbertura:hojeISO(), observacoes:'' },
+    produto:{ fornecedor:'', paisOrigem:'', incoterm:'FOB', moeda:'USD', proforma:'', invoice:'', itens:[novoItemProcesso()] },
+    transporte:{ modal:'maritimo', tipoCarga:'FCL', containerTipo:"40' HC", containerQtd:'', agenteCarga:'', armador:'', navioVoo:'',
+                 booking:'', conhecimentoMaster:'', conhecimentoHouse:'', origem:'', destino:'', etd:'', eta:'', chegada:'',
+                 freeTime:'', volumes:'', pesoBruto:'', cubagem:'' },
+    financeiro:{ taxaCambio:'', frete:'', freteMoeda:'USD', seguro:'', seguroMoeda:'USD', condicaoPagamento:'', banco:'', contratoCambio:'', parcelas:[] },
+    desembaraco:{ despachante:'', recinto:'', urf:'', tipoDeclaracao:'DUIMP', numeroDeclaracao:'', dataRegistro:'', canal:'', dataDesembaraco:'',
+                  liNecessaria:'nao', numeroLi:'', tributos:{ ii:'', ipi:'', pis:'', cofins:'', icms:'', siscomex:'', afrmm:'', armazenagem:'' }, observacoes:'' },
+  };
+}
+// Completa campos que faltem (processos salvos antes de algum campo novo existir).
+function normalizarProcesso(p){
+  const base = novoProcesso(), r = { ...base, ...(p||{}) };
+  for(const k of ['cliente','produto','transporte','financeiro','desembaraco']) r[k] = { ...base[k], ...((p||{})[k]||{}) };
+  r.desembaraco.tributos = { ...base.desembaraco.tributos, ...(((p||{}).desembaraco||{}).tributos||{}) };
+  if(!Array.isArray(r.produto.itens)) r.produto.itens = [];
+  if(!Array.isArray(r.financeiro.parcelas)) r.financeiro.parcelas = [];
+  return r;
+}
+
+const numProc = v => { const n = parseFloat(String(v??'').replace(/\./g,'').replace(',','.')); return isFinite(n) ? n : 0; };
+const numProcSimples = v => { const n = parseFloat(String(v??'').replace(',','.')); return isFinite(n) ? n : 0; };
+function fmtMoeda(v, moeda){
+  try{ return new Intl.NumberFormat('pt-BR', { style:'currency', currency: moeda||'USD' }).format(v||0); }
+  catch(e){ return (moeda||'') + ' ' + (v||0).toFixed(2); }
+}
+function totaisProcesso(p){
+  const itens = p.produto.itens || [];
+  const fob = itens.reduce((s,i)=>s + numProcSimples(i.quantidade)*numProcSimples(i.valorUnit), 0);
+  const pesoLiq = itens.reduce((s,i)=>s + numProcSimples(i.pesoLiquido), 0);
+  const moeda = p.produto.moeda || 'USD';
+  const frete = p.financeiro.freteMoeda===moeda ? numProcSimples(p.financeiro.frete) : 0;
+  const seguro = p.financeiro.seguroMoeda===moeda ? numProcSimples(p.financeiro.seguro) : 0;
+  const cambio = numProcSimples(p.financeiro.taxaCambio);
+  const cif = fob + frete + seguro;
+  const tributos = Object.values(p.desembaraco.tributos||{}).reduce((s,v)=>s + numProcSimples(v), 0);
+  return { fob, pesoLiq, moeda, cif, cifBRL: cambio ? cif*cambio : 0, cambio, tributos,
+           freteOutraMoeda: p.financeiro.frete && p.financeiro.freteMoeda!==moeda,
+           seguroOutraMoeda: p.financeiro.seguro && p.financeiro.seguroMoeda!==moeda };
+}
+
+function podeSalvarProcesso(){ return state.currentProcessoId ? pode('processos','editar') : pode('processos','criar'); }
+const saveDraftProcesso = debounce(()=>{ if(state.procDraft) storeSet('processo:draft', { draft: state.procDraft, id: state.currentProcessoId, aba: state.procTab }); }, 500);
+
+// --------- Lista ---------
+function renderProcessos(){
+  const q = (state.procFiltro||'').trim().toLowerCase();
+  const st = state.procFiltroStatus || '';
+  const lista = [...(state.processosIndex||[])].sort((a,b)=>(b.seq||0)-(a.seq||0)).filter(p=>{
+    if(st && p.status!==st) return false;
+    if(!q) return true;
+    const alvo = [p.id, p.cliente&&p.cliente.nome, p.cliente&&p.cliente.referenciaCliente, p.produto&&p.produto.fornecedor,
+                  p.produto&&p.produto.invoice, p.transporte&&p.transporte.conhecimentoMaster, p.transporte&&p.transporte.conhecimentoHouse,
+                  p.desembaraco&&p.desembaraco.numeroDeclaracao].join(' ').toLowerCase();
+    return alvo.includes(q);
+  });
+  const linhas = lista.map(p=>{
+    const s = PROC_STATUS[p.status] || PROC_STATUS.aberto;
+    const t = p.transporte || {}, d = p.desembaraco || {};
+    return `<tr>
+      <td><b class="num-mono" style="text-align:left;">${esc(p.id)}</b></td>
+      <td>${esc((p.cliente&&p.cliente.nome)||'—')}${p.cliente&&p.cliente.referenciaCliente ? `<div class="membro-sub">Ref.: ${esc(p.cliente.referenciaCliente)}</div>` : ''}</td>
+      <td>${esc(PROC_MODAIS[t.modal]||'—')}</td>
+      <td>${esc(t.origem||'—')} → ${esc(t.destino||'—')}</td>
+      <td>${t.eta ? fmtDateOnly(t.eta) : '—'}</td>
+      <td>${d.canal ? `<span class="canal canal-${esc(d.canal)}">${esc(PROC_CANAIS[d.canal])}</span>` : '—'}</td>
+      <td><span class="badge ${s.cls}">${s.label}</span></td>
+      <td style="text-align:right;">
+        <button class="icon-btn" title="Abrir" data-action="proc-abrir:${esc(p.id)}">${ICONS.open||ICONS.edit}</button>
+        ${deleteBtnHtml('proc', p.id, 'proc-excluir:'+p.id)}
+      </td>
+    </tr>`;
+  }).join('');
+  const total = (state.processosIndex||[]).length;
+  return `
+  <div class="page-title">Processos</div>
+  <div class="page-sub">Processos de importação da empresa: cliente, produtos, transporte, financeiro e desembaraço em um só lugar.</div>
+  <hr class="hairline">
+  <div class="btn-row" style="margin-bottom:18px; justify-content:space-between;">
+    <button class="btn btn-primary" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</button>
+    ${total ? `<div class="btn-row">
+      <div class="field" style="min-width:260px;"><input id="proc-busca" placeholder="Buscar nº, cliente, invoice, BL, DI/DUIMP…" value="${esc(state.procFiltro||'')}"></div>
+      <div class="field"><select id="proc-status-filtro"><option value="">Todos os status</option>
+        ${Object.entries(PROC_STATUS).map(([k,v])=>`<option value="${k}" ${st===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
+    </div>` : ''}
+  </div>
+  ${total ? (lista.length ? `<div class="table-wrap"><table>
+      <thead><tr><th>Nº</th><th>Cliente</th><th>Modal</th><th>Origem → Destino</th><th>ETA</th><th>Canal</th><th>Status</th><th></th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>`
+    : `<div class="empty"><h3>Nenhum processo encontrado</h3><p>Ajuste a busca ou o filtro de status.</p></div>`)
+  : `<div class="empty">${ICONS.folder}<h3>Nenhum processo cadastrado</h3><p>Clique em "Cadastrar Novo Processo" para começar.</p></div>`}`;
+}
+
+// --------- Formulário ---------
+function procCampo(path, label, opts){
+  const o = opts || {};
+  const v = getPath(state.procDraft, path);
+  const span = o.span ? ` style="grid-column:span ${o.span};"` : '';
+  if(o.options){
+    return `<div class="field"${span}><label>${label}</label><select data-proc="${path}">
+      ${o.options.map(([k,t])=>`<option value="${esc(k)}" ${String(v)===String(k)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
+  }
+  if(o.textarea) return `<div class="field"${span}><label>${label}</label><textarea data-proc="${path}" rows="${o.rows||3}" placeholder="${esc(o.placeholder||'')}">${esc(v)}</textarea></div>`;
+  return `<div class="field"${span}><label>${label}</label><input data-proc="${path}" value="${esc(v)}"
+    ${o.type ? `type="${o.type}"` : ''} ${o.list ? `list="${o.list}"` : ''} ${o.step ? `step="${o.step}"` : ''}
+    placeholder="${esc(o.placeholder||'')}" autocomplete="off" ${o.cls ? `class="${o.cls}"` : ''}>${o.hint ? `<span class="hint">${o.hint}</span>` : ''}</div>`;
+}
+const opcoes = obj => Object.entries(obj);
+const opcoesLista = arr => arr.map(x=>[x,x]);
+function opcoesPessoa(tipo, atual){
+  const l = listaPessoas(tipo).map(p=>[p.nome, p.nome + (p.cargo ? ' — ' + p.cargo : '')]);
+  if(atual && !l.some(([n])=>n===atual)) l.push([atual, atual + ' (fora da lista)']);
+  return [['', 'Selecione…'], ...l];
+}
+const nomeCadastro = c => c.nomeFantasia || c.razaoSocial || c.nome || '';
+
+function renderProcessoForm(){
+  if(!state.procDraft) state.procDraft = novoProcesso();
+  const p = state.procDraft;
+  const aba = state.procTab || 'cliente';
+  const i = PROC_ABAS.findIndex(a=>a.id===aba);
+  const titulo = state.currentProcessoId ? `Processo ${state.currentProcessoId}` : 'Cadastrar Novo Processo';
+  const conteudo = { cliente:procAbaCliente, produto:procAbaProduto, transporte:procAbaTransporte, financeiro:procAbaFinanceiro, desembaraco:procAbaDesembaraco }[aba]();
+  const leitura = !podeSalvarProcesso();
+  return `
+  <div class="page-title">${esc(titulo)}</div>
+  <div class="page-sub">${state.currentProcessoId ? 'Altere as informações e clique em Salvar processo.' : 'Preencha as janelas abaixo. O número do processo (PRC-0001…) é gerado ao salvar.'}${leitura ? ' <b>Somente leitura: você não tem permissão para alterar.</b>' : ''}</div>
+  <div class="proc-topo">
+    ${procCampo('status', 'Status do processo', { options: Object.entries(PROC_STATUS).map(([k,v])=>[k,v.label]) })}
+    <div class="btn-row">
+      <button class="btn btn-ghost" data-action="proc-cancelar">${ICONS.back} Voltar à lista</button>
+      <button class="btn btn-primary" data-action="proc-salvar">${ICONS.check} Salvar processo</button>
+    </div>
+  </div>
+  <div class="form-tabs" style="margin-top:14px;">
+    ${PROC_ABAS.map((a,n)=>`<div class="form-tab ${aba===a.id?'active':''}" data-action="proc-aba:${a.id}"><span class="tab-count">${n+1}</span> ${a.label}</div>`).join('')}
+  </div>
+  <div id="proc-form" class="${leitura?'proc-leitura':''}">${conteudo}</div>
+  <div class="btn-row" style="margin-top:18px; justify-content:space-between;">
+    ${i>0 ? `<button class="btn btn-ghost" data-action="proc-aba:${PROC_ABAS[i-1].id}">${ICONS.back} ${PROC_ABAS[i-1].label}</button>` : '<span></span>'}
+    ${i<PROC_ABAS.length-1 ? `<button class="btn btn-ghost" data-action="proc-aba:${PROC_ABAS[i+1].id}">${PROC_ABAS[i+1].label} →</button>`
+      : `<button class="btn btn-primary" data-action="proc-salvar">${ICONS.check} Salvar processo</button>`}
+  </div>`;
+}
+
+function procAbaCliente(){
+  const c = state.procDraft.cliente;
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">01</span> Cliente</div>
+    <datalist id="dl-proc-clientes">${state.clientes.map(x=>`<option value="${esc(nomeCadastro(x))}">`).join('')}</datalist>
+    <div class="field-row grid-3">
+      ${procCampo('cliente.nome', 'Cliente (nome ou razão social)', { list:'dl-proc-clientes', placeholder:'Digite ou escolha um cliente cadastrado', span:2,
+         hint: state.clientes.length ? 'Ao escolher um cliente cadastrado, o CNPJ/CPF é preenchido.' : '' })}
+      ${procCampo('cliente.cnpjCpf', 'CNPJ/CPF', { placeholder:'00.000.000/0000-00' })}
+      ${procCampo('cliente.contato', 'Contato')}
+      ${procCampo('cliente.email', 'E-mail', { type:'email' })}
+      ${procCampo('cliente.telefone', 'Telefone', { type:'tel' })}
+      ${procCampo('cliente.referenciaCliente', 'Referência do cliente', { placeholder:'Pedido / PO do cliente' })}
+      ${procCampo('cliente.modalidade', 'Modalidade de importação', { options:[['conta_propria','Conta própria'],['conta_ordem','Por conta e ordem'],['encomenda','Por encomenda']] })}
+      ${procCampo('cliente.dataAbertura', 'Data de abertura', { type:'date' })}
+      ${procCampo('cliente.responsavel', 'Responsável', listaPessoas('responsaveis').length ? { options: opcoesPessoa('responsaveis', c.responsavel) } : {})}
+      ${procCampo('cliente.vendedor', 'Vendedor', listaPessoas('vendedores').length ? { options: opcoesPessoa('vendedores', c.vendedor) } : {})}
+      ${procCampo('cliente.observacoes', 'Observações', { textarea:true, span:3 })}
+    </div>
+  </div>`;
+}
+
+function procAbaProduto(){
+  const pr = state.procDraft.produto;
+  const tot = totaisProcesso(state.procDraft);
+  const linhas = pr.itens.map((it, n)=>`<tr>
+    <td><input data-proc="produto.itens.${n}.produto" list="dl-proc-produtos" value="${esc(it.produto)}" placeholder="Produto" autocomplete="off"></td>
+    <td><input data-proc="produto.itens.${n}.ncm" value="${esc(it.ncm)}" placeholder="0000.00.00" style="min-width:100px;"></td>
+    <td><input data-proc="produto.itens.${n}.descricao" value="${esc(it.descricao)}" placeholder="Descrição"></td>
+    <td><input data-proc="produto.itens.${n}.quantidade" type="number" step="any" min="0" class="num-mono" value="${esc(it.quantidade)}" placeholder="0"></td>
+    <td><input data-proc="produto.itens.${n}.unidade" value="${esc(it.unidade)}" placeholder="UN" style="min-width:60px;"></td>
+    <td><input data-proc="produto.itens.${n}.valorUnit" type="number" step="any" min="0" class="num-mono" value="${esc(it.valorUnit)}" placeholder="0.00"></td>
+    <td class="num-mono" data-proc-total="${n}">${fmtMoeda(numProcSimples(it.quantidade)*numProcSimples(it.valorUnit), pr.moeda)}</td>
+    <td><input data-proc="produto.itens.${n}.pesoLiquido" type="number" step="any" min="0" class="num-mono" value="${esc(it.pesoLiquido)}" placeholder="kg"></td>
+    <td><button class="row-remove" title="Remover" data-action="proc-rm-item:${it.id}">${ICONS.trash}</button></td>
+  </tr>`).join('');
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">02</span> Produto e fornecedor</div>
+    <datalist id="dl-proc-fornecedores">${state.fornecedores.map(x=>`<option value="${esc(nomeCadastro(x))}">`).join('')}</datalist>
+    <datalist id="dl-proc-produtos">${state.produtos.map(x=>`<option value="${esc(x.nome)}">`).join('')}</datalist>
+    <div class="field-row grid-3">
+      ${procCampo('produto.fornecedor', 'Fornecedor / exportador', { list:'dl-proc-fornecedores', span:2 })}
+      ${procCampo('produto.paisOrigem', 'País de origem', { placeholder:'Ex.: China' })}
+      ${procCampo('produto.incoterm', 'Incoterm', { options: opcoesLista(PROC_INCOTERMS) })}
+      ${procCampo('produto.moeda', 'Moeda da mercadoria', { options: opcoesLista(PROC_MOEDAS) })}
+      ${procCampo('produto.proforma', 'Proforma invoice (PI)')}
+      ${procCampo('produto.invoice', 'Commercial invoice')}
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">03</span> Itens</div>
+    <div class="table-wrap"><table class="proc-itens">
+      <thead><tr><th>Produto</th><th>NCM</th><th>Descrição</th><th class="num-mono">Qtd</th><th>Unid.</th><th class="num-mono">Valor unit.</th><th class="num-mono">Total</th><th class="num-mono">Peso líq. (kg)</th><th></th></tr></thead>
+      <tbody>${linhas || `<tr><td colspan="9" style="text-align:center; color:var(--ink-soft);">Nenhum item.</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="6">Total ${esc(pr.incoterm)}</td><td class="num-mono" id="proc-total-fob">${fmtMoeda(tot.fob, pr.moeda)}</td><td class="num-mono" id="proc-total-peso">${tot.pesoLiq.toLocaleString('pt-BR')} kg</td><td></td></tr></tfoot>
+    </table></div>
+    <div class="btn-row" style="margin-top:12px;"><button class="btn btn-ghost btn-sm" data-action="proc-add-item">${ICONS.plus} Adicionar item</button>
+    ${state.produtos.length ? '<span class="hint" style="font-size:12px; color:var(--ink-soft);">Ao escolher um produto cadastrado, NCM, unidade e peso são preenchidos.</span>' : ''}</div>
+  </div>`;
+}
+
+function procAbaTransporte(){
+  const t = state.procDraft.transporte;
+  const maritimo = t.modal==='maritimo';
+  const aereo = t.modal==='aereo';
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">04</span> Transporte</div>
+    <div class="field-row grid-4">
+      ${procCampo('transporte.modal', 'Modal', { options: opcoes(PROC_MODAIS) })}
+      ${maritimo ? procCampo('transporte.tipoCarga', 'Tipo de carga', { options:[['FCL','FCL (container cheio)'],['LCL','LCL (carga consolidada)'],['BREAK','Carga solta / break bulk']] }) : ''}
+      ${maritimo && t.tipoCarga==='FCL' ? procCampo('transporte.containerTipo', 'Tipo de container', { options: opcoesLista(["20' DC","40' DC","40' HC","20' RF","40' RF","20' OT","40' OT","20' FR","40' FR"]) }) : ''}
+      ${maritimo && t.tipoCarga==='FCL' ? procCampo('transporte.containerQtd', 'Qtd. de containers', { type:'number', step:'1' }) : ''}
+      ${procCampo('transporte.agenteCarga', 'Agente de carga / forwarder', { span:2 })}
+      ${procCampo('transporte.armador', maritimo ? 'Armador' : aereo ? 'Companhia aérea' : 'Transportadora')}
+      ${procCampo('transporte.navioVoo', maritimo ? 'Navio / viagem' : aereo ? 'Voo' : 'Veículo / placa')}
+      ${procCampo('transporte.booking', 'Booking')}
+      ${procCampo('transporte.conhecimentoMaster', maritimo ? 'MBL (master)' : aereo ? 'MAWB (master)' : 'CRT / conhecimento')}
+      ${procCampo('transporte.conhecimentoHouse', maritimo ? 'HBL (house)' : aereo ? 'HAWB (house)' : 'Conhecimento house')}
+      ${procCampo('transporte.freeTime', 'Free time (dias)', { type:'number', step:'1' })}
+      ${procCampo('transporte.origem', maritimo ? 'Porto de origem' : aereo ? 'Aeroporto de origem' : 'Origem', { span:2 })}
+      ${procCampo('transporte.destino', maritimo ? 'Porto de destino' : aereo ? 'Aeroporto de destino' : 'Destino', { span:2 })}
+      ${procCampo('transporte.etd', 'ETD (saída estimada)', { type:'date' })}
+      ${procCampo('transporte.eta', 'ETA (chegada estimada)', { type:'date' })}
+      ${procCampo('transporte.chegada', 'Chegada efetiva', { type:'date' })}
+      <div></div>
+      ${procCampo('transporte.volumes', 'Volumes', { type:'number', step:'1' })}
+      ${procCampo('transporte.pesoBruto', 'Peso bruto (kg)', { type:'number', step:'any' })}
+      ${procCampo('transporte.cubagem', 'Cubagem (m³)', { type:'number', step:'any' })}
+    </div>
+  </div>`;
+}
+
+function procAbaFinanceiro(){
+  const f = state.procDraft.financeiro, moeda = state.procDraft.produto.moeda;
+  const tot = totaisProcesso(state.procDraft);
+  const parcelas = f.parcelas.map((pc, n)=>`<tr>
+    <td><input data-proc="financeiro.parcelas.${n}.descricao" value="${esc(pc.descricao)}" placeholder="Ex.: Sinal 30%"></td>
+    <td><input data-proc="financeiro.parcelas.${n}.vencimento" type="date" value="${esc(pc.vencimento)}"></td>
+    <td><input data-proc="financeiro.parcelas.${n}.valor" type="number" step="any" min="0" class="num-mono" value="${esc(pc.valor)}"></td>
+    <td><select data-proc="financeiro.parcelas.${n}.moeda">${PROC_MOEDAS.map(m=>`<option ${pc.moeda===m?'selected':''}>${m}</option>`).join('')}</select></td>
+    <td style="text-align:center;"><input type="checkbox" data-proc="financeiro.parcelas.${n}.pago" ${pc.pago?'checked':''}></td>
+    <td><button class="row-remove" title="Remover" data-action="proc-rm-parcela:${pc.id}">${ICONS.trash}</button></td>
+  </tr>`).join('');
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">05</span> Valores e câmbio</div>
+    <div class="field-row grid-4">
+      ${procCampo('financeiro.taxaCambio', `Taxa de câmbio (R$ por ${moeda})`, { type:'number', step:'any', placeholder:'Ex.: 5,35' })}
+      ${procCampo('financeiro.frete', 'Frete internacional', { type:'number', step:'any' })}
+      ${procCampo('financeiro.freteMoeda', 'Moeda do frete', { options: opcoesLista(PROC_MOEDAS) })}
+      <div></div>
+      ${procCampo('financeiro.seguro', 'Seguro internacional', { type:'number', step:'any' })}
+      ${procCampo('financeiro.seguroMoeda', 'Moeda do seguro', { options: opcoesLista(PROC_MOEDAS) })}
+    </div>
+    <div class="proc-resumo" id="proc-resumo">${procResumoHtml(tot)}</div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">06</span> Pagamento ao exterior</div>
+    <div class="field-row grid-3">
+      ${procCampo('financeiro.condicaoPagamento', 'Condição de pagamento', { placeholder:'Ex.: 30% antecipado, 70% contra BL' })}
+      ${procCampo('financeiro.banco', 'Banco do câmbio')}
+      ${procCampo('financeiro.contratoCambio', 'Nº do contrato de câmbio')}
+    </div>
+    <div class="table-wrap" style="margin-top:16px;"><table>
+      <thead><tr><th>Parcela</th><th>Vencimento</th><th class="num-mono">Valor</th><th>Moeda</th><th style="text-align:center;">Pago</th><th></th></tr></thead>
+      <tbody>${parcelas || `<tr><td colspan="6" style="text-align:center; color:var(--ink-soft);">Nenhuma parcela.</td></tr>`}</tbody>
+    </table></div>
+    <div class="btn-row" style="margin-top:12px;"><button class="btn btn-ghost btn-sm" data-action="proc-add-parcela">${ICONS.plus} Adicionar parcela</button></div>
+  </div>`;
+}
+function procResumoHtml(tot){
+  return `
+    <div class="stat-card"><div class="lbl">Mercadoria (itens)</div><div class="val" style="font-size:18px;">${fmtMoeda(tot.fob, tot.moeda)}</div></div>
+    <div class="stat-card"><div class="lbl">Valor CIF</div><div class="val" style="font-size:18px;">${fmtMoeda(tot.cif, tot.moeda)}</div>
+      <div class="sub">${tot.freteOutraMoeda || tot.seguroOutraMoeda ? 'Frete/seguro em outra moeda não somados' : 'Mercadoria + frete + seguro'}</div></div>
+    <div class="stat-card"><div class="lbl">CIF em reais</div><div class="val" style="font-size:18px;">${tot.cambio ? fmtMoeda(tot.cifBRL, 'BRL') : '—'}</div>
+      <div class="sub">${tot.cambio ? 'Câmbio ' + tot.cambio.toLocaleString('pt-BR') : 'Informe a taxa de câmbio'}</div></div>`;
+}
+
+function procAbaDesembaraco(){
+  const d = state.procDraft.desembaraco;
+  const tot = totaisProcesso(state.procDraft);
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">07</span> Desembaraço aduaneiro</div>
+    <div class="field-row grid-4">
+      ${procCampo('desembaraco.despachante', 'Despachante aduaneiro', { span:2 })}
+      ${procCampo('desembaraco.recinto', 'Recinto alfandegado / terminal', { span:2 })}
+      ${procCampo('desembaraco.urf', 'URF de despacho', { placeholder:'Ex.: 0817800 – Porto de Santos' , span:2 })}
+      ${procCampo('desembaraco.tipoDeclaracao', 'Declaração', { options:[['DUIMP','DUIMP'],['DI','DI'],['DSI','DSI']] })}
+      ${procCampo('desembaraco.numeroDeclaracao', `Nº da ${esc(d.tipoDeclaracao||'declaração')}`)}
+      ${procCampo('desembaraco.dataRegistro', 'Data de registro', { type:'date' })}
+      ${procCampo('desembaraco.canal', 'Canal de parametrização', { options: opcoes(PROC_CANAIS) })}
+      ${procCampo('desembaraco.dataDesembaraco', 'Data do desembaraço', { type:'date' })}
+      <div></div>
+      ${procCampo('desembaraco.liNecessaria', 'Licença de importação (LI/LPCO)', { options:[['nao','Não se aplica'],['sim','Necessária']] })}
+      ${d.liNecessaria==='sim' ? procCampo('desembaraco.numeroLi', 'Nº da LI / LPCO') : ''}
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">08</span> Tributos e despesas (R$)</div>
+    <div class="field-row grid-4">
+      ${PROC_TRIBUTOS.map(([k,l])=>procCampo('desembaraco.tributos.'+k, l, { type:'number', step:'any', placeholder:'0,00' })).join('')}
+    </div>
+    <div class="proc-total-tributos">Total: <b id="proc-total-tributos">${fmtMoeda(tot.tributos, 'BRL')}</b></div>
+    <div class="field-row" style="margin-top:16px;">${procCampo('desembaraco.observacoes', 'Observações do desembaraço', { textarea:true })}</div>
+  </div>`;
+}
+
+// Atualiza totais sem redesenhar a tela (para não perder o foco enquanto digita).
+function atualizarTotaisProcesso(){
+  const p = state.procDraft; if(!p) return;
+  const tot = totaisProcesso(p);
+  p.produto.itens.forEach((it, n)=>{
+    const el = document.querySelector(`[data-proc-total="${n}"]`);
+    if(el) el.textContent = fmtMoeda(numProcSimples(it.quantidade)*numProcSimples(it.valorUnit), p.produto.moeda);
+  });
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+  set('proc-total-fob', fmtMoeda(tot.fob, p.produto.moeda));
+  set('proc-total-peso', tot.pesoLiq.toLocaleString('pt-BR') + ' kg');
+  set('proc-total-tributos', fmtMoeda(tot.tributos, 'BRL'));
+  const r = document.getElementById('proc-resumo'); if(r) r.innerHTML = procResumoHtml(tot);
+}
+
+// Campos que mudam a estrutura da janela (redesenha) — o resto só guarda o valor.
+const PROC_REDESENHA = /^(transporte\.(modal|tipoCarga)|desembaraco\.(liNecessaria|tipoDeclaracao)|produto\.moeda|status)$/;
+function onProcessoInput(el, evento){
+  const path = el.getAttribute('data-proc');
+  if(!path || !state.procDraft) return false;
+  const valor = el.type==='checkbox' ? el.checked : el.value;
+  setPath(state.procDraft, path, valor);
+  // Autopreenchimento a partir dos cadastros
+  if(evento==='change' && path==='cliente.nome'){
+    const c = state.clientes.find(x=>nomeCadastro(x)===valor);
+    if(c){ if(!state.procDraft.cliente.cnpjCpf) state.procDraft.cliente.cnpjCpf = c.cnpjCpf || ''; renderApp(); }
+  }
+  const mItem = /^produto\.itens\.(\d+)\.produto$/.exec(path);
+  if(evento==='change' && mItem){
+    const prod = state.produtos.find(x=>x.nome===valor), it = state.procDraft.produto.itens[+mItem[1]];
+    if(prod && it){
+      it.ncm = it.ncm || prod.ncm || ''; it.unidade = it.unidade || prod.unidadeMedida || '';
+      it.descricao = it.descricao || prod.descricao || ''; it.pesoLiquido = it.pesoLiquido || prod.pesoLiquido || '';
+      renderApp();
+    }
+  }
+  if(evento==='change' && path==='produto.fornecedor'){
+    const f = state.fornecedores.find(x=>nomeCadastro(x)===valor);
+    const pais = f && f.enderecos && f.enderecos[0] && f.enderecos[0].pais;
+    if(pais && pais!=='Brasil' && !state.procDraft.produto.paisOrigem){ state.procDraft.produto.paisOrigem = pais; renderApp(); }
+  }
+  if(evento==='change' && PROC_REDESENHA.test(path)) renderApp();
+  else atualizarTotaisProcesso();
+  saveDraftProcesso();
+  return true;
+}
+
+function novoNumeroProcesso(){ return (state.processosIndex||[]).reduce((m,p)=>Math.max(m, p.seq||0), 0) + 1; }
+
+async function salvarProcesso(){
+  const p = state.procDraft;
+  if(!p.cliente.nome.trim()){ state.procTab = 'cliente'; renderApp(); return toast('Informe o cliente do processo.'); }
+  const agora = new Date().toISOString();
+  const copia = JSON.parse(JSON.stringify(p));
+  if(state.currentProcessoId){
+    const i = state.processosIndex.findIndex(x=>x.id===state.currentProcessoId);
+    if(i<0){ toast('Este processo foi excluído por outra pessoa. Ele será salvo como novo.'); state.currentProcessoId = null; return salvarProcesso(); }
+    copia.id = state.currentProcessoId; copia.seq = state.processosIndex[i].seq; copia.criadoEm = state.processosIndex[i].criadoEm;
+    copia.atualizadoEm = agora; copia.atualizadoPor = usuarioAtual.nome || usuarioAtual.email;
+    state.processosIndex[i] = copia;
+  }else{
+    const seq = novoNumeroProcesso();
+    copia.id = 'PRC-' + String(seq).padStart(4,'0'); copia.seq = seq;
+    copia.criadoEm = agora; copia.atualizadoEm = agora; copia.criadoPor = usuarioAtual.nome || usuarioAtual.email;
+    state.processosIndex.push(copia);
+    state.currentProcessoId = copia.id;
+  }
+  const ok = await persistProcessosIndex();
+  if(!ok) return;
+  // O número pode ter mudado na mescla (outra pessoa salvou o mesmo número ao mesmo tempo).
+  const salvo = state.processosIndex.find(x=>x.id===state.currentProcessoId);
+  if(salvo){ state.procDraft = normalizarProcesso(JSON.parse(JSON.stringify(salvo))); }
+  saveDraftProcesso();
+  toast('Processo ' + state.currentProcessoId + ' salvo.', 'ok');
+  renderApp();
+}
+async function persistProcessosIndex(){ return storeSet('processos:index', state.processosIndex); }
+
+function abrirProcesso(id){
+  const p = (state.processosIndex||[]).find(x=>x.id===id);
+  if(!p) return toast('Processo não encontrado.');
+  state.procDraft = normalizarProcesso(JSON.parse(JSON.stringify(p)));
+  state.currentProcessoId = id;
+  state.procTab = 'cliente';
+  saveDraftProcesso();
+  navigate('processoForm');
+}
+async function excluirProcesso(id){
+  if(state.pendingDelete !== 'proc:'+id){ state.pendingDelete = 'proc:'+id; renderApp(); return; }
+  state.pendingDelete = null;
+  state.processosIndex = state.processosIndex.filter(x=>x.id!==id);
+  if(state.currentProcessoId===id){ state.currentProcessoId = null; state.procDraft = null; storeDelete('processo:draft'); }
+  await persistProcessosIndex();
+  toast('Processo ' + id + ' excluído.', 'ok');
+  renderApp();
+}
+
+function acaoProcesso(cmd, a1){
+  const p = state.procDraft;
+  switch(cmd){
+    case 'proc-novo':
+      state.procDraft = novoProcesso(); state.currentProcessoId = null; state.procTab = 'cliente';
+      saveDraftProcesso(); navigate('processoForm'); return true;
+    case 'proc-abrir': abrirProcesso(a1); return true;
+    case 'proc-excluir': excluirProcesso(a1); return true;
+    case 'proc-aba': state.procTab = a1; saveDraftProcesso(); renderApp(); window.scrollTo({ top:0, behavior:'instant' }); return true;
+    case 'proc-cancelar': navigate('processos'); return true;
+    case 'proc-salvar': salvarProcesso(); return true;
+    case 'proc-add-item': p.produto.itens.push(novoItemProcesso()); saveDraftProcesso(); renderApp(); return true;
+    case 'proc-rm-item': p.produto.itens = p.produto.itens.filter(x=>x.id!==a1); saveDraftProcesso(); renderApp(); return true;
+    case 'proc-add-parcela': p.financeiro.parcelas.push({ ...novaParcelaProcesso(), moeda: p.produto.moeda }); saveDraftProcesso(); renderApp(); return true;
+    case 'proc-rm-parcela': p.financeiro.parcelas = p.financeiro.parcelas.filter(x=>x.id!==a1); saveDraftProcesso(); renderApp(); return true;
+  }
+  return false;
+}
+// Somente leitura: sem permissão para salvar, os campos do formulário ficam bloqueados.
+function aplicarLeituraProcesso(){
+  const form = document.getElementById('proc-form');
+  if(!form || !form.classList.contains('proc-leitura')) return;
+  form.querySelectorAll('input, select, textarea').forEach(el=>{ el.disabled = true; });
+  form.querySelectorAll('[data-action^="proc-add"], [data-action^="proc-rm"]').forEach(el=>{ el.style.display = 'none'; });
+  const st = document.querySelector('.proc-topo [data-proc="status"]'); if(st) st.disabled = true;
+}
+
 /* -------------------------------- Icones --------------------------------- */
 const ICONS = {
+  folder:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 10h18"/></svg>`,
   gear:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`,
   home:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>`,
   ship:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18l-2 4H5l-2-4Z"/><path d="M5 17V9h14v8"/><path d="M9 9V4h6v5"/><path d="M12 2v2"/></svg>`,
@@ -2088,6 +2585,7 @@ const state = {
   dados: dadosPadrao(),
   currentCotacaoId: null,
   cotacoesIndex: [],         // [{id,numero,criadoEm,atualizadoEm, resumo:{...}}]
+  processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procFiltro: '', procFiltroStatus: '',
   clientes: [], fornecedores: [], produtos: [],
   filtros: { numero:'', texto:'', de:'', ate:'' },
   filtrosFormal: { numero:'', texto:'', de:'', ate:'' },
@@ -2213,7 +2711,13 @@ const saveDraftFormal = debounce(async ()=>{ await storeSet('dadosFormal:draft',
 const saveDraftSimulacao = debounce(async ()=>{ await storeSet('simulacao:draft', state.simulacao); }, 500);
 
 async function loadInitialData(){
-  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado']);
+  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado', 'processo:draft']);
+  if(v['processos:index']) state.processosIndex = v['processos:index'];
+  if(v['processo:draft'] && v['processo:draft'].draft){
+    state.procDraft = normalizarProcesso(v['processo:draft'].draft);
+    state.currentProcessoId = v['processo:draft'].id || null;
+    state.procTab = v['processo:draft'].aba || 'cliente';
+  }
   await importarDadosAntigos(v);
   const [draft, idx, cli, forn, prod, draftF, idxF, draftS, idxS, filtrosSalvos] = [
     v['dados:draft'], v['cotacoes:index'],
@@ -2262,6 +2766,8 @@ const ROUTE_META = {
   'cad-fornecedor': {group:'cad', label:'Fornecedor'},
   'cad-produto':    {group:'cad', label:'Produto'},
   'config':         {group:null, label:'Configurações'},
+  'processos':      {group:'proc', label:'Processos'},
+  'processoForm':   {group:'proc', label:'Cadastrar Novo Processo'},
 };
 const SIM_PROTECTED_ROUTES = ['simCarga','simCarregando','simPaletes','simEquipamentos','simEmbalagem','simResultado'];
 function navigate(route){
@@ -2295,6 +2801,8 @@ function crumbsHtml(){
     if(state.route==='dadosFormal'||state.route==='numerarioFormal') items.push({label:'Importação Formal', route:'dadosFormal'});
   }
   if(meta.group==='cad') items.push({label:'Cadastro', route:'cad-cliente'});
+  if(meta.group==='proc' && state.route!=='processos') items.push({label:'Processos', route:'processos'});
+  if(state.route==='processoForm' && state.currentProcessoId){ items.push({label:'Processo '+state.currentProcessoId, route:'processoForm', cur:true}); return items.map((it,i)=>{ const sep = i>0 ? '<span class="sep">/</span>' : ''; return it.cur ? sep+`<span class="cur">${esc(it.label)}</span>` : sep+`<span class="seg" data-action="go:${it.route}">${esc(it.label)}</span>`; }).join(''); }
   if(meta.label) items.push({label:meta.label, route:state.route, cur:true});
   return items.map((it,i)=>{
     const sep = i>0 ? '<span class="sep">/</span>' : '';
@@ -2342,6 +2850,13 @@ function topbarHtml(){
           <div class="nav-drop-item" data-action="go:cad-produto">${ICONS.product} Produto</div>
         </div>
       </div>
+      <div class="nav-group">
+        <button class="nav-btn ${meta.group==='proc'?'active':''}" data-action="toggle-nav:proc">${ICONS.folder} Processos ${ICONS.chevronDown}</button>
+        <div class="nav-dropdown ${state.navDropdown==='proc'?'open':''}">
+          <div class="nav-drop-item" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</div>
+          <div class="nav-drop-item" data-action="go:processos">${ICONS.folder} Processos cadastrados</div>
+        </div>
+      </div>
     </nav>
     <div class="topbar-spacer"></div>
     <div class="brand" data-action="go:home" title="Comexta — comércio exterior inteligente">
@@ -2381,6 +2896,14 @@ function sideNavHtml(){
       ` : ''}
     </div>`;
   }
+  if(meta.group==='proc'){
+    return `<div class="sidenav">
+      <div class="grp-label">Processos</div>
+      <div class="side-link ${state.route==='processos'?'active':''}" data-action="go:processos">${ICONS.folder} Processos</div>
+      <div class="side-link ${state.route==='processoForm' && !state.currentProcessoId?'active':''}" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</div>
+      ${state.currentProcessoId ? `<div class="side-link ${state.route==='processoForm'?'active':''}" data-action="go:processoForm">${ICONS.edit} ${esc(state.currentProcessoId)}</div>` : ''}
+    </div>`;
+  }
   return `<div class="sidenav">
     <div class="grp-label">Cadastro</div>
     <div class="side-link ${state.route==='cad-cliente'?'active':''}" data-action="go:cad-cliente">${ICONS.client} Cliente</div>
@@ -2407,6 +2930,8 @@ function viewFor(route){
     case 'cad-fornecedor': return renderCadastro('fornecedor');
     case 'cad-produto': return renderCadastro('produto');
     case 'config': return renderConfig();
+    case 'processos': return renderProcessos();
+    case 'processoForm': return renderProcessoForm();
     default: return renderHome();
   }
 }
@@ -2431,6 +2956,7 @@ function renderApp(){
   if(state.route==='simResultado') initResultado3D();
   if(state.lightbox3D) initLightbox3D();
   aplicarPermissoesNaTela();
+  if(state.route==='processoForm') aplicarLeituraProcesso();
   if(state.route==='home') renderHomeCharts();
 }
 
@@ -6600,6 +7126,7 @@ function onAppClick(e){
   if(!acaoPermitida(action)){ avisoSemPermissao(action); return; }
   const [cmd, a1, a2] = action.split(':');
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
+  if(cmd.startsWith('proc-') && acaoProcesso(cmd, a1)) return;
   switch(cmd){
     case 'go': navigate(a1); break;
     case 'toggle-module':
@@ -6799,6 +7326,8 @@ function onAppClick(e){
 function onAppInput(e){
   const el = e.target;
   if(onConfigInput(el)) return;
+  if(el.hasAttribute('data-proc')){ if(el.type!=='checkbox' && el.tagName!=='SELECT') onProcessoInput(el, 'input'); return; }
+  if(el.id==='proc-busca'){ state.procFiltro = el.value; const pos = el.selectionStart; renderApp(); const b = document.getElementById('proc-busca'); if(b){ b.focus(); b.setSelectionRange(pos, pos); } return; }
   const bind = el.getAttribute('data-bind');
   if(!bind) return;
   const inCadForm = !!el.closest('#cad-rich-form');
@@ -6840,6 +7369,8 @@ function onAppInput(e){
 function onAppChange(e){
   const el = e.target;
   if(onConfigChange(el)) return;
+  if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
+  if(el.id==='proc-status-filtro'){ state.procFiltroStatus = el.value; renderApp(); return; }
   if(el.id==='icms-input' || el.id==='icms-input-formal') return; // handled by input
   if(el.id==='doc-file-input'){ handleFilesSelected(el.files); return; }
   if(el.id==='anexo-file-input'){ handleAnexoFilesSelected(el.files); return; }
@@ -6985,6 +7516,18 @@ function renderHome(){
         <div class="sub-btn" data-action="go:dados">${ICONS.data} Nova Cotação (Simplificada) <span class="desc">Invoice, produtos, frete e desembaraço</span></div>
         <div class="sub-btn" data-action="go:dadosFormal">${ICONS.data} Nova Cotação (Formal) <span class="desc">NCM, tributos por produto e despesas detalhadas</span></div>
         <div class="sub-btn" data-action="go:cotacoesTodas">${ICONS.quote} Cotações Salvas <span class="desc">${nCot} salva${nCot===1?'':'s'}</span></div>
+      </div></div>
+    </div>
+
+    <div class="module-card blue ${state.openModule==='proc'?'open':''}" id="mod-proc">
+      <div class="module-head" data-action="toggle-module:proc">
+        <div class="module-icon">${ICONS.folder}</div>
+        <div class="mt"><h3>Processos</h3><p>Acompanhamento dos processos de importação: cliente, produto, transporte, financeiro e desembaraço.</p></div>
+        <div class="module-chevron">${ICONS.chevron}</div>
+      </div>
+      <div class="module-sub"><div class="module-sub-inner">
+        <div class="sub-btn" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo <span class="desc">Cliente, produto, transporte, financeiro e desembaraço</span></div>
+        <div class="sub-btn" data-action="go:processos">${ICONS.folder} Processos cadastrados <span class="desc">${(state.processosIndex||[]).length} processo${(state.processosIndex||[]).length===1?'':'s'}</span></div>
       </div></div>
     </div>
 

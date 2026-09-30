@@ -7,7 +7,7 @@
 --   perfis          um por usuário: nome, telefone, cargo, foto, empresa, papel (admin|membro) e permissões
 --   convites        convites pendentes (link com token) criados pelo administrador
 --   dados_empresa   dados do ERP compartilhados pela equipe (cotações, simulações, cadastros), com versão
--- Permissões por área ('cadastros', 'cotacoes', 'simulador'): { "ver": bool, "criar": bool, "editar": bool }.
+-- Permissões por área ('cadastros', 'cotacoes', 'simulador', 'processos'): { "ver": bool, "criar": bool, "editar": bool }.
 -- Administradores podem tudo, inclusive editar a empresa e gerenciar a equipe.
 
 -- ============================================================ Tabelas
@@ -73,13 +73,18 @@ create table if not exists public.dados_empresa (
   empresa_id     uuid not null references public.empresas (id) on delete cascade,
   chave          text not null check (chave in (
                    'cotacoes:index', 'cotacoesFormal:index', 'simulacoes:index',
-                   'clientes:list', 'fornecedores:list', 'produtos:list')),
+                   'clientes:list', 'fornecedores:list', 'produtos:list', 'processos:index')),
   valor          jsonb,
   versao         integer not null default 1,
   atualizado_por uuid references auth.users (id) on delete set null,
   atualizado_em  timestamptz not null default now(),
   primary key (empresa_id, chave)
 );
+-- Chaves aceitas (atualizado a cada área nova; recria a regra em bancos que já existiam)
+alter table public.dados_empresa drop constraint if exists dados_empresa_chave_check;
+alter table public.dados_empresa add constraint dados_empresa_chave_check check (chave in (
+  'cotacoes:index', 'cotacoesFormal:index', 'simulacoes:index',
+  'clientes:list', 'fornecedores:list', 'produtos:list', 'processos:index'));
 
 -- ============================================================ Funções auxiliares
 -- security definer: leem perfis sem cair nas próprias regras RLS (evita recursão).
@@ -99,6 +104,7 @@ language sql immutable as $$
     when p_chave in ('clientes:list', 'fornecedores:list', 'produtos:list') then 'cadastros'
     when p_chave in ('cotacoes:index', 'cotacoesFormal:index') then 'cotacoes'
     when p_chave = 'simulacoes:index' then 'simulador'
+    when p_chave = 'processos:index' then 'processos'
   end
 $$;
 
@@ -115,7 +121,8 @@ create or replace function public.permissoes_totais() returns jsonb
 language sql immutable as $$
   select '{"cadastros":{"ver":true,"criar":true,"editar":true},
            "cotacoes":{"ver":true,"criar":true,"editar":true},
-           "simulador":{"ver":true,"criar":true,"editar":true}}'::jsonb
+           "simulador":{"ver":true,"criar":true,"editar":true},
+           "processos":{"ver":true,"criar":true,"editar":true}}'::jsonb
 $$;
 
 -- Deixa só as áreas/ações conhecidas, com valores booleanos; "criar"/"editar" implicam "ver".
@@ -126,7 +133,7 @@ declare
   secao text;
   ver boolean; criar boolean; editar boolean;
 begin
-  foreach secao in array array['cadastros','cotacoes','simulador'] loop
+  foreach secao in array array['cadastros','cotacoes','simulador','processos'] loop
     criar  := coalesce((p -> secao ->> 'criar')::boolean, false);
     editar := coalesce((p -> secao ->> 'editar')::boolean, false);
     ver    := coalesce((p -> secao ->> 'ver')::boolean, false) or criar or editar;
