@@ -560,6 +560,36 @@ td.num-mono, th.num-mono{text-align:right;}
   .proc-topo .btn-row{width:100%;}
   .proc-topo .field{min-width:0;}
 }
+
+/* ---------- Processos: cards e Template ---------- */
+.proc-barra{display:flex; justify-content:space-between; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-bottom:18px;}
+.proc-barra-dir{align-items:flex-end;}
+.modo-toggle{display:inline-flex; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; background:#fff;}
+.modo-toggle button{border:none; background:transparent; padding:10px 14px; font-weight:700; font-size:13px; color:var(--ink-soft); cursor:pointer; font-family:inherit;}
+.modo-toggle button.active{background:var(--navy); color:#fff;}
+.btn.ativo{background:var(--navy-100);}
+.proc-template{border-color:var(--navy-100);}
+.proc-template-topo{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;}
+.proc-template-topo .section-title svg{width:16px; height:16px;}
+.tpl-grupos{display:grid; grid-template-columns:repeat(3, 1fr); gap:14px;}
+@media (max-width:980px){ .tpl-grupos{grid-template-columns:repeat(2, 1fr);} }
+@media (max-width:620px){ .tpl-grupos{grid-template-columns:1fr;} }
+.tpl-grupo{border:1px solid var(--line-soft); border-radius:var(--radius-sm); padding:12px 14px; background:var(--paper);}
+.tpl-grupo-topo{display:flex; align-items:baseline; gap:8px; margin-bottom:8px; flex-wrap:wrap;}
+.tpl-grupo-topo b{color:var(--navy-deep); font-size:13.5px;}
+.tpl-grupo-topo .link-btn{margin-left:auto;}
+.link-btn{border:none; background:none; color:var(--navy); font-weight:700; font-size:12px; cursor:pointer; padding:0; font-family:inherit; text-decoration:underline;}
+.tpl-campo{display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0; cursor:pointer;}
+.tpl-campo input{width:16px; height:16px; accent-color:var(--navy); flex-shrink:0;}
+.proc-cards{display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:14px;}
+.proc-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 18px; display:flex; flex-direction:column; gap:12px;}
+.pc-topo{display:flex; justify-content:space-between; align-items:center; gap:10px;}
+.pc-num{font-family:var(--font-mono); font-size:15px; color:var(--navy-deep);}
+.pc-campos{display:grid; grid-template-columns:auto 1fr; gap:6px 12px; margin:0; font-size:13px;}
+.pc-campos dt{color:var(--ink-soft);}
+.pc-campos dd{margin:0; font-weight:600; word-break:break-word;}
+.pc-acoes{display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:auto; border-top:1px solid var(--line-soft); padding-top:10px;}
+.vazio{color:var(--ink-soft); font-weight:400;}
 </style>
 </head>
 <body>
@@ -681,6 +711,7 @@ async function carregarPerfilEEmpresa(userId){
   if(error) throw new Error('Falha ao carregar perfil: ' + error.message);
   if(!perfil) throw new Error('Perfil não encontrado: rode supabase/schema.sql no Supabase.');
   usuarioAtual = { id: perfil.user_id, ...perfil };
+  if(!perfil.preferencias){ try{ const loc = localStorage.getItem('comexta:u:' + perfil.user_id + ':preferencias'); if(loc) usuarioAtual.preferencias = JSON.parse(loc); }catch(e){} }
   const { data: empresa, error: e2 } = await sb.from('empresas').select('*').eq('id', perfil.empresa_id).maybeSingle();
   if(e2) throw new Error('Falha ao carregar empresa: ' + e2.message);
   empresaAtual = empresa || { id: perfil.empresa_id };
@@ -900,6 +931,7 @@ const PERMISSAO_DA_ACAO = {
   'toggle-nav:proc':['processos','ver'], 'toggle-module:proc':['processos','ver'], 'go:processos':['processos','ver'],
   'go:processoForm':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
   'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'],
+  'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 };
 const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos' };
 
@@ -1744,53 +1776,247 @@ function totaisProcesso(p){
 function podeSalvarProcesso(){ return state.currentProcessoId ? pode('processos','editar') : pode('processos','criar'); }
 const saveDraftProcesso = debounce(()=>{ if(state.procDraft) storeSet('processo:draft', { draft: state.procDraft, id: state.currentProcessoId, aba: state.procTab }); }, 500);
 
-// --------- Lista ---------
+// --------- Lista, cards e Template ---------
+// Catálogo de tudo o que pode aparecer na lista ou nos cards: todos os campos das janelas do processo,
+// agrupados pela janela de origem. Cada usuário escolhe os seus em Template (salvo nas preferências do perfil).
+const PROC_JANELAS_TEMPLATE = ['Geral', 'Cliente', 'Produto', 'Transporte', 'Financeiro', 'Desembaraço'];
+const PROC_CAMPOS = (()=>{
+  const data = v => v ? fmtDateOnly(v) : '';
+  const lista = (arr, k) => [...new Set((arr||[]).map(x=>x[k]).filter(Boolean))].join(', ');
+  const moedaProd = p => (p.produto && p.produto.moeda) || 'USD';
+  const t = p => totaisProcesso(normalizarProcesso(p));
+  const campos = [
+    ['Geral', 'id', 'Nº do processo', p=>p.id],
+    ['Geral', 'status', 'Status', p=>(PROC_STATUS[p.status]||PROC_STATUS.aberto).label, { badge:true }],
+    ['Geral', 'criadoEm', 'Criado em', p=>p.criadoEm ? fmtDate(p.criadoEm) : ''],
+    ['Geral', 'criadoPor', 'Criado por', p=>p.criadoPor],
+    ['Geral', 'atualizadoEm', 'Atualizado em', p=>p.atualizadoEm ? fmtDate(p.atualizadoEm) : ''],
+    ['Geral', 'atualizadoPor', 'Atualizado por', p=>p.atualizadoPor],
+
+    ['Cliente', 'cliente.nome', 'Cliente'], ['Cliente', 'cliente.cnpjCpf', 'CNPJ/CPF'], ['Cliente', 'cliente.contato', 'Contato'],
+    ['Cliente', 'cliente.email', 'E-mail'], ['Cliente', 'cliente.telefone', 'Telefone'], ['Cliente', 'cliente.referenciaCliente', 'Referência do cliente'],
+    ['Cliente', 'cliente.modalidade', 'Modalidade de importação', p=>({ conta_propria:'Conta própria', conta_ordem:'Por conta e ordem', encomenda:'Por encomenda' })[p.cliente&&p.cliente.modalidade]||''],
+    ['Cliente', 'cliente.dataAbertura', 'Data de abertura', p=>data(p.cliente&&p.cliente.dataAbertura)],
+    ['Cliente', 'cliente.responsavel', 'Responsável'], ['Cliente', 'cliente.vendedor', 'Vendedor'], ['Cliente', 'cliente.observacoes', 'Observações do cliente'],
+
+    ['Produto', 'produto.fornecedor', 'Fornecedor / exportador'], ['Produto', 'produto.paisOrigem', 'País de origem'],
+    ['Produto', 'produto.incoterm', 'Incoterm'], ['Produto', 'produto.moeda', 'Moeda da mercadoria'],
+    ['Produto', 'produto.proforma', 'Proforma invoice (PI)'], ['Produto', 'produto.invoice', 'Commercial invoice'],
+    ['Produto', 'produto.itensProdutos', 'Produtos', p=>lista(p.produto&&p.produto.itens, 'produto')],
+    ['Produto', 'produto.itensNcm', 'NCMs', p=>lista(p.produto&&p.produto.itens, 'ncm')],
+    ['Produto', 'produto.itensQtd', 'Quantidade de itens', p=>String(((p.produto&&p.produto.itens)||[]).filter(i=>i.produto||i.quantidade).length)],
+    ['Produto', 'produto.totalMercadoria', 'Total da mercadoria', p=>fmtMoeda(t(p).fob, moedaProd(p))],
+    ['Produto', 'produto.pesoLiquido', 'Peso líquido total', p=>{ const v = t(p).pesoLiq; return v ? v.toLocaleString('pt-BR') + ' kg' : ''; }],
+
+    ['Transporte', 'transporte.modal', 'Modal', p=>PROC_MODAIS[p.transporte&&p.transporte.modal]||''],
+    ['Transporte', 'transporte.rota', 'Origem → destino', p=>{ const tr = p.transporte||{}; return tr.origem||tr.destino ? `${tr.origem||'—'} → ${tr.destino||'—'}` : ''; }],
+    ['Transporte', 'transporte.origem', 'Origem'], ['Transporte', 'transporte.destino', 'Destino'],
+    ['Transporte', 'transporte.tipoCarga', 'Tipo de carga'],
+    ['Transporte', 'transporte.containers', 'Containers', p=>{ const tr = p.transporte||{}; return tr.containerQtd ? `${tr.containerQtd} × ${tr.containerTipo}` : ''; }],
+    ['Transporte', 'transporte.agenteCarga', 'Agente de carga'], ['Transporte', 'transporte.armador', 'Armador / cia. aérea'],
+    ['Transporte', 'transporte.navioVoo', 'Navio / voo'], ['Transporte', 'transporte.booking', 'Booking'],
+    ['Transporte', 'transporte.conhecimentoMaster', 'Conhecimento master (MBL/MAWB)'], ['Transporte', 'transporte.conhecimentoHouse', 'Conhecimento house (HBL/HAWB)'],
+    ['Transporte', 'transporte.etd', 'ETD', p=>data(p.transporte&&p.transporte.etd)],
+    ['Transporte', 'transporte.eta', 'ETA', p=>data(p.transporte&&p.transporte.eta)],
+    ['Transporte', 'transporte.chegada', 'Chegada efetiva', p=>data(p.transporte&&p.transporte.chegada)],
+    ['Transporte', 'transporte.freeTime', 'Free time (dias)'], ['Transporte', 'transporte.volumes', 'Volumes'],
+    ['Transporte', 'transporte.pesoBruto', 'Peso bruto (kg)'], ['Transporte', 'transporte.cubagem', 'Cubagem (m³)'],
+
+    ['Financeiro', 'financeiro.taxaCambio', 'Taxa de câmbio'],
+    ['Financeiro', 'financeiro.frete', 'Frete internacional', p=>{ const f = p.financeiro||{}; return f.frete ? fmtMoeda(numProcSimples(f.frete), f.freteMoeda) : ''; }],
+    ['Financeiro', 'financeiro.seguro', 'Seguro internacional', p=>{ const f = p.financeiro||{}; return f.seguro ? fmtMoeda(numProcSimples(f.seguro), f.seguroMoeda) : ''; }],
+    ['Financeiro', 'financeiro.cif', 'Valor CIF', p=>fmtMoeda(t(p).cif, moedaProd(p))],
+    ['Financeiro', 'financeiro.cifBRL', 'CIF em reais', p=>{ const x = t(p); return x.cambio ? fmtMoeda(x.cifBRL, 'BRL') : ''; }],
+    ['Financeiro', 'financeiro.condicaoPagamento', 'Condição de pagamento'], ['Financeiro', 'financeiro.banco', 'Banco do câmbio'],
+    ['Financeiro', 'financeiro.contratoCambio', 'Contrato de câmbio'],
+    ['Financeiro', 'financeiro.parcelas', 'Parcelas pagas', p=>{ const ps = (p.financeiro&&p.financeiro.parcelas)||[]; return ps.length ? `${ps.filter(x=>x.pago).length} de ${ps.length}` : ''; }],
+    ['Financeiro', 'financeiro.proximoVencimento', 'Próximo vencimento', p=>{
+      const ps = ((p.financeiro&&p.financeiro.parcelas)||[]).filter(x=>!x.pago && x.vencimento).sort((a,b)=>a.vencimento.localeCompare(b.vencimento));
+      return ps.length ? `${data(ps[0].vencimento)} · ${fmtMoeda(numProcSimples(ps[0].valor), ps[0].moeda)}` : ''; }],
+
+    ['Desembaraço', 'desembaraco.despachante', 'Despachante'], ['Desembaraço', 'desembaraco.recinto', 'Recinto / terminal'],
+    ['Desembaraço', 'desembaraco.urf', 'URF de despacho'], ['Desembaraço', 'desembaraco.tipoDeclaracao', 'Tipo de declaração'],
+    ['Desembaraço', 'desembaraco.numeroDeclaracao', 'Nº da declaração (DI/DUIMP)'],
+    ['Desembaraço', 'desembaraco.dataRegistro', 'Data de registro', p=>data(p.desembaraco&&p.desembaraco.dataRegistro)],
+    ['Desembaraço', 'desembaraco.canal', 'Canal', p=>PROC_CANAIS[(p.desembaraco||{}).canal]&&(p.desembaraco||{}).canal ? PROC_CANAIS[p.desembaraco.canal] : '', { canal:true }],
+    ['Desembaraço', 'desembaraco.dataDesembaraco', 'Data do desembaraço', p=>data(p.desembaraco&&p.desembaraco.dataDesembaraco)],
+    ['Desembaraço', 'desembaraco.numeroLi', 'Nº da LI / LPCO'],
+    ['Desembaraço', 'desembaraco.totalTributos', 'Total de tributos e despesas', p=>{ const v = t(p).tributos; return v ? fmtMoeda(v, 'BRL') : ''; }],
+    ...PROC_TRIBUTOS.map(([k,l])=>['Desembaraço', 'desembaraco.tributos.'+k, l, p=>{ const v = numProcSimples(((p.desembaraco||{}).tributos||{})[k]); return v ? fmtMoeda(v, 'BRL') : ''; }]),
+    ['Desembaraço', 'desembaraco.observacoes', 'Observações do desembaraço'],
+  ];
+  return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor: valor || (p=>{ const v = getPath(p, id); return v==null ? '' : String(v); }), ...(extra||{}) }));
+})();
+const PROC_CAMPO = Object.fromEntries(PROC_CAMPOS.map(c=>[c.id, c]));
+const PROC_TEMPLATE_PADRAO = {
+  lista: ['cliente.nome', 'transporte.modal', 'transporte.rota', 'transporte.eta', 'desembaraco.canal', 'status'],
+  card: ['cliente.nome', 'produto.fornecedor', 'transporte.modal', 'transporte.rota', 'transporte.eta', 'produto.totalMercadoria', 'desembaraco.canal'],
+};
+
+function prefsProcessos(){
+  const p = ((usuarioAtual && usuarioAtual.preferencias) || {}).processos || {};
+  const valido = arr => Array.isArray(arr) ? arr.filter(id=>PROC_CAMPO[id]) : null;
+  return { modo: p.modo==='card' ? 'card' : 'lista', lista: valido(p.lista) || PROC_TEMPLATE_PADRAO.lista, card: valido(p.card) || PROC_TEMPLATE_PADRAO.card };
+}
+async function salvarPrefsProcessos(alteracao, mensagem){
+  const nova = { ...((usuarioAtual.preferencias)||{}), processos: { ...prefsProcessos(), ...alteracao } };
+  usuarioAtual.preferencias = nova;
+  const { error } = await sb.from('perfis').update({ preferencias: nova }).eq('user_id', usuarioAtual.id);
+  if(error){
+    console.error(error);
+    // Sem a coluna no banco (SQL ainda não atualizado), guarda ao menos neste navegador.
+    try{ localStorage.setItem(chaveLocal('preferencias'), JSON.stringify(nova)); }catch(e){}
+    if(mensagem) toast('Salvo só neste navegador: não foi possível salvar no seu perfil.');
+    return;
+  }
+  try{ localStorage.removeItem(chaveLocal('preferencias')); }catch(e){}
+  if(mensagem) toast(mensagem, 'ok');
+}
+
+function valorCampoProcesso(campo, p){
+  const v = campo.valor(p);
+  if(!v) return '<span class="vazio">—</span>';
+  if(campo.badge){ const s = PROC_STATUS[p.status] || PROC_STATUS.aberto; return `<span class="badge ${s.cls}">${esc(v)}</span>`; }
+  if(campo.canal) return `<span class="canal canal-${esc(p.desembaraco.canal)}">${esc(v)}</span>`;
+  return esc(v);
+}
+function acoesProcessoHtml(p){
+  return `<button class="icon-btn" title="Abrir" data-action="proc-abrir:${esc(p.id)}">${ICONS.open||ICONS.edit}</button>
+    ${deleteBtnHtml('proc', p.id, 'proc-excluir:'+p.id)}`;
+}
+
 function renderProcessos(){
+  const prefs = prefsProcessos();
   const q = (state.procFiltro||'').trim().toLowerCase();
   const st = state.procFiltroStatus || '';
   const lista = [...(state.processosIndex||[])].sort((a,b)=>(b.seq||0)-(a.seq||0)).filter(p=>{
     if(st && p.status!==st) return false;
     if(!q) return true;
-    const alvo = [p.id, p.cliente&&p.cliente.nome, p.cliente&&p.cliente.referenciaCliente, p.produto&&p.produto.fornecedor,
-                  p.produto&&p.produto.invoice, p.transporte&&p.transporte.conhecimentoMaster, p.transporte&&p.transporte.conhecimentoHouse,
-                  p.desembaraco&&p.desembaraco.numeroDeclaracao].join(' ').toLowerCase();
-    return alvo.includes(q);
+    return PROC_CAMPOS.some(c=>{ try{ return String(c.valor(p)||'').toLowerCase().includes(q); }catch(e){ return false; } });
   });
-  const linhas = lista.map(p=>{
-    const s = PROC_STATUS[p.status] || PROC_STATUS.aberto;
-    const t = p.transporte || {}, d = p.desembaraco || {};
-    return `<tr>
-      <td><b class="num-mono" style="text-align:left;">${esc(p.id)}</b></td>
-      <td>${esc((p.cliente&&p.cliente.nome)||'—')}${p.cliente&&p.cliente.referenciaCliente ? `<div class="membro-sub">Ref.: ${esc(p.cliente.referenciaCliente)}</div>` : ''}</td>
-      <td>${esc(PROC_MODAIS[t.modal]||'—')}</td>
-      <td>${esc(t.origem||'—')} → ${esc(t.destino||'—')}</td>
-      <td>${t.eta ? fmtDateOnly(t.eta) : '—'}</td>
-      <td>${d.canal ? `<span class="canal canal-${esc(d.canal)}">${esc(PROC_CANAIS[d.canal])}</span>` : '—'}</td>
-      <td><span class="badge ${s.cls}">${s.label}</span></td>
-      <td style="text-align:right;">
-        <button class="icon-btn" title="Abrir" data-action="proc-abrir:${esc(p.id)}">${ICONS.open||ICONS.edit}</button>
-        ${deleteBtnHtml('proc', p.id, 'proc-excluir:'+p.id)}
-      </td>
-    </tr>`;
-  }).join('');
   const total = (state.processosIndex||[]).length;
+  const modo = prefs.modo;
+
+  let conteudo;
+  if(!total) conteudo = `<div class="empty">${ICONS.folder}<h3>Nenhum processo cadastrado</h3><p>Clique em "Cadastrar Novo Processo" para começar.</p></div>`;
+  else if(!lista.length) conteudo = `<div class="empty"><h3>Nenhum processo encontrado</h3><p>Ajuste a busca ou o filtro de status.</p></div>`;
+  else if(modo==='card'){
+    const campos = prefs.card.filter(id=>id!=='id' && id!=='status').map(id=>PROC_CAMPO[id]);
+    conteudo = `<div class="proc-cards">${lista.map(p=>{
+      const s = PROC_STATUS[p.status] || PROC_STATUS.aberto;
+      return `<div class="proc-card">
+        <div class="pc-topo"><b class="pc-num">${esc(p.id)}</b><span class="badge ${s.cls}">${s.label}</span></div>
+        <dl class="pc-campos">${campos.map(c=>`<dt>${esc(c.label)}</dt><dd>${valorCampoProcesso(c, p)}</dd>`).join('')}</dl>
+        <div class="pc-acoes"><button class="btn btn-ghost btn-sm" data-action="proc-abrir:${esc(p.id)}">Abrir</button>${deleteBtnHtml('proc', p.id, 'proc-excluir:'+p.id)}</div>
+      </div>`;
+    }).join('')}</div>`;
+  }else{
+    const campos = prefs.lista.filter(id=>id!=='id').map(id=>PROC_CAMPO[id]);
+    conteudo = `<div class="table-wrap"><table>
+      <thead><tr><th>Nº</th>${campos.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead>
+      <tbody>${lista.map(p=>`<tr>
+        <td><b class="num-mono" style="text-align:left;">${esc(p.id)}</b></td>
+        ${campos.map(c=>`<td>${valorCampoProcesso(c, p)}</td>`).join('')}
+        <td style="text-align:right; white-space:nowrap;">${acoesProcessoHtml(p)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }
+
   return `
   <div class="page-title">Processos</div>
   <div class="page-sub">Processos de importação da empresa: cliente, produtos, transporte, financeiro e desembaraço em um só lugar.</div>
   <hr class="hairline">
-  <div class="btn-row" style="margin-bottom:18px; justify-content:space-between;">
+  <div class="proc-barra">
     <button class="btn btn-primary" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</button>
-    ${total ? `<div class="btn-row">
-      <div class="field" style="min-width:260px;"><input id="proc-busca" placeholder="Buscar nº, cliente, invoice, BL, DI/DUIMP…" value="${esc(state.procFiltro||'')}"></div>
+    <div class="btn-row proc-barra-dir">
+      ${total ? `<div class="field" style="min-width:240px;"><input id="proc-busca" placeholder="Buscar em qualquer campo…" value="${esc(state.procFiltro||'')}"></div>
       <div class="field"><select id="proc-status-filtro"><option value="">Todos os status</option>
-        ${Object.entries(PROC_STATUS).map(([k,v])=>`<option value="${k}" ${st===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
-    </div>` : ''}
+        ${Object.entries(PROC_STATUS).map(([k,v])=>`<option value="${k}" ${st===k?'selected':''}>${v.label}</option>`).join('')}</select></div>` : ''}
+      <div class="modo-toggle" role="group" aria-label="Formato de visualização">
+        <button class="${modo==='lista'?'active':''}" data-action="proc-modo:lista">Lista</button>
+        <button class="${modo==='card'?'active':''}" data-action="proc-modo:card">Cards</button>
+      </div>
+      <button class="btn btn-ghost ${state.procTemplateAberto?'ativo':''}" data-action="proc-template">${ICONS.gear} Template</button>
+    </div>
   </div>
-  ${total ? (lista.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Nº</th><th>Cliente</th><th>Modal</th><th>Origem → Destino</th><th>ETA</th><th>Canal</th><th>Status</th><th></th></tr></thead>
-      <tbody>${linhas}</tbody></table></div>`
-    : `<div class="empty"><h3>Nenhum processo encontrado</h3><p>Ajuste a busca ou o filtro de status.</p></div>`)
-  : `<div class="empty">${ICONS.folder}<h3>Nenhum processo cadastrado</h3><p>Clique em "Cadastrar Novo Processo" para começar.</p></div>`}`;
+  ${state.procTemplateAberto ? renderProcTemplate() : ''}
+  ${conteudo}`;
+}
+
+// Janela Template: Configurar Card / Configurar Lista
+function renderProcTemplate(){
+  const aba = state.procTemplateAba || 'card';
+  if(!state.procTemplateSel){ const pr = prefsProcessos(); state.procTemplateSel = { card:[...pr.card], lista:[...pr.lista] }; }
+  const sel = new Set(state.procTemplateSel[aba]);
+  const grupos = PROC_JANELAS_TEMPLATE.map(janela=>{
+    const campos = PROC_CAMPOS.filter(c=>c.janela===janela && !(c.id==='id') && !(aba==='card' && c.id==='status'));
+    const marcados = campos.filter(c=>sel.has(c.id)).length;
+    return `<div class="tpl-grupo">
+      <div class="tpl-grupo-topo"><b>${janela==='Geral' ? 'Geral' : 'Janela ' + janela}</b>
+        <span class="membro-sub">${marcados} de ${campos.length}</span>
+        <button class="link-btn" data-action="proc-tpl-grupo:${janela}:${marcados===campos.length?'0':'1'}">${marcados===campos.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+      ${campos.map(c=>`<label class="tpl-campo"><input type="checkbox" data-tpl-campo="${esc(c.id)}" ${sel.has(c.id)?'checked':''}> ${esc(c.label)}</label>`).join('')}
+    </div>`;
+  }).join('');
+  return `<div class="card proc-template">
+    <div class="proc-template-topo">
+      <div class="section-title">${ICONS.gear} Template</div>
+      <div class="pers-tabs" style="margin:0;">
+        <button class="pers-tab ${aba==='card'?'active':''}" data-action="proc-tpl-aba:card">Configurar Card</button>
+        <button class="pers-tab ${aba==='lista'?'active':''}" data-action="proc-tpl-aba:lista">Configurar Lista</button>
+      </div>
+    </div>
+    <p class="page-sub" style="margin:10px 0 16px;">${aba==='card'
+      ? 'Escolha as informações que aparecem em cada card. O nº do processo e o status aparecem sempre no topo do card.'
+      : 'Escolha as colunas da lista. O nº do processo aparece sempre na primeira coluna.'} Esta escolha vale só para você.</p>
+    <div class="tpl-grupos">${grupos}</div>
+    <div class="btn-row" style="margin-top:18px; justify-content:space-between;">
+      <span class="membro-sub">${sel.size} ${sel.size===1?'informação selecionada':'informações selecionadas'}</span>
+      <div class="btn-row">
+        <button class="btn btn-ghost" data-action="proc-tpl-padrao">Restaurar padrão</button>
+        <button class="btn btn-ghost" data-action="proc-template">Cancelar</button>
+        <button class="btn btn-primary" data-action="proc-tpl-salvar">${ICONS.check} Salvar ${aba==='card'?'card':'lista'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function acaoTemplateProcesso(cmd, a1, a2){
+  switch(cmd){
+    case 'proc-modo': salvarPrefsProcessos({ modo: a1 }); renderApp(); return true;
+    case 'proc-template':
+      state.procTemplateAberto = !state.procTemplateAberto; state.procTemplateSel = null; renderApp(); return true;
+    case 'proc-tpl-aba': state.procTemplateAba = a1; renderApp(); return true;
+    case 'proc-tpl-grupo': {
+      const aba = state.procTemplateAba || 'card';
+      const ids = PROC_CAMPOS.filter(c=>c.janela===a1 && c.id!=='id' && !(aba==='card' && c.id==='status')).map(c=>c.id);
+      const atual = new Set(state.procTemplateSel[aba]);
+      ids.forEach(id=> a2==='1' ? atual.add(id) : atual.delete(id));
+      state.procTemplateSel[aba] = PROC_CAMPOS.map(c=>c.id).filter(id=>atual.has(id));
+      renderApp(); return true;
+    }
+    case 'proc-tpl-padrao': {
+      const aba = state.procTemplateAba || 'card';
+      state.procTemplateSel[aba] = [...PROC_TEMPLATE_PADRAO[aba]]; renderApp(); return true;
+    }
+    case 'proc-tpl-salvar': {
+      const aba = state.procTemplateAba || 'card';
+      const escolhidos = state.procTemplateSel[aba];
+      if(!escolhidos.length) return toast('Selecione pelo menos uma informação.'), true;
+      salvarPrefsProcessos({ [aba]: [...escolhidos], modo: aba }, aba==='card' ? 'Template do card salvo.' : 'Template da lista salvo.')
+        .then(()=>{ state.procTemplateAberto = false; state.procTemplateSel = null; renderApp(); });
+      return true;
+    }
+  }
+  return false;
+}
+function onTemplateCampo(el){
+  const id = el.getAttribute('data-tpl-campo'); if(!id || !state.procTemplateSel) return false;
+  const aba = state.procTemplateAba || 'card';
+  const atual = new Set(state.procTemplateSel[aba]);
+  el.checked ? atual.add(id) : atual.delete(id);
+  state.procTemplateSel[aba] = PROC_CAMPOS.map(c=>c.id).filter(x=>atual.has(x)); // mantém a ordem das janelas
+  renderApp();
+  return true;
 }
 
 // --------- Formulário ---------
@@ -2585,7 +2811,7 @@ const state = {
   dados: dadosPadrao(),
   currentCotacaoId: null,
   cotacoesIndex: [],         // [{id,numero,criadoEm,atualizadoEm, resumo:{...}}]
-  processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procFiltro: '', procFiltroStatus: '',
+  processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procFiltro: '', procFiltroStatus: '', procTemplateAberto: false, procTemplateAba: 'card', procTemplateSel: null,
   clientes: [], fornecedores: [], produtos: [],
   filtros: { numero:'', texto:'', de:'', ate:'' },
   filtrosFormal: { numero:'', texto:'', de:'', ate:'' },
@@ -7126,7 +7352,7 @@ function onAppClick(e){
   if(!acaoPermitida(action)){ avisoSemPermissao(action); return; }
   const [cmd, a1, a2] = action.split(':');
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
-  if(cmd.startsWith('proc-') && acaoProcesso(cmd, a1)) return;
+  if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1))) return;
   switch(cmd){
     case 'go': navigate(a1); break;
     case 'toggle-module':
@@ -7370,6 +7596,7 @@ function onAppChange(e){
   const el = e.target;
   if(onConfigChange(el)) return;
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
+  if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.id==='proc-status-filtro'){ state.procFiltroStatus = el.value; renderApp(); return; }
   if(el.id==='icms-input' || el.id==='icms-input-formal') return; // handled by input
   if(el.id==='doc-file-input'){ handleFilesSelected(el.files); return; }

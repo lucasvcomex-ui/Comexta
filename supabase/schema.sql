@@ -53,6 +53,10 @@ create table if not exists public.perfis (
   criado_em   timestamptz not null default now()
 );
 create index if not exists perfis_empresa_idx on public.perfis (empresa_id);
+-- Preferências de cada usuário (ex.: campos escolhidos em Processos → Template para a lista e os cards)
+alter table public.perfis add column if not exists preferencias jsonb not null default '{}'::jsonb;
+alter table public.perfis drop constraint if exists perfis_preferencias_tamanho;
+alter table public.perfis add constraint perfis_preferencias_tamanho check (octet_length(preferencias::text) < 200000);
 
 create table if not exists public.convites (
   id            uuid primary key default gen_random_uuid(),
@@ -345,7 +349,7 @@ create policy "apagar dados da empresa" on public.dados_empresa
 revoke all on public.empresas, public.perfis, public.convites, public.dados_empresa from anon;
 revoke insert, update, delete on public.perfis from authenticated;
 grant select on public.perfis to authenticated;
-grant update (nome, telefone, cargo, foto) on public.perfis to authenticated;
+grant update (nome, telefone, cargo, foto, preferencias) on public.perfis to authenticated;
 revoke insert, delete on public.empresas from authenticated;
 grant select on public.empresas to authenticated;
 grant update (nome_fantasia, razao_social, cnpj, inscricao_estadual, telefone, email, site,
