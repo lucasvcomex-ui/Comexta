@@ -616,6 +616,8 @@ td.num-mono, th.num-mono{text-align:right;}
   .proc-topo-campos .field{min-width:0; flex:1 1 140px;}
   .filtro-periodo .periodo input{width:auto; flex:1;}
 }
+.aviso-lista{display:block; margin-top:4px; font-size:11.5px; color:var(--amber-deep);}
+.aviso-lista .link-btn{color:inherit; font-size:inherit;}
 </style>
 </head>
 <body>
@@ -1476,8 +1478,8 @@ function renderCompletarPerfil(){
 //   responsaveis / vendedores: listas usadas nos campos da Nova Cotação (Simplificada e Formal)
 const ESTILO_PADRAO = { corCabecalho:'#173A5E', corFundo:'#FFFFFF' };
 const TIPOS_PESSOA = {
-  responsaveis:{ titulo:'Responsáveis', singular:'responsável', campo:'responsavel', texto:'Pessoas responsáveis pela cotação. Aparecem na lista do campo "Responsável" da Nova Cotação (Simplificada e Formal).' },
-  vendedores:{ titulo:'Vendedores', singular:'vendedor', campo:'vendedor', texto:'Pessoas responsáveis pela venda. Aparecem na lista do campo "Nome do Vendedor" da Nova Cotação (Simplificada e Formal).' },
+  responsaveis:{ titulo:'Responsáveis', singular:'responsável', campo:'responsavel', texto:'Pessoas responsáveis pela cotação. Aparecem na lista do campo "Responsável" em todo o site: Nova Cotação (Simplificada e Formal), Processos e filtros.' },
+  vendedores:{ titulo:'Vendedores', singular:'vendedor', campo:'vendedor', texto:'Pessoas responsáveis pela venda. Aparecem na lista do campo "Vendedor" em todo o site: Nova Cotação (Simplificada e Formal), Processos e filtros.' },
 };
 
 function personalizacao(){ return (empresaAtual && empresaAtual.personalizacao) || {}; }
@@ -1517,17 +1519,27 @@ function prepararFundoPdf(doc){
 
 function listaPessoas(tipo){ return (personalizacao()[tipo] || []).filter(p=>p && p.nome); }
 
-// Campo da Nova Cotação: com lista cadastrada vira seleção ("Nome — Cargo"); sem lista, texto livre.
-function campoPessoaHtml(tipo, valor, placeholder){
+// Opções de Responsável / Vendedor: sempre a lista do administrador (Configurações → Personalização).
+// Um valor antigo que não está na lista continua aparecendo, marcado como "fora da lista".
+function opcoesPessoa(tipo, atual){
+  const l = listaPessoas(tipo).map(p=>[p.nome, p.nome + (p.cargo ? ' — ' + p.cargo : '')]);
+  if(atual && !l.some(([n])=>n===atual)) l.push([atual, atual + ' (fora da lista)']);
+  return [['', l.length ? 'Selecione…' : 'Nenhum cadastrado'], ...l];
+}
+// Aviso abaixo do campo quando a lista está vazia: o administrador ganha um atalho para cadastrar.
+function avisoListaPessoas(tipo){
+  if(listaPessoas(tipo).length) return '';
+  const info = TIPOS_PESSOA[tipo];
+  return `<span class="hint aviso-lista">Nenhum ${info.singular} cadastrado. ${souAdmin()
+    ? `<button type="button" class="link-btn" data-action="cfg-pers-ir:${tipo}">Cadastrar em Configurações → Personalização</button>`
+    : 'Peça ao administrador da empresa para cadastrar em Configurações → Personalização.'}</span>`;
+}
+// Campo da Nova Cotação (Simplificada e Formal): seleção com a lista do administrador.
+function campoPessoaHtml(tipo, valor){
   const campo = TIPOS_PESSOA[tipo].campo;
-  const lista = listaPessoas(tipo);
-  if(!lista.length) return `<input data-bind="${campo}" value="${esc(valor)}" placeholder="${esc(placeholder)}">`;
-  const naLista = lista.some(p=>p.nome===valor);
   return `<select data-bind="${campo}">
-    <option value="">Selecione…</option>
-    ${lista.map(p=>`<option value="${esc(p.nome)}" ${p.nome===valor?'selected':''}>${esc(p.nome)}${p.cargo ? ' — '+esc(p.cargo) : ''}</option>`).join('')}
-    ${valor && !naLista ? `<option value="${esc(valor)}" selected>${esc(valor)} (fora da lista)</option>` : ''}
-  </select>`;
+    ${opcoesPessoa(tipo, valor).map(([k,t])=>`<option value="${esc(k)}" ${k===(valor||'')?'selected':''}>${esc(t)}</option>`).join('')}
+  </select>${avisoListaPessoas(tipo)}`;
 }
 
 // --------- Tela (Configurações → Personalização) ---------
@@ -1606,7 +1618,7 @@ function renderPersPessoas(tipo){
         <input data-pessoa="${tipo}:${i}:cargo" value="${esc(p.cargo)}" placeholder="Cargo" autocomplete="off">
         <button class="row-remove" title="Remover" data-action="cfg-pers-remover:${tipo}:${i}">${ICONS.trash || '✕'}</button>
       </div>`).join('')}
-    </div>` : `<p class="page-sub" style="margin:0 0 6px;">Nenhum ${info.singular} cadastrado. Enquanto a lista estiver vazia, o campo da cotação continua aceitando texto livre.</p>`}
+    </div>` : `<p class="page-sub" style="margin:0 0 6px;">Nenhum ${info.singular} cadastrado. Enquanto a lista estiver vazia, o campo fica sem opções nas cotações e nos processos.</p>`}
     <div class="btn-row" style="margin-top:16px;">
       <button class="btn btn-ghost" data-action="cfg-pers-adicionar:${tipo}">+ Adicionar ${info.singular}</button>
       <button class="btn btn-primary" data-action="cfg-pers-salvar-pessoas:${tipo}">Salvar lista</button>
@@ -1682,6 +1694,8 @@ function atualizarPreviaEstilo(){
 
 function acaoPersonalizacao(cmd, a1, a2){
   switch(cmd){
+    case 'cfg-pers-ir':
+      state.configTab = 'personalizacao'; state.cfgPersTab = a1; state.cfgPessoas = null; navigate('config'); return true;
     case 'cfg-pers-aba':
       if(state.cfgPersTab && state.cfgPersTab!=='cotacoes') lerPessoasDigitadas(state.cfgPersTab);
       state.cfgPersTab = a1; renderApp(); return true;
@@ -2148,7 +2162,7 @@ function procCampo(path, label, opts){
   const span = o.span ? ` style="grid-column:span ${o.span};"` : '';
   if(o.options){
     return `<div class="field"${span}><label>${label}</label><select data-proc="${path}">
-      ${o.options.map(([k,t])=>`<option value="${esc(k)}" ${String(v)===String(k)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
+      ${o.options.map(([k,t])=>`<option value="${esc(k)}" ${String(v)===String(k)?'selected':''}>${esc(t)}</option>`).join('')}</select>${o.hintHtml||''}</div>`;
   }
   if(o.textarea) return `<div class="field"${span}><label>${label}</label><textarea data-proc="${path}" rows="${o.rows||3}" placeholder="${esc(o.placeholder||'')}">${esc(v)}</textarea></div>`;
   return `<div class="field"${span}><label>${label}</label><input data-proc="${path}" value="${esc(v)}"
@@ -2157,11 +2171,6 @@ function procCampo(path, label, opts){
 }
 const opcoes = obj => Object.entries(obj);
 const opcoesLista = arr => arr.map(x=>[x,x]);
-function opcoesPessoa(tipo, atual){
-  const l = listaPessoas(tipo).map(p=>[p.nome, p.nome + (p.cargo ? ' — ' + p.cargo : '')]);
-  if(atual && !l.some(([n])=>n===atual)) l.push([atual, atual + ' (fora da lista)']);
-  return [['', 'Selecione…'], ...l];
-}
 const nomeCadastro = c => c.nomeFantasia || c.razaoSocial || c.nome || '';
 
 function renderProcessoForm(){
@@ -2210,8 +2219,8 @@ function procAbaCliente(){
       ${procCampo('cliente.telefone', 'Telefone', { type:'tel' })}
       ${procCampo('cliente.referenciaCliente', 'Referência do cliente', { placeholder:'Pedido / PO do cliente' })}
       ${procCampo('cliente.modalidade', 'Modalidade de importação', { options:[['conta_propria','Conta própria'],['conta_ordem','Por conta e ordem'],['encomenda','Por encomenda']] })}
-      ${procCampo('cliente.responsavel', 'Responsável', listaPessoas('responsaveis').length ? { options: opcoesPessoa('responsaveis', c.responsavel) } : {})}
-      ${procCampo('cliente.vendedor', 'Vendedor', listaPessoas('vendedores').length ? { options: opcoesPessoa('vendedores', c.vendedor) } : {})}
+      ${procCampo('cliente.responsavel', 'Responsável', { options: opcoesPessoa('responsaveis', c.responsavel), hintHtml: avisoListaPessoas('responsaveis') })}
+      ${procCampo('cliente.vendedor', 'Vendedor', { options: opcoesPessoa('vendedores', c.vendedor), hintHtml: avisoListaPessoas('vendedores') })}
       ${procCampo('cliente.observacoes', 'Observações', { textarea:true, span:3 })}
     </div>
   </div>`;
@@ -2618,6 +2627,13 @@ function acoesCotacaoHtml(tipo, cot, compacto){
   </div>`;
 }
 
+// Nomes para os filtros de Vendedor/Responsável: a lista do administrador e os que já aparecem em cotações antigas.
+function nomesFiltroPessoa(campo){
+  const tipo = campo==='vendedor' ? 'vendedores' : 'responsaveis';
+  const daLista = listaPessoas(tipo).map(p=>p.nome);
+  const usados = [...state.cotacoesIndex, ...state.cotacoesFormalIndex].map(c=>(c.dados||{})[campo]).filter(Boolean);
+  return [...new Set([...daLista, ...usados])].sort((a,b)=>a.localeCompare(b, 'pt-BR')).map(n=>[n, daLista.includes(n) ? n : n + ' (fora da lista)']);
+}
 function filtroCotacaoHtml(f){
   const v = state.filtrosTodas[f.id] ?? '';
   const sel = (opcoes) => `<select id="${f.el}">${opcoes.map(([k,t])=>`<option value="${k}" ${String(v||f.vazio||'')===k?'selected':''}>${t}</option>`).join('')}</select>`;
@@ -2627,6 +2643,7 @@ function filtroCotacaoHtml(f){
     case 'incoterm': campo = sel([['','Todos'], ...['FOB','CIF','CFR','EXW','FCA','CPT','CIP'].map(i=>[i,i])]); break;
     case 'statusCotacao': campo = sel([['','Todos'], ...Object.entries(COT_STATUS_LABEL)]); break;
     case 'statusMotivoNegado': campo = sel([['','Todos'], ...Object.entries(COT_MOTIVO_LABEL)]); break;
+    case 'vendedor': case 'responsavel': campo = sel([['','Todos'], ...nomesFiltroPessoa(f.id)]); break;
     case 'de': case 'ate': campo = `<input id="${f.el}" type="date" value="${esc(v)}">`; break;
     default: {
       const ph = { numero:'COT-0001 ou COTF-0001', texto:'Buscar...', vendedor:'Nome do vendedor', responsavel:'Nome do responsável', paisOrigem:'Ex: China',
@@ -4632,8 +4649,8 @@ function cotacoesTodasFiltradas(ignorarStatus){
     if(f.ate && cot.criadoEm > (f.ate+'T23:59:59')) return false;
     const cidadeOrigem = tipo==='Simplificada' ? d.cidadeOrigem : d.freteOrigem;
     const cidadeDestino = tipo==='Simplificada' ? d.cidadeDestino : d.freteDestino;
-    if(f.vendedor && !(d.vendedor||'').toLowerCase().includes(f.vendedor.toLowerCase())) return false;
-    if(f.responsavel && !(d.responsavel||'').toLowerCase().includes(f.responsavel.toLowerCase())) return false;
+    if(f.vendedor && (d.vendedor||'').trim().toLowerCase()!==f.vendedor.trim().toLowerCase()) return false;
+    if(f.responsavel && (d.responsavel||'').trim().toLowerCase()!==f.responsavel.trim().toLowerCase()) return false;
     if(f.paisOrigem && !(d.paisOrigem||'').toLowerCase().includes(f.paisOrigem.toLowerCase())) return false;
     if(f.paisDestino && !(d.paisDestino||'').toLowerCase().includes(f.paisDestino.toLowerCase())) return false;
     if(f.portoOrigem && !(d.portoOrigem||'').toLowerCase().includes(f.portoOrigem.toLowerCase())) return false;

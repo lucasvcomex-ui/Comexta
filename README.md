@@ -26,7 +26,8 @@ Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
   A diferença entre criar e editar dentro de uma mesma lista é aplicada pelo ERP.
 - **Personalização** (Configurações → Personalização, só administradores; quem for promovido a administrador
   também pode editar): cores do cabeçalho e do fundo e logo da empresa nos PDFs da cotação, e as listas de
-  Responsáveis e Vendedores (nome completo e cargo) usadas nos campos da Nova Cotação (Simplificada e Formal).
+  Responsáveis e Vendedores (nome completo e cargo). Todos os campos e filtros de Responsável e Vendedor do site
+  (Nova Cotação Simplificada e Formal, Processos, filtros de Cotações Salvas e de Processos) usam essas listas.
   Fica em `empresas.personalizacao`.
 - **Processos** (barra superior → Processos): lista dos processos de importação da empresa (PRC-0001…) com busca
   e filtro de status, e "Cadastrar Novo Processo" com as janelas Cliente, Produto, Transporte, Financeiro e
