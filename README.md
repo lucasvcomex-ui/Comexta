@@ -31,7 +31,9 @@ Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
   Fica em `empresas.personalizacao`.
 - **Processos** (barra superior → Processos): lista dos processos de importação da empresa (PRC-0001…) com busca
   e filtro de status, e "Cadastrar Novo Processo" com as janelas Cliente, Produto, Transporte, Desembaraço, Financeiro e
-  Numerário. O **Numerário** resume todos os custos lidos das janelas anteriores (mercadoria, frete e seguro em reais,
+  Numerário. Na janela Produto cada fornecedor tem seu quadro (dados + itens) e **Adicionar Fornecedor** inclui outro;
+  o Financeiro pede uma taxa de câmbio por moeda usada (processos antigos, de um fornecedor só, são convertidos ao abrir).
+  O **Numerário** resume todos os custos lidos das janelas anteriores (mercadoria, frete e seguro em reais,
   valor aduaneiro, tributos e despesas) e faz o rateio por produto, sem e com crédito de tributos, com PDF — nos
   moldes do Numerário das cotações. Frete ou seguro em moeda diferente da mercadoria pedem câmbio próprio no Financeiro. É uma área de permissão própria (visualizar, criar, editar); membros começam sem acesso.
   Em **Template** (à direita, na lista) cada usuário escolhe, por janela do processo, as informações que aparecem
