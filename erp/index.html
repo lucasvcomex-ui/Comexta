@@ -645,6 +645,7 @@ td.num-mono, th.num-mono{text-align:right;}
 .proc-board .kanban-column{min-height:160px;}
 .tpl-tipo{font-size:10.5px; color:var(--ink-soft); background:var(--paper-2); border-radius:999px; padding:1px 7px; margin-left:auto; white-space:nowrap;}
 .tpl-campo{justify-content:flex-start;}
+.exportar-grupo{display:inline-flex; gap:6px; flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -984,6 +985,7 @@ const PERMISSAO_DA_ACAO = {
   'cad-edit':['cadastros','editar'], 'cad-view-edit':['cadastros','editar'], 'cad-delete':['cadastros','editar'],
   'cad-save':['cadastros','salvar'],
   'cadtpl-modo':['cadastros','ver'], 'cadtpl-abrir':['cadastros','ver'],
+  'exportar:cot':['cotacoes','ver'], 'exportar:proc':['processos','ver'], 'exportar:cad-cliente':['cadastros','ver'], 'exportar:cad-produto':['cadastros','ver'],
 
   'toggle-nav:proc':['processos','ver'], 'toggle-module:proc':['processos','ver'], 'go:processos':['processos','ver'],
   'go:processoForm':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
@@ -2265,7 +2267,7 @@ function renderProcessos(){
       <button class="view-toggle-btn ${modo==='lista'?'active':''}" data-action="proc-modo:lista">${ICONS.file} Lista</button>
       <button class="view-toggle-btn ${modo==='card'?'active':''}" data-action="proc-modo:card">${ICONS.product} Cards</button>
     </div>
-    <button class="btn btn-ghost btn-sm ${state.procTemplateAberto?'ativo':''}" data-action="proc-template">${ICONS.gear} Template</button>
+    <div class="btn-row">${botoesExportarHtml('proc')}<button class="btn btn-ghost btn-sm ${state.procTemplateAberto?'ativo':''}" data-action="proc-template">${ICONS.gear} Template</button></div>
   </div>
   ${state.procTemplateAberto ? renderProcTemplate() : ''}
   ${barraFiltrosTpl('proc', ignorar, `<button class="btn btn-primary btn-sm" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</button>`)}
@@ -3265,6 +3267,7 @@ function barraCadastroTpl(tipo, total, filtrados){
         <button class="${prefs.modo==='lista'?'active':''}" data-action="cadtpl-modo:${tipo}:lista">Lista</button>
         <button class="${prefs.modo==='card'?'active':''}" data-action="cadtpl-modo:${tipo}:card">Cards</button>
       </div>
+      ${botoesExportarHtml('cad-'+tipo, true)}
       <button class="btn btn-ghost ${aberto?'ativo':''}" data-action="cadtpl-abrir:${tipo}">${ICONS.gear} Template</button>
     </div>
   </div>
@@ -3362,6 +3365,146 @@ function onCadTemplateCampo(el){
   state.cadTemplateSel[aba] = ordemCadTpl(tipo, aba).filter(x=>atual.has(x));
   renderApp();
   return true;
+}
+
+/* ---------------------- Exportar (Excel e PDF) ---------------------- */
+// Cotações Salvas, Clientes e Empresas, Produtos e Processos: exporta o que está na tela — só os
+// registros filtrados e as colunas do Template (as da Lista ou as do Card, conforme o formato em uso).
+function botoesExportarHtml(tela, grande){
+  const tam = grande ? '' : ' btn-sm';
+  return `<div class="exportar-grupo" role="group" aria-label="Exportar">
+    <button class="btn btn-ghost${tam}" data-action="exportar:${tela}:xlsx" title="Baixar em Excel o que está filtrado na tela">${ICONS.download} Excel</button>
+    <button class="btn btn-ghost${tam}" data-action="exportar:${tela}:pdf" title="Baixar em PDF o que está filtrado na tela">${ICONS.download} PDF</button>
+  </div>`;
+}
+
+// Texto simples (sem HTML) de um valor
+const textoPlano = v => String(v ?? '').replace(/\s+/g, ' ').trim();
+
+// Resumo dos filtros aplicados (vai no PDF e na planilha)
+function resumoFiltrosTpl(escopo, ignorar){
+  const mapa = mapaFiltrosTpl(escopo), v = filtrosAplicados(escopo);
+  return FILTROS_TPL[escopo].prefs().filtros.map(id=>mapa[id]).filter(f=>f && !(ignorar||[]).includes(f.id) && filtroTplAtivo(v, f)).map(f=>{
+    if(f.tipo==='periodo' || f.tipo==='faixa'){
+      const fmt = x => f.tipo==='periodo' ? fmtDateOnly(x) : x;
+      const de = v[f.id+':de'], ate = v[f.id+':ate'];
+      return `${f.label}: ${de && ate ? fmt(de)+' a '+fmt(ate) : de ? 'a partir de '+fmt(de) : 'até '+fmt(ate)}`;
+    }
+    if(f.tipo==='opcao'){ const op = opcoesFiltroTpl(escopo, f).find(([k])=>k===v[f.id]); return `${f.label}: ${op ? op[1] : v[f.id]}`; }
+    return `${f.label}: "${v[f.id]}"`;
+  });
+}
+function resumoFiltrosCad(tipo){
+  const t = CAD_TEMPLATE[tipo], v = (state.cadFiltrosTpl||{})[tipo] || {};
+  return prefsCadastro(tipo).filtros.map(id=>t.mapaFiltros[id]).filter(f=>f && filtroCadAtivo(tipo, f)).map(f=>{
+    const k = tipoFiltroCad(f);
+    if(k==='periodo' || k==='faixa'){
+      const fmt = x => k==='periodo' ? fmtDateOnly(x) : x, de = v[f.id+':de'], ate = v[f.id+':ate'];
+      return `${f.label}: ${de && ate ? fmt(de)+' a '+fmt(ate) : de ? 'a partir de '+fmt(de) : 'até '+fmt(ate)}`;
+    }
+    if(k==='opcao'){ const op = opcoesFiltroCad(tipo, f).find(([o])=>o===v[f.id]); return `${f.label}: ${op ? op[1] : v[f.id]}`; }
+    return `${f.label}: "${v[f.id]}"`;
+  });
+}
+
+// Monta { titulo, arquivo, colunas, linhas, filtros } de cada tela
+function dadosExportacao(tela){
+  if(tela==='cot'){
+    const prefs = prefsCotacoes(), cards = state.cotacoesViewMode==='cards';
+    const ids = cards ? ['tipo', 'status', ...prefs.card.filter(id=>id!=='tipo' && id!=='status')] : prefs.lista;
+    const campos = ids.map(id=>COT_CAMPO[id]).filter(Boolean);
+    const itens = cotacoesTodasFiltradas(cards);
+    return { titulo:'Cotações Salvas', arquivo:'cotacoes-salvas',
+      colunas: ['Nº', ...campos.map(c=>c.label)],
+      linhas: itens.map(({tipo, cot})=>[cot.id, ...campos.map(c=>{ try{ return textoPlano(c.valor(tipo, cot)); }catch(e){ return ''; } })]),
+      filtros: resumoFiltrosTpl('cot', cards ? ['status'] : []) };
+  }
+  if(tela==='proc'){
+    const prefs = prefsProcessos(), cards = prefs.modo==='card';
+    const ids = cards ? ['status', ...prefs.card.filter(id=>id!=='id' && id!=='status')] : prefs.lista.filter(id=>id!=='id');
+    const campos = ids.map(id=>PROC_CAMPO[id]).filter(Boolean);
+    const itens = aplicarFiltrosTpl('proc', [...(state.processosIndex||[])].sort((a,b)=>(b.seq||0)-(a.seq||0)), cards ? ['status'] : []);
+    return { titulo:'Processos', arquivo:'processos',
+      colunas: ['Nº', ...campos.map(c=>c.label)],
+      linhas: itens.map(p=>[p.id, ...campos.map(c=>{ try{ return textoPlano(c.valor(p)); }catch(e){ return ''; } })]),
+      filtros: resumoFiltrosTpl('proc', cards ? ['status'] : []) };
+  }
+  const tipo = tela==='cad-produto' ? 'produto' : 'cliente';
+  const t = CAD_TEMPLATE[tipo], prefs = prefsCadastro(tipo), cards = prefs.modo==='card';
+  let ids = cards ? prefs.card : prefs.lista;
+  if(tipo==='cliente' && cards) ids = ['tipoCadastro', 'status', ...ids.filter(id=>id!=='tipoCadastro' && id!=='status')];
+  ids = ids.filter(id=>!(tipo==='produto' && id==='nome') && !(tipo==='cliente' && id==='nomeFantasia'));
+  const campos = ids.map(id=>t.mapa[id]).filter(Boolean);
+  return { titulo: tipo==='produto' ? 'Produtos' : 'Clientes e Empresas', arquivo: tipo==='produto' ? 'produtos' : 'clientes-e-empresas',
+    colunas: [tipo==='produto' ? 'Produto' : 'Nome', ...campos.map(c=>c.label)],
+    linhas: filtrarCadastroTpl(tipo).map(item=>[textoPlano(t.nome(item)), ...campos.map(c=>textoPlano(textoCampoCad(c, item)))]),
+    filtros: resumoFiltrosCad(tipo) };
+}
+
+let _xlsxCarregando = null;
+function carregarXLSX(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(!_xlsxCarregando) _xlsxCarregando = new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = ()=>res(window.XLSX);
+    s.onerror = ()=>{ _xlsxCarregando = null; rej(new Error('Não foi possível carregar o gerador de Excel. Verifique sua conexão.')); };
+    document.head.appendChild(s);
+  });
+  return _xlsxCarregando;
+}
+// Números em formato brasileiro ("R$ 1.234,56", "1,8", "12") viram número na planilha
+function celulaExcel(v){
+  const s = String(v||'').trim();
+  // só milhar com grupos de 3 dígitos: NCM "8467.21.00", CNPJ e datas continuam como texto
+  if(/^(R\$|US\$|€|£|¥)?\s?-?(\d{1,3}(\.\d{3})+|\d+)(,\d+)?$/.test(s)){
+    const n = Number(s.replace(/^[^\d-]+/, '').replace(/\./g, '').replace(',', '.'));
+    if(isFinite(n) && !/^0\d/.test(s.replace(/^[^\d]+/, ''))) return n;
+  }
+  return s;
+}
+
+async function exportarTela(tela, formato){
+  const d = dadosExportacao(tela);
+  if(!d.linhas.length){ toast('Nada para exportar: nenhum registro na tela com os filtros atuais.'); return; }
+  const hoje = new Date().toISOString().slice(0,10);
+  const nome = `comexta-${d.arquivo}-${hoje}.${formato}`;
+  const empresa = nomeEmpresa();
+  try{
+    if(formato==='xlsx'){
+      const XLSX = await carregarXLSX();
+      const topo = [[`${d.titulo} — ${empresa}`], [`Gerado em ${fmtDate(new Date().toISOString())} por ${usuarioAtual.nome || usuarioAtual.email}`],
+        [d.filtros.length ? 'Filtros: ' + d.filtros.join(' · ') : 'Sem filtros'], []];
+      const aoa = [...topo, d.colunas, ...d.linhas.map(l=>l.map(celulaExcel))];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = d.colunas.map((c, i)=>({ wch: Math.min(48, Math.max(10, c.length + 2, ...d.linhas.slice(0, 200).map(l=>String(l[i]||'').length + 2))) }));
+      ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{ r:topo.length, c:0 }, e:{ r:topo.length + d.linhas.length, c:d.colunas.length-1 } }) };
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, d.titulo.slice(0, 31));
+      const bin = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+      await saveArtifactFile(nome, new Blob([bin], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      return;
+    }
+    if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){ toast('Não foi possível carregar o gerador de PDF. Recarregue a página.'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+    prepararFundoPdf(doc);
+    pdfHeader(doc, d.titulo, `${empresa} · ${d.linhas.length} registro${d.linhas.length===1?'':'s'}`, fmtDate(new Date().toISOString()));
+    let y = 74;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(75,90,104);
+    const filtrosTxt = doc.splitTextToSize(d.filtros.length ? 'Filtros: ' + d.filtros.join(' · ') : 'Sem filtros aplicados', doc.internal.pageSize.getWidth() - 56);
+    doc.text(filtrosTxt, 28, y); y += filtrosTxt.length * 11 + 6;
+    const fonte = d.colunas.length > 12 ? 6 : d.colunas.length > 8 ? 7 : 8;
+    doc.autoTable({ startY:y, head:[d.colunas], body:d.linhas, theme:'grid', margin:{ left:28, right:28 },
+      styles:{ fontSize:fonte, cellPadding:3, overflow:'linebreak', valign:'top' },
+      headStyles:{ fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:fonte },
+      didDrawPage:(info)=>{ doc.setFontSize(7.5); doc.setTextColor(120,130,140);
+        doc.text(`Página ${info.pageNumber}`, doc.internal.pageSize.getWidth() - 28, doc.internal.pageSize.getHeight() - 14, { align:'right' }); } });
+    await downloadPdfBlob(doc, nome);
+  }catch(err){
+    console.error('Falha ao exportar:', err);
+    toast(err && err.message ? err.message : 'Não foi possível gerar o arquivo.');
+  }
 }
 
 /* -------------------------------- Icones --------------------------------- */
@@ -5272,7 +5415,7 @@ function renderCotacoesTodas(){
       <button class="view-toggle-btn ${state.cotacoesViewMode==='lista'?'active':''}" data-action="set-cotacoes-view:lista">${ICONS.file} Lista</button>
       <button class="view-toggle-btn ${state.cotacoesViewMode==='cards'?'active':''}" data-action="set-cotacoes-view:cards">${ICONS.product} Cards</button>
     </div>
-    <button class="btn btn-ghost btn-sm ${state.cotTemplateAberto?'ativo':''}" data-action="cot-template">${ICONS.gear} Template</button>
+    <div class="btn-row">${botoesExportarHtml('cot')}<button class="btn btn-ghost btn-sm ${state.cotTemplateAberto?'ativo':''}" data-action="cot-template">${ICONS.gear} Template</button></div>
   </div>`;
 
   const ignorarFiltros = state.cotacoesViewMode==='cards' ? ['status'] : []; // no quadro, as colunas já são o status
@@ -7464,7 +7607,7 @@ async function saveArtifactFile(filename, dataBlob){
     a.click();
     document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    toast('PDF gerado: '+filename, 'ok');
+    toast((/\.xlsx$/i.test(filename) ? 'Planilha gerada: ' : 'PDF gerado: ')+filename, 'ok');
     return true;
   }catch(err2){
     console.error('Falha ao baixar PDF:', err2);
@@ -8123,6 +8266,7 @@ function onAppClick(e){
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1))) return;
   if(cmd.startsWith('cot-') && acaoTemplateCotacoes(cmd, a1, a2)) return;
   if(cmd.startsWith('ftpl-') && acaoFiltrosTpl(cmd, a1)) return;
+  if(cmd==='exportar'){ exportarTela(a1, a2); return; }
   if(cmd.startsWith('cadtpl-') && acaoTemplateCadastro(cmd, a1, a2)) return;
   switch(cmd){
     case 'go': navigate(a1); break;
