@@ -4098,9 +4098,6 @@ function topbarHtml(){
       </div>
     </nav>
     <div class="topbar-spacer"></div>
-    <div class="brand" data-action="go:home" title="Comexta — comércio exterior inteligente">
-      <div class="logo-chip"><img src="${COMEXTA_LOGO_URI}" alt="Comexta — comércio exterior inteligente"></div>
-    </div>
     <button class="user-btn ${state.route==='config'?'active':''}" data-action="go:config" title="Configurações — ${esc(usuarioAtual ? usuarioAtual.email : '')}">
       ${avatarHtml(usuarioAtual, 30)}<span class="user-btn-txt"><b>${esc(usuarioAtual ? (usuarioAtual.nome || usuarioAtual.email) : '')}</b><small>${esc(nomeEmpresa())}</small></span>${ICONS.gear}
     </button>
