@@ -618,6 +618,14 @@ td.num-mono, th.num-mono{text-align:right;}
 }
 .aviso-lista{display:block; margin-top:4px; font-size:11.5px; color:var(--amber-deep);}
 .aviso-lista .link-btn{color:inherit; font-size:inherit;}
+
+/* ---------- Cadastros: lista e cards ---------- */
+.cad-cel-nome{display:flex; align-items:center; gap:10px; min-width:180px;}
+.cad-cel-nome .cad-avatar{width:32px; height:32px; font-size:12px; flex-shrink:0;}
+.cad-cel-nome .cad-avatar-lg{width:36px; height:36px;}
+.cad-card-topo{justify-content:flex-start; gap:12px; align-items:center;}
+.cad-card-nome{display:block; color:var(--navy-deep); font-size:14.5px; margin-bottom:4px; word-break:break-word;}
+.cad-card-topo .badge{margin-right:4px;}
 </style>
 </head>
 <body>
@@ -956,6 +964,7 @@ const PERMISSAO_DA_ACAO = {
   'cad-view':['cadastros','ver'], 'cad-open-form':['cadastros','criar'],
   'cad-edit':['cadastros','editar'], 'cad-view-edit':['cadastros','editar'], 'cad-delete':['cadastros','editar'],
   'cad-save':['cadastros','salvar'],
+  'cadtpl-modo':['cadastros','ver'], 'cadtpl-abrir':['cadastros','ver'],
 
   'toggle-nav:proc':['processos','ver'], 'toggle-module:proc':['processos','ver'], 'go:processos':['processos','ver'],
   'go:processoForm':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
@@ -2835,6 +2844,351 @@ function onCotTemplateCampo(el){
   return true;
 }
 
+/* --------------- Cadastros (Clientes e Empresas, Produtos): Lista/Cards e Template --------------- */
+// Mesmo padrão de Processos e Cotações: cada usuário escolhe as informações dos cards e da lista e os
+// filtros da tela (perfis.preferencias.cad_cliente / cad_produto). Todo campo do formulário pode virar filtro.
+//   filtro: 'texto' (contém) · 'opcao' (igual) · 'periodo' (datas) · 'faixa' (números de/até)
+// Endereços e contatos são listas: o campo mostra os valores juntos e o filtro aceita se qualquer um bater.
+const CAD_SIM_NAO = [['sim','Sim'],['nao','Não']];
+function cadEnderecos(e){ return (e && e.enderecos) || []; }
+function cadContatos(e){ return cadEnderecos(e).flatMap(end=>end.contatos||[]); }
+const juntar = arr => [...new Set(arr.map(v=>String(v??'').trim()).filter(Boolean))];
+
+const CAD_TEMPLATE = {
+  cliente: {
+    janelas: ['Informações Gerais', 'Endereços', 'Contatos', 'Documentos'],
+    campos: [
+      ['Informações Gerais', 'tipoCadastro', 'Tipo de Cadastro', e=>[e.tipoCadastro||'cliente'], { opcao:()=>Object.entries(TIPOS_CADASTRO), rotulo:v=>TIPOS_CADASTRO[v] }],
+      ['Informações Gerais', 'status', 'Status', e=>[e.status||'ATIVO'], { opcao:()=>Object.entries(STATUS_LABELS), rotulo:v=>STATUS_LABELS[v] }],
+      ['Informações Gerais', 'tipoPessoa', 'Tipo de Pessoa', e=>[e.tipoPessoa], { opcao:()=>Object.entries(TIPO_PESSOA_LABELS), rotulo:v=>TIPO_PESSOA_LABELS[v] }],
+      ['Informações Gerais', 'regimeTributario', 'Regime Tributário', e=>[e.regimeTributario], { opcao:()=>Object.entries(REGIME_LABELS), rotulo:v=>REGIME_LABELS[v] }],
+      ['Informações Gerais', 'nomeFantasia', 'Nome Fantasia', e=>[e.nomeFantasia]],
+      ['Informações Gerais', 'razaoSocial', 'Razão Social', e=>[e.razaoSocial]],
+      ['Informações Gerais', 'cnpjCpf', 'CNPJ/CPF', e=>[e.cnpjCpf]],
+      ['Informações Gerais', 'inscricaoEstadual', 'Inscrição Estadual', e=>[e.inscricaoEstadual]],
+      ['Informações Gerais', 'inscricaoMunicipal', 'Inscrição Municipal', e=>[e.inscricaoMunicipal]],
+
+      ['Endereços', 'end.tipo', 'Tipo de endereço', e=>cadEnderecos(e).map(x=>x.tipo), { opcao:()=>Object.entries(ENDERECO_TIPO_LABELS), rotulo:v=>ENDERECO_TIPO_LABELS[v] }],
+      ['Endereços', 'end.cep', 'CEP', e=>cadEnderecos(e).map(x=>x.cep)],
+      ['Endereços', 'end.logradouro', 'Logradouro', e=>cadEnderecos(e).map(x=>x.logradouro)],
+      ['Endereços', 'end.numero', 'Número', e=>cadEnderecos(e).map(x=>x.numero)],
+      ['Endereços', 'end.complemento', 'Complemento', e=>cadEnderecos(e).map(x=>x.complemento)],
+      ['Endereços', 'end.bairro', 'Bairro', e=>cadEnderecos(e).map(x=>x.bairro)],
+      ['Endereços', 'end.municipio', 'Município', e=>cadEnderecos(e).map(x=>x.municipio), { opcaoDinamica:true }],
+      ['Endereços', 'end.uf', 'UF', e=>cadEnderecos(e).map(x=>x.uf), { opcaoDinamica:true }],
+      ['Endereços', 'end.pais', 'País', e=>cadEnderecos(e).map(x=>x.pais), { opcaoDinamica:true }],
+      ['Endereços', 'end.empresaEstrangeira', 'Empresa Estrangeira', e=>cadEnderecos(e).map(x=>x.empresaEstrangeira?'sim':'nao'), { opcao:()=>CAD_SIM_NAO, rotulo:v=>v==='sim'?'Sim':'Não' }],
+      ['Endereços', 'end.qtd', 'Quantidade de endereços', e=>[String(cadEnderecos(e).length)], { faixa:true }],
+
+      ['Contatos', 'ct.nome', 'Nome do contato', e=>cadContatos(e).map(x=>x.nome)],
+      ['Contatos', 'ct.cargo', 'Cargo', e=>cadContatos(e).map(x=>x.cargo)],
+      ['Contatos', 'ct.email', 'E-mail', e=>cadContatos(e).map(x=>x.email)],
+      ['Contatos', 'ct.ddi', 'DDI', e=>cadContatos(e).map(x=>x.ddi)],
+      ['Contatos', 'ct.ddd', 'DDD', e=>cadContatos(e).map(x=>x.ddd)],
+      ['Contatos', 'ct.telefone', 'Telefone', e=>cadContatos(e).map(x=>[x.ddi?'+'+x.ddi:'', x.ddd?'('+x.ddd+')':'', x.telefone].filter(Boolean).join(' ')).filter((t,i)=>cadContatos(e)[i].telefone)],
+      ['Contatos', 'ct.ramal', 'Ramal', e=>cadContatos(e).map(x=>x.ramal)],
+      ['Contatos', 'ct.qtd', 'Quantidade de contatos', e=>[String(cadContatos(e).length)], { faixa:true }],
+
+      ['Documentos', 'doc.qtd', 'Quantidade de documentos', e=>[String((e.documentos||[]).length)], { faixa:true }],
+      ['Documentos', 'doc.nomes', 'Documentos (nomes)', e=>(e.documentos||[]).map(d=>d.nome)],
+    ],
+    padrao: {
+      lista: ['tipoCadastro', 'cnpjCpf', 'end.municipio', 'end.uf', 'ct.nome', 'ct.email', 'status'],
+      card: ['cnpjCpf', 'tipoPessoa', 'regimeTributario', 'end.municipio', 'end.uf', 'ct.nome', 'ct.telefone'],
+      filtros: ['busca', 'tipoCadastro', 'status', 'tipoPessoa', 'regimeTributario'],
+    },
+    nome: e=>e.nomeFantasia || e.razaoSocial || '(sem nome)',
+  },
+  produto: {
+    janelas: ['Produto', 'Fornecedor/Fabricante', 'Medidas', 'Matéria-Prima', 'Lote'],
+    campos: [
+      ['Produto', 'nome', 'Nome', p=>[p.nome]],
+      ['Produto', 'codigoInterno', 'Código Interno', p=>[p.codigoInterno]],
+      ['Produto', 'descricao', 'Descrição', p=>[p.descricao]],
+      ['Produto', 'ncm', 'NCM', p=>[p.ncm]],
+      ['Produto', 'quantidade', 'Quantidade', p=>[p.quantidade], { faixa:true }],
+      ['Produto', 'categoria', 'Categoria', p=>[p.categoria], { opcaoDinamica:true }],
+      ['Produto', 'subcategoria', 'Subcategoria', p=>[p.subcategoria], { opcaoDinamica:true }],
+      ['Produto', 'precoEntrada', 'Preço Unitário de Entrada', p=>[p.precoEntrada], { faixa:true, moeda:true }],
+      ['Produto', 'precoSaida', 'Preço Unitário de Saída', p=>[p.precoSaida], { faixa:true, moeda:true }],
+      ['Produto', 'fotos', 'Quantidade de fotos', p=>[String((p.fotos||[]).length)], { faixa:true }],
+
+      ['Fornecedor/Fabricante', 'fornecedorNome', 'Nome da Empresa', p=>[p.fornecedorNome], { opcaoDinamica:true }],
+      ['Fornecedor/Fabricante', 'fornecedorTipo', 'Tipo (fornecedor/fabricante)', p=>[p.fornecedorTipo], { opcao:()=>Object.entries(FORNECEDOR_TIPO_LABELS), rotulo:v=>FORNECEDOR_TIPO_LABELS[v] }],
+      ['Fornecedor/Fabricante', 'fornecedorCodigo', 'Código do Fornecedor', p=>[p.fornecedorCodigo]],
+
+      ['Medidas', 'unidadeMedida', 'Unidade de Medida', p=>[p.unidadeMedida], { opcaoDinamica:true }],
+      ['Medidas', 'pesoLiquido', 'Peso Líquido (kg)', p=>[p.pesoLiquido], { faixa:true }],
+      ['Medidas', 'pesoBruto', 'Peso Bruto (kg)', p=>[p.pesoBruto], { faixa:true }],
+      ['Medidas', 'cubagem', 'Cubagem (m³)', p=>[p.cubagem], { faixa:true }],
+      ['Medidas', 'altura', 'Altura (cm)', p=>[p.altura], { faixa:true }],
+      ['Medidas', 'largura', 'Largura (cm)', p=>[p.largura], { faixa:true }],
+      ['Medidas', 'comprimento', 'Comprimento (cm)', p=>[p.comprimento], { faixa:true }],
+
+      ['Matéria-Prima', 'mp.tipo', 'Tipo de matéria-prima', p=>(p.materiasPrimas||[]).map(m=>m.tipo), { opcaoDinamica:true }],
+      ['Matéria-Prima', 'mp.composicao', 'Composição', p=>(p.materiasPrimas||[]).map(m=>m.composicao)],
+      ['Matéria-Prima', 'mp.quantidade', 'Quantidade de matéria-prima', p=>(p.materiasPrimas||[]).map(m=>m.quantidade)],
+
+      ['Lote', 'numeroLote', 'Número do Lote', p=>[p.numeroLote]],
+      ['Lote', 'dataFabricacao', 'Data de Fabricação', p=>[p.dataFabricacao], { periodo:true }],
+      ['Lote', 'dataValidade', 'Data de Validade', p=>[p.dataValidade], { periodo:true }],
+      ['Lote', 'prazoValidade', 'Prazo de Validade', p=>p.prazoValidade ? [p.prazoValidade + ' ' + (PRAZO_VALIDADE_LABELS[p.prazoValidadeUnidade]||'')] : []],
+      ['Lote', 'embalagem', 'Embalagem', p=>[p.embalagem]],
+      ['Lote', 'codigoBarrasGtin', 'Código de Barras (GTIN)', p=>[p.codigoBarrasGtin]],
+      ['Lote', 'codigoAgregacao', 'Código de Agregação', p=>[p.codigoAgregacao]],
+      ['Lote', 'codigoBarrasInterno', 'Código de Barras Interno', p=>[p.codigoBarrasInterno]],
+    ],
+    padrao: {
+      lista: ['codigoInterno', 'ncm', 'categoria', 'fornecedorNome', 'unidadeMedida', 'precoSaida'],
+      card: ['codigoInterno', 'ncm', 'categoria', 'fornecedorNome', 'pesoLiquido', 'precoSaida'],
+      filtros: ['busca', 'categoria', 'fornecedorTipo'],
+    },
+    nome: p=>p.nome || '(sem nome)',
+  },
+};
+// Monta os objetos dos campos (e o filtro "busca" geral) de cada cadastro
+for(const t of Object.values(CAD_TEMPLATE)){
+  t.campos = t.campos.map(([janela, id, label, valores, extra])=>({ janela, id, label, valores, ...(extra||{}) }));
+  t.mapa = Object.fromEntries(t.campos.map(c=>[c.id, c]));
+  t.filtros = [{ id:'busca', label:'Busca em qualquer campo', janela:'Geral' }, ...t.campos];
+  t.mapaFiltros = Object.fromEntries(t.filtros.map(f=>[f.id, f]));
+}
+const tipoFiltroCad = c => c.id==='busca' ? 'texto' : c.periodo ? 'periodo' : c.faixa ? 'faixa' : (c.opcao||c.opcaoDinamica) ? 'opcao' : 'texto';
+
+function prefsCadastro(tipo){
+  const t = CAD_TEMPLATE[tipo];
+  const p = ((usuarioAtual && usuarioAtual.preferencias) || {})['cad_'+tipo] || {};
+  const valido = (arr, mapa) => Array.isArray(arr) ? arr.filter(id=>mapa[id]) : null;
+  return { modo: p.modo==='card' ? 'card' : 'lista', lista: valido(p.lista, t.mapa) || t.padrao.lista,
+           card: valido(p.card, t.mapa) || t.padrao.card, filtros: valido(p.filtros, t.mapaFiltros) || t.padrao.filtros };
+}
+const salvarPrefsCadastro = (tipo, alteracao, mensagem) => salvarPreferencias('cad_'+tipo, alteracao, prefsCadastro(tipo), mensagem);
+
+function textoCampoCad(c, item){
+  let vals;
+  try{ vals = juntar(c.valores(item)); }catch(e){ vals = []; }
+  if(c.rotulo) vals = vals.map(v=>c.rotulo(v)||v);
+  if(c.moeda) vals = vals.map(v=>isFinite(num(v)) && v!=='' ? fmtBRL(num(v)) : v);
+  if(c.periodo) vals = vals.map(v=>fmtDateOnly(v));
+  return vals.join(', ');
+}
+function valorCampoCadHtml(c, item){
+  const v = textoCampoCad(c, item);
+  if(!v) return '<span class="vazio">—</span>';
+  if(c.id==='status') return item.status==='INATIVO' ? '<span class="badge badge-red">Inativo</span>' : '<span class="badge badge-green">Ativo</span>';
+  if(c.id==='tipoCadastro') return `<span class="badge badge-navy">${esc(v)}</span>`;
+  return esc(v);
+}
+
+// ---- Filtros ----
+function filtroCadAtivo(tipo, f){
+  const v = (state.cadFiltrosTpl||{})[tipo] || {};
+  const k = tipoFiltroCad(f);
+  return (k==='periodo' || k==='faixa') ? !!(v[f.id+':de'] || v[f.id+':ate']) : !!v[f.id];
+}
+function filtrarCadastroTpl(tipo){
+  const t = CAD_TEMPLATE[tipo];
+  const lista = state[CAD_CONFIG[tipo].stateKey] || [];
+  const visiveis = prefsCadastro(tipo).filtros.map(id=>t.mapaFiltros[id]).filter(f=>filtroCadAtivo(tipo, f));
+  const v = (state.cadFiltrosTpl||{})[tipo] || {};
+  return lista.filter(item=>visiveis.every(f=>{
+    const k = tipoFiltroCad(f);
+    if(f.id==='busca'){
+      const q = String(v.busca).toLowerCase();
+      return t.campos.some(c=>textoCampoCad(c, item).toLowerCase().includes(q));
+    }
+    let vals; try{ vals = juntar(f.valores(item)); }catch(e){ vals = []; }
+    if(k==='opcao') return vals.includes(v[f.id]);
+    if(k==='periodo') return vals.some(d=>(!v[f.id+':de'] || d>=v[f.id+':de']) && (!v[f.id+':ate'] || d<=v[f.id+':ate']));
+    if(k==='faixa') return vals.some(x=>{ const n = num(x); if(!isFinite(n) || x==='') return false;
+      return (v[f.id+':de']==='' || v[f.id+':de']==null || n>=num(v[f.id+':de'])) && (v[f.id+':ate']==='' || v[f.id+':ate']==null || n<=num(v[f.id+':ate'])); });
+    const q = String(v[f.id]).toLowerCase();
+    return vals.some(x=>x.toLowerCase().includes(q) || (f.rotulo && String(f.rotulo(x)||'').toLowerCase().includes(q)));
+  }));
+}
+function opcoesFiltroCad(tipo, f){
+  if(f.opcao) return f.opcao();
+  const lista = state[CAD_CONFIG[tipo].stateKey] || [];
+  return juntar(lista.flatMap(item=>{ try{ return f.valores(item); }catch(e){ return []; } })).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(x=>[x,x]);
+}
+function filtroCadHtml(tipo, f){
+  const v = (state.cadFiltrosTpl||{})[tipo] || {};
+  const k = tipoFiltroCad(f);
+  const attr = sufixo => `data-cad-filtro="${tipo}|${f.id}${sufixo||''}"`;
+  if(k==='periodo' || k==='faixa'){
+    const tp = k==='periodo' ? 'date' : 'number';
+    return `<div class="field filtro-periodo"><label>${esc(f.label)}</label><div class="periodo">
+      <input type="${tp}" ${k==='faixa'?'step="any" placeholder="de"':''} ${attr(':de')} value="${esc(v[f.id+':de']||'')}">
+      <span>até</span>
+      <input type="${tp}" ${k==='faixa'?'step="any" placeholder="até"':''} ${attr(':ate')} value="${esc(v[f.id+':ate']||'')}"></div></div>`;
+  }
+  if(k==='opcao'){
+    return `<div class="field"><label>${esc(f.label)}</label><select ${attr()}>
+      <option value="">Todos</option>${opcoesFiltroCad(tipo, f).map(([o,t])=>`<option value="${esc(o)}" ${v[f.id]===o?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
+  }
+  return `<div class="field" ${f.id==='busca'?'style="min-width:220px;"':''}><label>${esc(f.label)}</label>
+    <input ${attr()} value="${esc(v[f.id]||'')}" placeholder="${f.id==='busca' ? 'Buscar…' : ''}" autocomplete="off"></div>`;
+}
+function onFiltroCadastro(el, evento){
+  const chave = el.getAttribute('data-cad-filtro'); if(!chave) return false;
+  const texto = el.tagName==='INPUT' && el.type==='text' || (el.tagName==='INPUT' && !el.type);
+  const imediato = el.tagName==='INPUT' && (el.type==='text' || el.type==='number' || !el.type);
+  if(imediato ? evento!=='input' : evento!=='change') return true;
+  const [tipo, id] = chave.split('|');
+  if(!state.cadFiltrosTpl) state.cadFiltrosTpl = {};
+  if(!state.cadFiltrosTpl[tipo]) state.cadFiltrosTpl[tipo] = {};
+  state.cadFiltrosTpl[tipo][id] = el.value;
+  let pos = null; try{ pos = el.selectionStart; }catch(e){}
+  renderApp();
+  if(imediato){ const novo = document.querySelector(`[data-cad-filtro="${chave}"]`); if(novo){ novo.focus(); try{ if(texto) novo.setSelectionRange(pos, pos); }catch(e){} } }
+  return true;
+}
+
+// ---- Lista / cards ----
+function acoesCadHtml(tipo, item){
+  return `<button class="icon-btn" title="Visualizar" data-action="cad-view:${tipo}:${item.id}">${ICONS.eye}</button>
+    <button class="icon-btn" title="Editar" data-action="cad-edit:${tipo}:${item.id}">${ICONS.edit}</button>
+    ${deleteBtnHtml('cad-'+tipo, item.id, 'cad-delete:'+tipo+':'+item.id)}`;
+}
+function fotoCadHtml(tipo, item){
+  if(tipo==='produto'){
+    const fotos = item.fotos||[], principal = fotos.find(f=>f.principal) || fotos[0];
+    return `<div class="cad-avatar cad-avatar-lg" style="overflow:hidden; padding:0;">${principal ? `<img src="${principal.dataUri}" alt="" style="width:100%;height:100%;object-fit:cover;">` : ICONS.product}</div>`;
+  }
+  return `<div class="cad-avatar">${initials(CAD_TEMPLATE[tipo].nome(item))}</div>`;
+}
+function renderCadastroListaTpl(tipo, lista){
+  const t = CAD_TEMPLATE[tipo], prefs = prefsCadastro(tipo);
+  if(prefs.modo==='card'){
+    const campos = prefs.card.map(id=>t.mapa[id]).filter(c=>!(tipo==='cliente' && c.id==='status'));
+    return `<div class="proc-cards">${lista.map(item=>`<div class="proc-card">
+      <div class="pc-topo cad-card-topo">${fotoCadHtml(tipo, item)}
+        <div style="flex:1; min-width:0;"><b class="cad-card-nome">${esc(t.nome(item))}</b>
+          ${tipo==='cliente' ? `<div>${valorCampoCadHtml(t.mapa.tipoCadastro, item)} ${valorCampoCadHtml(t.mapa.status, item)}</div>` : ''}</div></div>
+      <dl class="pc-campos">${campos.filter(c=>c.id!=='tipoCadastro').map(c=>`<dt>${esc(c.label)}</dt><dd>${valorCampoCadHtml(c, item)}</dd>`).join('')}</dl>
+      <div class="pc-acoes">${acoesCadHtml(tipo, item)}</div>
+    </div>`).join('')}</div>`;
+  }
+  const campos = prefs.lista.map(id=>t.mapa[id]).filter(c=>!(tipo==='produto' && c.id==='nome') && !(tipo==='cliente' && c.id==='nomeFantasia'));
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>${tipo==='produto' ? 'Produto' : 'Nome'}</th>${campos.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead>
+    <tbody>${lista.map(item=>`<tr>
+      <td><div class="cad-cel-nome">${fotoCadHtml(tipo, item)}<b>${esc(t.nome(item))}</b></div></td>
+      ${campos.map(c=>`<td>${valorCampoCadHtml(c, item)}</td>`).join('')}
+      <td style="text-align:right; white-space:nowrap;"><div class="ci-actions">${acoesCadHtml(tipo, item)}</div></td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function barraCadastroTpl(tipo, total, filtrados){
+  const t = CAD_TEMPLATE[tipo], prefs = prefsCadastro(tipo);
+  const filtros = prefs.filtros.map(id=>t.mapaFiltros[id]);
+  const algum = filtros.some(f=>filtroCadAtivo(tipo, f));
+  const aberto = state.cadTemplateAberto===tipo;
+  return `<div class="proc-barra">
+    <div class="btn-row">${!state.cadFormOpen ? `<button class="btn btn-primary" data-action="cad-open-form:${tipo}">${ICONS.plus} Novo ${CAD_CONFIG[tipo].singular}</button>` : ''}</div>
+    <div class="btn-row proc-barra-dir">
+      <div class="modo-toggle" role="group" aria-label="Formato de visualização">
+        <button class="${prefs.modo==='lista'?'active':''}" data-action="cadtpl-modo:${tipo}:lista">Lista</button>
+        <button class="${prefs.modo==='card'?'active':''}" data-action="cadtpl-modo:${tipo}:card">Cards</button>
+      </div>
+      <button class="btn btn-ghost ${aberto?'ativo':''}" data-action="cadtpl-abrir:${tipo}">${ICONS.gear} Template</button>
+    </div>
+  </div>
+  ${aberto ? renderCadTemplate(tipo) : ''}
+  ${total && filtros.length ? `<div class="filter-bar proc-filtros">
+    ${filtros.map(f=>filtroCadHtml(tipo, f)).join('')}
+    ${algum ? `<button class="btn btn-ghost btn-sm" data-action="cadtpl-limpar:${tipo}">Limpar filtros</button>
+      <span class="membro-sub">${filtrados} de ${total}</span>` : ''}
+  </div>` : ''}`;
+}
+
+// ---- Janela Template ----
+function renderCadTemplate(tipo){
+  const t = CAD_TEMPLATE[tipo];
+  const aba = state.cadTemplateAba || 'card';
+  if(!state.cadTemplateSel){ const pr = prefsCadastro(tipo); state.cadTemplateSel = { card:[...pr.card], lista:[...pr.lista], filtros:[...pr.filtros] }; }
+  const sel = new Set(state.cadTemplateSel[aba]);
+  const lista = aba==='filtros' ? t.filtros : t.campos;
+  const janelas = aba==='filtros' ? ['Geral', ...t.janelas] : t.janelas;
+  const grupos = janelas.map(janela=>{
+    const campos = lista.filter(c=>c.janela===janela);
+    if(!campos.length) return '';
+    const marcados = campos.filter(c=>sel.has(c.id)).length;
+    return `<div class="tpl-grupo">
+      <div class="tpl-grupo-topo"><b>${esc(janela)}</b><span class="membro-sub">${marcados} de ${campos.length}</span>
+        <button class="link-btn" data-action="cadtpl-grupo:${janela}:${marcados===campos.length?'0':'1'}">${marcados===campos.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+      ${campos.map(c=>`<label class="tpl-campo"><input type="checkbox" data-cadtpl-campo="${esc(c.id)}" ${sel.has(c.id)?'checked':''}> ${esc(c.label)}</label>`).join('')}
+    </div>`;
+  }).join('');
+  const nome = tipo==='produto' ? 'produto' : 'cadastro';
+  const textos = {
+    card: `Escolha as informações de cada card. O nome${tipo==='cliente' ? ', o tipo de cadastro e o status' : ' e a foto'} aparecem sempre no topo.`,
+    lista: `Escolha as colunas da lista. O nome do ${nome} aparece sempre na primeira coluna.`,
+    filtros: 'Escolha os filtros da tela. Todos os campos do formulário podem ser usados como filtro; filtros ocultos deixam de ser aplicados.',
+  };
+  const contagem = aba==='filtros' ? (sel.size===1 ? 'filtro selecionado' : 'filtros selecionados') : (sel.size===1 ? 'informação selecionada' : 'informações selecionadas');
+  return `<div class="card proc-template">
+    <div class="proc-template-topo">
+      <div class="section-title">${ICONS.gear} Template</div>
+      <div class="pers-tabs" style="margin:0;">
+        <button class="pers-tab ${aba==='card'?'active':''}" data-action="cadtpl-aba:card">Configurar Card</button>
+        <button class="pers-tab ${aba==='lista'?'active':''}" data-action="cadtpl-aba:lista">Configurar Lista</button>
+        <button class="pers-tab ${aba==='filtros'?'active':''}" data-action="cadtpl-aba:filtros">Configurar Filtros</button>
+      </div>
+    </div>
+    <p class="page-sub" style="margin:10px 0 16px;">${textos[aba]} Esta escolha vale só para você.</p>
+    <div class="tpl-grupos">${grupos}</div>
+    <div class="btn-row" style="margin-top:18px; justify-content:space-between;">
+      <span class="membro-sub">${sel.size} ${contagem}</span>
+      <div class="btn-row">
+        <button class="btn btn-ghost" data-action="cadtpl-padrao">Restaurar padrão</button>
+        <button class="btn btn-ghost" data-action="cadtpl-abrir:${tipo}">Cancelar</button>
+        <button class="btn btn-primary" data-action="cadtpl-salvar">${ICONS.check} Salvar ${({ card:'card', lista:'lista', filtros:'filtros' })[aba]}</button>
+      </div>
+    </div>
+  </div>`;
+}
+function ordemCadTpl(tipo, aba){ const t = CAD_TEMPLATE[tipo]; return (aba==='filtros' ? t.filtros : t.campos).map(c=>c.id); }
+function acaoTemplateCadastro(cmd, a1, a2){
+  const tipo = state.cadTemplateAberto, aba = state.cadTemplateAba || 'card';
+  switch(cmd){
+    case 'cadtpl-modo': salvarPrefsCadastro(a1, { modo:a2 }); renderApp(); return true;
+    case 'cadtpl-abrir':
+      state.cadTemplateAberto = state.cadTemplateAberto===a1 ? null : a1; state.cadTemplateSel = null; renderApp(); return true;
+    case 'cadtpl-aba': state.cadTemplateAba = a1; renderApp(); return true;
+    case 'cadtpl-limpar': if(state.cadFiltrosTpl) state.cadFiltrosTpl[a1] = {}; renderApp(); return true;
+    case 'cadtpl-grupo': {
+      const lista = aba==='filtros' ? CAD_TEMPLATE[tipo].filtros : CAD_TEMPLATE[tipo].campos;
+      const atual = new Set(state.cadTemplateSel[aba]);
+      lista.filter(c=>c.janela===a1).forEach(c=> a2==='1' ? atual.add(c.id) : atual.delete(c.id));
+      state.cadTemplateSel[aba] = ordemCadTpl(tipo, aba).filter(id=>atual.has(id)); renderApp(); return true;
+    }
+    case 'cadtpl-padrao': state.cadTemplateSel[aba] = [...CAD_TEMPLATE[tipo].padrao[aba]]; renderApp(); return true;
+    case 'cadtpl-salvar': {
+      const escolhidos = state.cadTemplateSel[aba];
+      if(aba!=='filtros' && !escolhidos.length){ toast('Selecione pelo menos uma informação.'); return true; }
+      const alteracao = { [aba]: [...escolhidos] };
+      if(aba!=='filtros') alteracao.modo = aba;
+      else{
+        const visiveis = new Set(escolhidos), v = (state.cadFiltrosTpl||{})[tipo] || {};
+        for(const chave of Object.keys(v)) if(!visiveis.has(chave.split(':')[0])) delete v[chave];
+      }
+      salvarPrefsCadastro(tipo, alteracao, ({ card:'Template do card salvo.', lista:'Template da lista salvo.', filtros:'Filtros da tela salvos.' })[aba])
+        .then(()=>{ state.cadTemplateAberto = null; state.cadTemplateSel = null; renderApp(); });
+      return true;
+    }
+  }
+  return false;
+}
+function onCadTemplateCampo(el){
+  const id = el.getAttribute('data-cadtpl-campo'); if(!id || !state.cadTemplateSel) return false;
+  const tipo = state.cadTemplateAberto, aba = state.cadTemplateAba || 'card';
+  const atual = new Set(state.cadTemplateSel[aba]);
+  el.checked ? atual.add(id) : atual.delete(id);
+  state.cadTemplateSel[aba] = ordemCadTpl(tipo, aba).filter(x=>atual.has(x));
+  renderApp();
+  return true;
+}
+
 /* -------------------------------- Icones --------------------------------- */
 const ICONS = {
   folder:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 10h18"/></svg>`,
@@ -3286,6 +3640,7 @@ const state = {
   cotacoesIndex: [],         // [{id,numero,criadoEm,atualizadoEm, resumo:{...}}]
   processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procFiltros: {}, procTemplateAberto: false, procTemplateAba: 'card', procTemplateSel: null,
   cotTemplateAberto: false, cotTemplateAba: 'card', cotTemplateSel: null,
+  cadTemplateAberto: null, cadTemplateAba: 'card', cadTemplateSel: null, cadFiltrosTpl: {},
   clientes: [], fornecedores: [], produtos: [],
   filtros: { numero:'', texto:'', de:'', ate:'' },
   filtrosFormal: { numero:'', texto:'', de:'', ate:'' },
@@ -3497,6 +3852,7 @@ function navigate(route){
   if(ROUTE_META[route].group==='sim') state.openModule='sim';
   if(ROUTE_META[route].group==='cad') state.openModule='cad';
   state.cadFormOpen = false; state.cadEdit = {tipo:null,id:null}; state.cadView = null;
+  if(state.cadTemplateAberto && route!=='cad-'+state.cadTemplateAberto){ state.cadTemplateAberto = null; state.cadTemplateSel = null; }
   state.navDropdown = null;
   window.scrollTo({top:0, behavior:'instant'});
   renderApp();
@@ -6132,103 +6488,12 @@ function renderCadastroSimples(tipo){
 }
 
 /* --- Cadastro rico (Cliente / Fornecedor) --- */
-function filtrarListaCadastro(tipo){
-  const cfg = CAD_CONFIG[tipo];
-  const list = state[cfg.stateKey];
-  const f = state.cadFiltros[tipo];
-  if(cfg.richKind==='produto'){
-    return list.filter(p=>{
-      if(f.texto){
-        const t = f.texto.toLowerCase();
-        const hay = [p.nome,p.codigoInterno,p.ncm,p.categoria,p.subcategoria].filter(Boolean).join(' ').toLowerCase();
-        if(!hay.includes(t)) return false;
-      }
-      if(f.categoria && (p.categoria||'')!==f.categoria) return false;
-      if(f.fornecedorTipo && p.fornecedorTipo!==f.fornecedorTipo) return false;
-      return true;
-    });
-  }
-  return list.filter(item=>{
-    if(f.texto){
-      const t = f.texto.toLowerCase();
-      const hay = [item.nomeFantasia,item.razaoSocial,item.cnpjCpf].filter(Boolean).join(' ').toLowerCase();
-      if(!hay.includes(t)) return false;
-    }
-    if(f.tipoCadastro && (item.tipoCadastro||'cliente')!==f.tipoCadastro) return false;
-    if(f.status && item.status!==f.status) return false;
-    if(f.tipoPessoa && item.tipoPessoa!==f.tipoPessoa) return false;
-    if(f.regime && item.regimeTributario!==f.regime) return false;
-    return true;
-  });
-}
-function renderCadFilterBar(tipo){
-  const cfg = CAD_CONFIG[tipo];
-  const f = state.cadFiltros[tipo];
-  if(cfg.richKind==='produto'){
-    const categorias = [...new Set(state.produtos.map(p=>p.categoria).filter(Boolean))];
-    return `
-    <div class="filter-bar">
-      <div class="field"><label>Buscar</label><input id="cf-texto-${tipo}" placeholder="Nome, código, NCM..." value="${esc(f.texto)}"></div>
-      <div class="field"><label>Categoria</label>
-        <select id="cf-categoria-${tipo}">
-          <option value="">Todas</option>
-          ${categorias.map(c=>`<option value="${esc(c)}" ${f.categoria===c?'selected':''}>${esc(c)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field"><label>Tipo</label>
-        <select id="cf-fornecedortipo-${tipo}">
-          <option value="">Todos</option>
-          <option value="FORNECEDOR" ${f.fornecedorTipo==='FORNECEDOR'?'selected':''}>Fornecedor</option>
-          <option value="FABRICANTE" ${f.fornecedorTipo==='FABRICANTE'?'selected':''}>Fabricante</option>
-        </select>
-      </div>
-      <button class="btn btn-ghost btn-sm" data-action="cad-aplicar-filtros:${tipo}">${ICONS.filter} Filtrar</button>
-      <button class="btn btn-ghost btn-sm" data-action="cad-limpar-filtros:${tipo}">Limpar</button>
-    </div>`;
-  }
-  return `
-  <div class="filter-bar">
-    <div class="field"><label>Buscar</label><input id="cf-texto-${tipo}" placeholder="Nome, CNPJ/CPF..." value="${esc(f.texto)}"></div>
-    <div class="field"><label>Tipo de Cadastro</label>
-      <select id="cf-tipocadastro-${tipo}">
-        <option value="">Todos</option>
-        ${Object.entries(TIPOS_CADASTRO).map(([k,l])=>`<option value="${k}" ${f.tipoCadastro===k?'selected':''}>${l} (${empresasDoTipo(k).length})</option>`).join('')}
-      </select>
-    </div>
-    <div class="field"><label>Status</label>
-      <select id="cf-status-${tipo}">
-        <option value="">Todos</option>
-        <option value="ATIVO" ${f.status==='ATIVO'?'selected':''}>Ativo</option>
-        <option value="INATIVO" ${f.status==='INATIVO'?'selected':''}>Inativo</option>
-      </select>
-    </div>
-    <div class="field"><label>Tipo de Pessoa</label>
-      <select id="cf-tipopessoa-${tipo}">
-        <option value="">Todos</option>
-        <option value="JURIDICA" ${f.tipoPessoa==='JURIDICA'?'selected':''}>Pessoa Jurídica</option>
-        <option value="FISICA" ${f.tipoPessoa==='FISICA'?'selected':''}>Pessoa Física</option>
-      </select>
-    </div>
-    <div class="field"><label>Regime Tributário</label>
-      <select id="cf-regime-${tipo}">
-        <option value="">Todos</option>
-        <option value="SIMPLES" ${f.regime==='SIMPLES'?'selected':''}>Simples</option>
-        <option value="LUCRO_REAL" ${f.regime==='LUCRO_REAL'?'selected':''}>Lucro Real</option>
-        <option value="LUCRO_PRESUMIDO" ${f.regime==='LUCRO_PRESUMIDO'?'selected':''}>Lucro Presumido</option>
-      </select>
-    </div>
-    <button class="btn btn-ghost btn-sm" data-action="cad-aplicar-filtros:${tipo}">${ICONS.filter} Filtrar</button>
-    <button class="btn btn-ghost btn-sm" data-action="cad-limpar-filtros:${tipo}">Limpar</button>
-  </div>`;
-}
 function renderCadastroRico(tipo){
   const cfg = CAD_CONFIG[tipo];
-  const list = filtrarListaCadastro(tipo);
+  const list = filtrarCadastroTpl(tipo);
   const totalCount = state[cfg.stateKey].length;
   const formHtml = (state.cadFormOpen && state.cadDraft) ? renderCadRichForm(tipo) : '';
-  const itemsHtml = list.length ? `<div class="card-flat"><div class="cad-list">
-    ${list.map(item=>renderCadRichListItem(tipo,item)).join('')}
-  </div></div>` : `<div class="empty">${ICONS[cfg.icon]}<h3>Nenhum ${cfg.singular.toLowerCase()} encontrado</h3><p>${totalCount ? 'Ajuste os filtros para ver outros registros.' : 'Cadastre para agilizar o preenchimento da aba Dados.'}</p></div>`;
+  const itemsHtml = list.length ? renderCadastroListaTpl(tipo, list) : `<div class="empty">${ICONS[cfg.icon]}<h3>Nenhum ${cfg.singular.toLowerCase()} encontrado</h3><p>${totalCount ? 'Ajuste os filtros para ver outros registros.' : 'Cadastre para agilizar o preenchimento da aba Dados.'}</p></div>`;
   const subText = cfg.richKind==='produto'
     ? 'Ficha completa do produto: dados gerais, fornecedor/fabricante, medidas, matéria-prima e lote.'
     : 'Clientes, fabricantes, fornecedores, despachantes aduaneiros, agentes de carga, armadores, transportadoras e funcionários: dados gerais, endereços, contatos e documentos.';
@@ -6237,72 +6502,10 @@ function renderCadastroRico(tipo){
   <div class="page-title">Cadastro — ${cfg.titulo}</div>
   <div class="page-sub">${subText}</div>
   <hr class="hairline">
-  ${renderCadFilterBar(tipo)}
-  ${!state.cadFormOpen ? `<div class="btn-row" style="margin-bottom:18px;"><button class="btn btn-primary" data-action="cad-open-form:${tipo}">${ICONS.plus} Novo ${cfg.singular}</button></div>` : ''}
+  ${barraCadastroTpl(tipo, totalCount, list.length)}
   ${formHtml}
   ${itemsHtml}
   `;
-}
-
-function renderCadRichListItem(tipo, item){
-  return CAD_CONFIG[tipo].richKind==='produto' ? renderCadProdutoListItem(tipo,item) : renderCadPessoaListItem(tipo,item);
-}
-
-function renderCadPessoaListItem(tipo, item){
-  const nome = item.nomeFantasia || item.razaoSocial || '(sem nome)';
-  const statusBadge = item.status==='INATIVO' ? `<span class="badge badge-red">Inativo</span>` : `<span class="badge badge-green">Ativo</span>`;
-  const nEnd = (item.enderecos||[]).length;
-  const nCont = sum((item.enderecos||[]).map(e=>(e.contatos||[]).length));
-  const nDocs = (item.documentos||[]).length;
-  const sub = [
-    item.cnpjCpf || null,
-    TIPO_PESSOA_LABELS[item.tipoPessoa] || null,
-    REGIME_LABELS[item.regimeTributario] || null,
-    `${nEnd} endereço${nEnd===1?'':'s'}`,
-    `${nCont} contato${nCont===1?'':'s'}`,
-    nDocs ? `${nDocs} documento${nDocs===1?'':'s'}` : null,
-  ].filter(Boolean).join(' · ');
-  return `
-  <div class="cad-item">
-    <div class="cad-avatar">${initials(nome)}</div>
-    <div class="ci-main">
-      <div class="ci-name">${esc(nome)} <span class="badge badge-navy">${esc(TIPOS_CADASTRO[item.tipoCadastro||'cliente']||'—')}</span> ${statusBadge}</div>
-      <div class="ci-sub">${sub}</div>
-    </div>
-    <div class="ci-actions">
-      <button class="icon-btn" title="Visualizar" data-action="cad-view:${tipo}:${item.id}">${ICONS.eye}</button>
-      <button class="icon-btn" title="Editar" data-action="cad-edit:${tipo}:${item.id}">${ICONS.edit}</button>
-      ${deleteBtnHtml('cad-'+tipo, item.id, 'cad-delete:'+tipo+':'+item.id)}
-    </div>
-  </div>`;
-}
-
-function renderCadProdutoListItem(tipo, item){
-  const fotos = item.fotos||[];
-  const principal = fotos.find(f=>f.principal) || fotos[0];
-  const nMP = (item.materiasPrimas||[]).length;
-  const sub = [
-    item.codigoInterno ? 'Cód: '+item.codigoInterno : null,
-    item.ncm ? 'NCM '+item.ncm : null,
-    item.categoria || null,
-    item.fornecedorNome ? (FORNECEDOR_TIPO_LABELS[item.fornecedorTipo]||'Fornecedor')+': '+item.fornecedorNome : null,
-    nMP ? nMP+' matéria'+(nMP===1?'':'s')+'-prima' : null,
-  ].filter(Boolean).join(' · ');
-  return `
-  <div class="cad-item">
-    <div class="cad-avatar cad-avatar-lg" style="overflow:hidden; padding:0;">
-      ${principal ? `<img src="${principal.dataUri}" alt="" style="width:100%;height:100%;object-fit:cover;">` : ICONS.product}
-    </div>
-    <div class="ci-main">
-      <div class="ci-name">${esc(item.nome)||'(sem nome)'}</div>
-      <div class="ci-sub">${sub||'—'}</div>
-    </div>
-    <div class="ci-actions">
-      <button class="icon-btn" title="Visualizar" data-action="cad-view:${tipo}:${item.id}">${ICONS.eye}</button>
-      <button class="icon-btn" title="Editar" data-action="cad-edit:${tipo}:${item.id}">${ICONS.edit}</button>
-      ${deleteBtnHtml('cad-'+tipo, item.id, 'cad-delete:'+tipo+':'+item.id)}
-    </div>
-  </div>`;
 }
 
 /* --- Visualização somente leitura --- */
@@ -7793,6 +7996,7 @@ function onAppClick(e){
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1))) return;
   if(cmd.startsWith('cot-') && acaoTemplateCotacoes(cmd, a1, a2)) return;
+  if(cmd.startsWith('cadtpl-') && acaoTemplateCadastro(cmd, a1, a2)) return;
   switch(cmd){
     case 'go': navigate(a1); break;
     case 'toggle-module':
@@ -7894,28 +8098,6 @@ function onAppClick(e){
       limparFiltrosTodasPersistidos();
       renderApp();
       break;
-    case 'cad-aplicar-filtros': {
-      const tipo = a1, cfg = CAD_CONFIG[tipo];
-      const gv = (id)=>{ const el = document.getElementById(id); return el ? el.value.trim() : ''; };
-      state.cadFiltros[tipo].texto = gv('cf-texto-'+tipo);
-      if(cfg.richKind==='produto'){
-        state.cadFiltros[tipo].categoria = gv('cf-categoria-'+tipo);
-        state.cadFiltros[tipo].fornecedorTipo = gv('cf-fornecedortipo-'+tipo);
-      } else {
-        state.cadFiltros[tipo].tipoCadastro = gv('cf-tipocadastro-'+tipo);
-        state.cadFiltros[tipo].status = gv('cf-status-'+tipo);
-        state.cadFiltros[tipo].tipoPessoa = gv('cf-tipopessoa-'+tipo);
-        state.cadFiltros[tipo].regime = gv('cf-regime-'+tipo);
-      }
-      renderApp();
-      break;
-    }
-    case 'cad-limpar-filtros': {
-      const tipo = a1, cfg = CAD_CONFIG[tipo];
-      state.cadFiltros[tipo] = cfg.richKind==='produto' ? {texto:'',categoria:'',fornecedorTipo:''} : {texto:'',tipoCadastro:'',status:'',tipoPessoa:'',regime:''};
-      renderApp();
-      break;
-    }
     case 'cad-open-form':
       if(CAD_CONFIG[a1].rich){ cadOpenFormRico(a1, null); }
       else { state.cadFormOpen = true; state.cadEdit = {tipo:null,id:null}; renderApp(); }
@@ -7979,6 +8161,7 @@ function onAppInput(e){
   if(onConfigInput(el)) return;
   if(el.hasAttribute('data-proc')){ if(el.type!=='checkbox' && el.tagName!=='SELECT') onProcessoInput(el, 'input'); return; }
   if(el.hasAttribute('data-proc-filtro')){ onFiltroProcesso(el, 'input'); return; }
+  if(el.hasAttribute('data-cad-filtro')){ onFiltroCadastro(el, 'input'); return; }
   const bind = el.getAttribute('data-bind');
   if(!bind) return;
   const inCadForm = !!el.closest('#cad-rich-form');
@@ -8023,6 +8206,8 @@ function onAppChange(e){
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
+  if(el.hasAttribute('data-cadtpl-campo')){ onCadTemplateCampo(el); return; }
+  if(el.hasAttribute('data-cad-filtro')){ onFiltroCadastro(el, 'change'); return; }
   if(el.hasAttribute('data-proc-filtro')){ onFiltroProcesso(el, 'change'); return; }
   if(el.id==='icms-input' || el.id==='icms-input-formal') return; // handled by input
   if(el.id==='doc-file-input'){ handleFilesSelected(el.files); return; }

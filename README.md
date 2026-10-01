@@ -42,6 +42,9 @@ Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
   (Cliente, Fabricante, Fornecedor, Despachante Aduaneiro, Agente de Carga, Armador, Transportadora, Funcionário).
   A antiga lista de Fornecedores é unida a ela automaticamente. Em Processos, Cliente, Agente de Carga e Despachante
   só aceitam empresas cadastradas do tipo correspondente (sugestões a partir de 3 letras; outro texto é apagado).
+- **Clientes e Empresas** e **Produtos**: Lista ou Cards e **Template** (Configurar Card, Lista e Filtros) por usuário
+  (`perfis.preferencias.cad_cliente` / `cad_produto`). Todo campo do formulário pode ser filtro (Informações Gerais,
+  Endereços e Contatos; em Produtos, todas as janelas).
 - **Rascunhos e filtros** ficam só no navegador, separados por usuário.
 - A chave publishable em `js/supabase-client.js` é pública por natureza; a proteção dos dados vem das regras RLS.
 
