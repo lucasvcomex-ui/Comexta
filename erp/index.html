@@ -590,6 +590,19 @@ td.num-mono, th.num-mono{text-align:right;}
 .pc-campos dd{margin:0; font-weight:600; word-break:break-word;}
 .pc-acoes{display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:auto; border-top:1px solid var(--line-soft); padding-top:10px;}
 .vazio{color:var(--ink-soft); font-weight:400;}
+
+/* ---------- Cotações Salvas: Template e cards ---------- */
+.cot-barra{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+.tpl-colunas{columns:3 220px; column-gap:18px;}
+.tpl-colunas .tpl-campo{break-inside:avoid;}
+.kanban-card-top{gap:6px;}
+.kanban-card-acoes{margin-left:auto;}
+.kanban-card-acoes .ci-actions{gap:2px;}
+.kanban-card-acoes .icon-btn{width:26px; height:26px;}
+.kanban-card-acoes .icon-btn svg{width:13px; height:13px;}
+.kanban-card-campos{display:grid; grid-template-columns:auto 1fr; gap:3px 8px; margin:0; font-size:11.5px; line-height:1.4;}
+.kanban-card-campos dt{color:var(--ink-soft);}
+.kanban-card-campos dd{margin:0; color:var(--ink); font-weight:600; word-break:break-word;}
 </style>
 </head>
 <body>
@@ -1859,18 +1872,7 @@ function prefsProcessos(){
   return { modo: p.modo==='card' ? 'card' : 'lista', lista: valido(p.lista) || PROC_TEMPLATE_PADRAO.lista, card: valido(p.card) || PROC_TEMPLATE_PADRAO.card };
 }
 async function salvarPrefsProcessos(alteracao, mensagem){
-  const nova = { ...((usuarioAtual.preferencias)||{}), processos: { ...prefsProcessos(), ...alteracao } };
-  usuarioAtual.preferencias = nova;
-  const { error } = await sb.from('perfis').update({ preferencias: nova }).eq('user_id', usuarioAtual.id);
-  if(error){
-    console.error(error);
-    // Sem a coluna no banco (SQL ainda não atualizado), guarda ao menos neste navegador.
-    try{ localStorage.setItem(chaveLocal('preferencias'), JSON.stringify(nova)); }catch(e){}
-    if(mensagem) toast('Salvo só neste navegador: não foi possível salvar no seu perfil.');
-    return;
-  }
-  try{ localStorage.removeItem(chaveLocal('preferencias')); }catch(e){}
-  if(mensagem) toast(mensagem, 'ok');
+  return salvarPreferencias('processos', alteracao, prefsProcessos(), mensagem);
 }
 
 function valorCampoProcesso(campo, p){
@@ -2362,6 +2364,271 @@ function aplicarLeituraProcesso(){
   const st = document.querySelector('.proc-topo [data-proc="status"]'); if(st) st.disabled = true;
 }
 
+/* ------------------ Cotações Salvas: Template (card, lista e filtros) ------------------ */
+// Mesmo padrão do Template de Processos: cada usuário escolhe as informações do card e da lista e
+// quais filtros ficam na tela. Salvo nas preferências do perfil (perfis.preferencias.cotacoes).
+const COT_STATUS_LABEL = { em_andamento:'Em Andamento', enviado_cliente:'Enviado Cliente', aceito:'Aprovado', negado:'Negado' };
+const COT_STATUS_CLASSE = { em_andamento:'badge-navy', enviado_cliente:'badge-amber', aceito:'badge-ok', negado:'badge-danger' };
+const COT_MOTIVO_LABEL = { frete:'Frete', produto:'Produto', servico:'Serviço', custo_geral:'Custo Geral' };
+const COT_JANELAS_TEMPLATE = ['Geral', 'Cliente', 'Rota e embarque', 'Produtos', 'Valores', 'Status'];
+
+const COT_CAMPOS = (()=>{
+  const ehSimp = tipo => tipo==='Simplificada';
+  const unicos = (arr, k) => [...new Set((arr||[]).map(x=>x[k]).filter(Boolean))].join(', ');
+  const rota = (a, b) => a||b ? `${a||'—'} → ${b||'—'}` : '';
+  const brl = v => (v||v===0) && isFinite(v) ? fmtBRL(v) : '';
+  const campos = [
+    ['Geral', 'tipo', 'Tipo', (tipo)=>tipo, { tipo:true }],
+    ['Geral', 'status', 'Status', (tipo, c)=>COT_STATUS_LABEL[c.dados.statusCotacao||'em_andamento'], { status:true }],
+    ['Geral', 'criadoEm', 'Data de criação', (tipo, c)=>c.criadoEm ? fmtDate(c.criadoEm) : ''],
+    ['Geral', 'atualizadoEm', 'Última atualização', (tipo, c)=>c.atualizadoEm ? fmtDate(c.atualizadoEm) : ''],
+    ['Geral', 'dataCotacao', 'Data da cotação', (tipo, c)=>c.dados.dataCotacao ? fmtDateOnly(c.dados.dataCotacao) : ''],
+    ['Geral', 'validade', 'Validade', (tipo, c)=>c.dados.validadeCotacao ? fmtDateOnly(c.dados.validadeCotacao) : ''],
+
+    ['Cliente', 'cliente', 'Cliente / empresa', (tipo, c)=>c.dados.cliente],
+    ['Cliente', 'clienteCnpjCpf', 'CNPJ/CPF do cliente', (tipo, c)=>c.dados.clienteCnpjCpf],
+    ['Cliente', 'responsavel', 'Responsável', (tipo, c)=>c.dados.responsavel],
+    ['Cliente', 'vendedor', 'Vendedor', (tipo, c)=>c.dados.vendedor],
+
+    ['Rota e embarque', 'rotaPaises', 'País origem → destino', (tipo, c)=>rota(c.dados.paisOrigem, c.dados.paisDestino)],
+    ['Rota e embarque', 'rotaCidades', 'Cidade origem → destino', (tipo, c)=>ehSimp(tipo) ? rota(c.dados.cidadeOrigem, c.dados.cidadeDestino) : rota(c.dados.freteOrigem, c.dados.freteDestino)],
+    ['Rota e embarque', 'rotaPortos', 'Porto/aeroporto origem → destino', (tipo, c)=>rota(c.dados.portoOrigem, c.dados.portoDestino)],
+    ['Rota e embarque', 'paisOrigem', 'País de origem', (tipo, c)=>c.dados.paisOrigem],
+    ['Rota e embarque', 'paisDestino', 'País de destino', (tipo, c)=>c.dados.paisDestino],
+    ['Rota e embarque', 'portoOrigem', 'Porto/aeroporto de origem', (tipo, c)=>c.dados.portoOrigem],
+    ['Rota e embarque', 'portoDestino', 'Porto/aeroporto de destino', (tipo, c)=>c.dados.portoDestino],
+    ['Rota e embarque', 'incoterm', 'Incoterm', (tipo, c)=>c.dados.incoterm],
+    ['Rota e embarque', 'etd', 'ETD', (tipo, c)=>{ const v = c.dados.etd || c.dados.freteEtd; return v ? fmtDateOnly(v) : ''; }],
+    ['Rota e embarque', 'eta', 'ETA', (tipo, c)=>{ const v = c.dados.eta || c.dados.freteEta; return v ? fmtDateOnly(v) : ''; }],
+    ['Rota e embarque', 'transitTime', 'Transit time (Formal)', (tipo, c)=>c.dados.freteTransitTime],
+    ['Rota e embarque', 'navio', 'Navio / viagem (Formal)', (tipo, c)=>[c.dados.freteNavio, c.dados.freteViagem].filter(Boolean).join(' / ')],
+    ['Rota e embarque', 'pesoBruto', 'Peso bruto total (Formal)', (tipo, c)=>c.dados.pesoBrutoTotal ? c.dados.pesoBrutoTotal + ' kg' : ''],
+    ['Rota e embarque', 'cbm', 'Cubagem (Formal)', (tipo, c)=>c.dados.cbm ? c.dados.cbm + ' m³' : ''],
+
+    ['Produtos', 'itens', 'Itens', (tipo, c)=>String((c.resumo&&c.resumo.itens)||0), { num:true }],
+    ['Produtos', 'produtos', 'Produtos', (tipo, c)=>unicos(c.dados.produtos, 'produto')],
+    ['Produtos', 'fornecedores', 'Fornecedores', (tipo, c)=>unicos(c.dados.produtos, 'fornecedor')],
+    ['Produtos', 'ncms', 'NCMs (Formal)', (tipo, c)=>unicos(c.dados.produtos, 'ncm')],
+
+    ['Valores', 'custoA', 'Custo A (Simples / com créditos)', (tipo, c)=>brl(ehSimp(tipo) ? c.resumo.custoSimples : c.resumo.custoComCredito), { num:true }],
+    ['Valores', 'custoB', 'Custo B (Lucro Real / sem créditos)', (tipo, c)=>brl(ehSimp(tipo) ? c.resumo.custoLucroReal : c.resumo.custoSemCredito), { num:true }],
+    ['Valores', 'valorAduaneiro', 'Valor aduaneiro', (tipo, c)=>brl(ehSimp(tipo) ? c.resumo.valorAduaneiroBRL : c.resumo.valorAduaneiro), { num:true }],
+    ['Valores', 'limite', 'Limite da simplificada', (tipo, c)=>ehSimp(tipo) ? (c.resumo.limiteExcedido ? 'Excedido' : 'Dentro do limite') : ''],
+
+    ['Status', 'motivoNegado', 'Motivo da negação', (tipo, c)=>COT_MOTIVO_LABEL[c.dados.statusMotivoNegado]||''],
+    ['Status', 'statusObservacao', 'Observação do status', (tipo, c)=>c.dados.statusObservacao],
+    ['Status', 'observacoes', 'Observações da cotação', (tipo, c)=>c.dados.observacoes],
+  ];
+  return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor, ...(extra||{}) }));
+})();
+const COT_CAMPO = Object.fromEntries(COT_CAMPOS.map(c=>[c.id, c]));
+
+// Filtros da tela (Configurar Filtros). "el" é o id do campo na tela; "trim" tira espaços do texto.
+const COT_FILTROS = [
+  { id:'tipo', label:'Tipo', el:'ft-tipo', vazio:'todos' },
+  { id:'numero', label:'Número', el:'ft-numero', trim:true },
+  { id:'texto', label:'Cliente / Fornecedor / Produto', el:'ft-texto', trim:true },
+  { id:'de', label:'De (data)', el:'ft-de' },
+  { id:'ate', label:'Até (data)', el:'ft-ate' },
+  { id:'vendedor', label:'Vendedor', el:'ft-vendedor', trim:true },
+  { id:'responsavel', label:'Responsável', el:'ft-responsavel', trim:true },
+  { id:'paisOrigem', label:'País de Origem', el:'ft-pais-origem', trim:true },
+  { id:'paisDestino', label:'País de Destino', el:'ft-pais-destino', trim:true },
+  { id:'cidadeOrigem', label:'Cidade de Origem', el:'ft-cidade-origem', trim:true },
+  { id:'cidadeDestino', label:'Cidade de Destino', el:'ft-cidade-destino', trim:true },
+  { id:'portoOrigem', label:'Porto/Aeroporto de Origem', el:'ft-porto-origem', trim:true },
+  { id:'portoDestino', label:'Porto/Aeroporto de Destino', el:'ft-porto-destino', trim:true },
+  { id:'ncm', label:'NCM', el:'ft-ncm', trim:true },
+  { id:'incoterm', label:'Incoterm', el:'ft-incoterm' },
+  { id:'statusCotacao', label:'Status (na lista)', el:'ft-status' },
+  { id:'statusMotivoNegado', label:'Motivo da Negação', el:'ft-motivo' },
+];
+const COT_TEMPLATE_PADRAO = {
+  lista: ['tipo', 'status', 'cliente', 'criadoEm', 'validade', 'itens', 'custoA', 'custoB'],
+  card: ['cliente', 'vendedor', 'incoterm', 'rotaPaises', 'rotaCidades', 'rotaPortos'],
+  filtros: COT_FILTROS.map(f=>f.id),
+};
+
+function prefsCotacoes(){
+  const p = ((usuarioAtual && usuarioAtual.preferencias) || {}).cotacoes || {};
+  const valido = (arr, mapa) => Array.isArray(arr) ? arr.filter(id=>mapa[id]) : null;
+  const filtrosMapa = Object.fromEntries(COT_FILTROS.map(f=>[f.id, f]));
+  return {
+    modo: p.modo==='cards' ? 'cards' : 'lista',
+    lista: valido(p.lista, COT_CAMPO) || COT_TEMPLATE_PADRAO.lista,
+    card: valido(p.card, COT_CAMPO) || COT_TEMPLATE_PADRAO.card,
+    filtros: valido(p.filtros, filtrosMapa) || COT_TEMPLATE_PADRAO.filtros,
+  };
+}
+async function salvarPreferencias(area, alteracao, atuais, mensagem){
+  const nova = { ...((usuarioAtual.preferencias)||{}), [area]: { ...atuais, ...alteracao } };
+  usuarioAtual.preferencias = nova;
+  const { error } = await sb.from('perfis').update({ preferencias: nova }).eq('user_id', usuarioAtual.id);
+  if(error){
+    console.error(error);
+    try{ localStorage.setItem(chaveLocal('preferencias'), JSON.stringify(nova)); }catch(e){}
+    if(mensagem) toast('Salvo só neste navegador: não foi possível salvar no seu perfil.');
+    return;
+  }
+  try{ localStorage.removeItem(chaveLocal('preferencias')); }catch(e){}
+  if(mensagem) toast(mensagem, 'ok');
+}
+const salvarPrefsCotacoes = (alteracao, mensagem) => salvarPreferencias('cotacoes', alteracao, prefsCotacoes(), mensagem);
+
+function valorCampoCotacao(campo, tipo, cot){
+  let v;
+  try{ v = campo.valor(tipo, cot); }catch(e){ v = ''; }
+  if(!v) return '<span class="vazio">—</span>';
+  if(campo.tipo) return `<span class="badge ${tipo==='Simplificada'?'badge-navy':'badge-amber'}">${esc(v)}</span>`;
+  if(campo.status){ const s = cot.dados.statusCotacao||'em_andamento'; return `<span class="badge ${COT_STATUS_CLASSE[s]||'badge-navy'}">${esc(v)}</span>`; }
+  return esc(v);
+}
+
+// Ações de uma cotação (lista e card): abrir, duplicar, baixar PDF e excluir
+function acoesCotacaoHtml(tipo, cot, compacto){
+  const s = tipo==='Simplificada';
+  return `<div class="ci-actions">
+    ${compacto ? '' : `<button class="icon-btn" title="Abrir para edição" data-action="${s?'abrir-cotacao':'abrir-cotacao-formal'}:${cot.id}">${ICONS.open}</button>`}
+    <button class="icon-btn" title="Duplicar cotação" data-action="${s?'duplicar-cotacao':'duplicar-cotacao-formal'}:${cot.id}">${ICONS.copy}</button>
+    <button class="icon-btn" title="Baixar PDF" data-action="${s?'baixar-cotacao-pdf':'baixar-cotacao-formal-pdf'}:${cot.id}">${ICONS.download}</button>
+    ${deleteBtnHtml(s?'cotacao':'cotacaoFormal', cot.id, (s?'excluir-cotacao':'excluir-cotacao-formal')+':'+cot.id)}
+  </div>`;
+}
+
+function filtroCotacaoHtml(f){
+  const v = state.filtrosTodas[f.id] ?? '';
+  const sel = (opcoes) => `<select id="${f.el}">${opcoes.map(([k,t])=>`<option value="${k}" ${String(v||f.vazio||'')===k?'selected':''}>${t}</option>`).join('')}</select>`;
+  let campo;
+  switch(f.id){
+    case 'tipo': campo = sel([['todos','Todos'],['simplificada','Simplificada'],['formal','Formal']]); break;
+    case 'incoterm': campo = sel([['','Todos'], ...['FOB','CIF','CFR','EXW','FCA','CPT','CIP'].map(i=>[i,i])]); break;
+    case 'statusCotacao': campo = sel([['','Todos'], ...Object.entries(COT_STATUS_LABEL)]); break;
+    case 'statusMotivoNegado': campo = sel([['','Todos'], ...Object.entries(COT_MOTIVO_LABEL)]); break;
+    case 'de': case 'ate': campo = `<input id="${f.el}" type="date" value="${esc(v)}">`; break;
+    default: {
+      const ph = { numero:'COT-0001 ou COTF-0001', texto:'Buscar...', vendedor:'Nome do vendedor', responsavel:'Nome do responsável', paisOrigem:'Ex: China',
+        paisDestino:'Ex: Brasil', cidadeOrigem:'Ex: Shanghai', cidadeDestino:'Ex: Santos', portoOrigem:'Ex: Porto de Shanghai', portoDestino:'Ex: Porto de Santos', ncm:'0000.00.00' }[f.id] || '';
+      campo = `<input id="${f.el}" placeholder="${esc(ph)}" value="${esc(v)}">`;
+    }
+  }
+  return `<div class="field"><label>${esc(f.id==='statusCotacao' ? 'Status' : f.id==='de' ? 'De' : f.id==='ate' ? 'Até' : f.label)}</label>${campo}</div>`;
+}
+// Lê os filtros visíveis; os ocultos ficam vazios (não filtram escondido).
+function lerFiltrosCotacoes(){
+  const visiveis = new Set(prefsCotacoes().filtros);
+  for(const f of COT_FILTROS){
+    const el = document.getElementById(f.el);
+    let v = (visiveis.has(f.id) && el) ? el.value : '';
+    if(f.trim) v = v.trim();
+    state.filtrosTodas[f.id] = v || f.vazio || '';
+  }
+}
+
+// Janela Template de Cotações Salvas
+function renderCotTemplate(){
+  const aba = state.cotTemplateAba || 'card';
+  if(!state.cotTemplateSel){ const pr = prefsCotacoes(); state.cotTemplateSel = { card:[...pr.card], lista:[...pr.lista], filtros:[...pr.filtros] }; }
+  const sel = new Set(state.cotTemplateSel[aba]);
+  let grupos;
+  if(aba==='filtros'){
+    grupos = `<div class="tpl-grupo" style="grid-column:1/-1;">
+      <div class="tpl-grupo-topo"><b>Filtros da tela</b><span class="membro-sub">${sel.size} de ${COT_FILTROS.length}</span>
+        <button class="link-btn" data-action="cot-tpl-todos:${sel.size===COT_FILTROS.length?'0':'1'}">${sel.size===COT_FILTROS.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+      <div class="tpl-colunas">${COT_FILTROS.map(f=>`<label class="tpl-campo"><input type="checkbox" data-cot-tpl="${f.id}" ${sel.has(f.id)?'checked':''}> ${esc(f.label)}</label>`).join('')}</div>
+    </div>`;
+  }else{
+    grupos = COT_JANELAS_TEMPLATE.map(janela=>{
+      const campos = COT_CAMPOS.filter(c=>c.janela===janela && !(aba==='card' && (c.id==='tipo' || c.id==='status')));
+      if(!campos.length) return '';
+      const marcados = campos.filter(c=>sel.has(c.id)).length;
+      return `<div class="tpl-grupo">
+        <div class="tpl-grupo-topo"><b>${esc(janela)}</b><span class="membro-sub">${marcados} de ${campos.length}</span>
+          <button class="link-btn" data-action="cot-tpl-grupo:${janela}:${marcados===campos.length?'0':'1'}">${marcados===campos.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+        ${campos.map(c=>`<label class="tpl-campo"><input type="checkbox" data-cot-tpl="${c.id}" ${sel.has(c.id)?'checked':''}> ${esc(c.label)}</label>`).join('')}
+      </div>`;
+    }).join('');
+  }
+  const textos = {
+    card: 'Escolha as informações que aparecem em cada card. O nº, o tipo e os botões (duplicar, baixar PDF e excluir) aparecem sempre no topo; o status é a coluna do quadro.',
+    lista: 'Escolha as colunas da lista. O nº aparece sempre na primeira coluna e as ações na última.',
+    filtros: 'Escolha os filtros que ficam na tela de Cotações Salvas. Filtros ocultos deixam de ser aplicados.',
+  };
+  const nomes = { card:'card', lista:'lista', filtros:'filtros' };
+  return `<div class="card proc-template">
+    <div class="proc-template-topo">
+      <div class="section-title">${ICONS.gear} Template</div>
+      <div class="pers-tabs" style="margin:0;">
+        <button class="pers-tab ${aba==='card'?'active':''}" data-action="cot-tpl-aba:card">Configurar Card</button>
+        <button class="pers-tab ${aba==='lista'?'active':''}" data-action="cot-tpl-aba:lista">Configurar Lista</button>
+        <button class="pers-tab ${aba==='filtros'?'active':''}" data-action="cot-tpl-aba:filtros">Configurar Filtros</button>
+      </div>
+    </div>
+    <p class="page-sub" style="margin:10px 0 16px;">${textos[aba]} Esta escolha vale só para você.</p>
+    <div class="tpl-grupos">${grupos}</div>
+    <div class="btn-row" style="margin-top:18px; justify-content:space-between;">
+      <span class="membro-sub">${sel.size} ${aba==='filtros' ? (sel.size===1?'filtro selecionado':'filtros selecionados') : (sel.size===1?'informação selecionada':'informações selecionadas')}</span>
+      <div class="btn-row">
+        <button class="btn btn-ghost" data-action="cot-tpl-padrao">Restaurar padrão</button>
+        <button class="btn btn-ghost" data-action="cot-template">Cancelar</button>
+        <button class="btn btn-primary" data-action="cot-tpl-salvar">${ICONS.check} Salvar ${nomes[aba]}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function idsDoGrupoCotacao(janela, aba){
+  return COT_CAMPOS.filter(c=>c.janela===janela && !(aba==='card' && (c.id==='tipo' || c.id==='status'))).map(c=>c.id);
+}
+function ordenarSelecaoCot(aba, conjunto){
+  const ordem = aba==='filtros' ? COT_FILTROS.map(f=>f.id) : COT_CAMPOS.map(c=>c.id);
+  return ordem.filter(id=>conjunto.has(id));
+}
+function acaoTemplateCotacoes(cmd, a1, a2){
+  const aba = state.cotTemplateAba || 'card';
+  switch(cmd){
+    case 'cot-template': state.cotTemplateAberto = !state.cotTemplateAberto; state.cotTemplateSel = null; renderApp(); return true;
+    case 'cot-tpl-aba': state.cotTemplateAba = a1; renderApp(); return true;
+    case 'cot-tpl-grupo': {
+      const atual = new Set(state.cotTemplateSel[aba]);
+      idsDoGrupoCotacao(a1, aba).forEach(id=> a2==='1' ? atual.add(id) : atual.delete(id));
+      state.cotTemplateSel[aba] = ordenarSelecaoCot(aba, atual); renderApp(); return true;
+    }
+    case 'cot-tpl-todos':
+      state.cotTemplateSel.filtros = a1==='1' ? COT_FILTROS.map(f=>f.id) : []; renderApp(); return true;
+    case 'cot-tpl-padrao': state.cotTemplateSel[aba] = [...COT_TEMPLATE_PADRAO[aba]]; renderApp(); return true;
+    case 'cot-tpl-salvar': {
+      const escolhidos = state.cotTemplateSel[aba];
+      if(aba!=='filtros' && !escolhidos.length){ toast('Selecione pelo menos uma informação.'); return true; }
+      const alteracao = { [aba]: [...escolhidos] };
+      if(aba==='card') alteracao.modo = 'cards';
+      if(aba==='lista') alteracao.modo = 'lista';
+      if(aba==='filtros'){
+        // Filtro que saiu da tela deixa de ser aplicado.
+        const visiveis = new Set(escolhidos);
+        let mudou = false;
+        COT_FILTROS.forEach(f=>{ if(!visiveis.has(f.id) && (state.filtrosTodas[f.id]||'') !== (f.vazio||'')){ state.filtrosTodas[f.id] = f.vazio || ''; mudou = true; } });
+        if(mudou) persistFiltrosTodas();
+      }
+      const msg = { card:'Template do card salvo.', lista:'Template da lista salvo.', filtros:'Filtros da tela salvos.' }[aba];
+      salvarPrefsCotacoes(alteracao, msg).then(()=>{
+        if(alteracao.modo) state.cotacoesViewMode = alteracao.modo;
+        state.cotTemplateAberto = false; state.cotTemplateSel = null; renderApp();
+      });
+      return true;
+    }
+  }
+  return false;
+}
+function onCotTemplateCampo(el){
+  const id = el.getAttribute('data-cot-tpl'); if(!id || !state.cotTemplateSel) return false;
+  const aba = state.cotTemplateAba || 'card';
+  const atual = new Set(state.cotTemplateSel[aba]);
+  el.checked ? atual.add(id) : atual.delete(id);
+  state.cotTemplateSel[aba] = ordenarSelecaoCot(aba, atual);
+  renderApp();
+  return true;
+}
+
 /* -------------------------------- Icones --------------------------------- */
 const ICONS = {
   folder:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 10h18"/></svg>`,
@@ -2812,6 +3079,7 @@ const state = {
   currentCotacaoId: null,
   cotacoesIndex: [],         // [{id,numero,criadoEm,atualizadoEm, resumo:{...}}]
   processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procFiltro: '', procFiltroStatus: '', procTemplateAberto: false, procTemplateAba: 'card', procTemplateSel: null,
+  cotTemplateAberto: false, cotTemplateAba: 'card', cotTemplateSel: null,
   clientes: [], fornecedores: [], produtos: [],
   filtros: { numero:'', texto:'', de:'', ate:'' },
   filtrosFormal: { numero:'', texto:'', de:'', ate:'' },
@@ -4279,109 +4547,45 @@ function filtroTodasAtivo(){
   return !!(f.numero||f.texto||f.de||f.ate||(f.tipo&&f.tipo!=='todos')||f.vendedor||f.responsavel||f.paisOrigem||f.paisDestino||f.portoOrigem||f.portoDestino||f.cidadeOrigem||f.cidadeDestino||f.ncm||f.incoterm||f.statusCotacao||f.statusMotivoNegado);
 }
 function renderCotacoesTodas(){
+  const prefs = prefsCotacoes();
   const list = cotacoesTodasFiltradas();
-  const rows = list.length ? list.map(({tipo, cot})=>{
-    const custoLabel = tipo==='Simplificada' ? 'Custo Simples / Lucro Real' : 'Custo c/créd. / s/créd.';
-    const custoA = tipo==='Simplificada' ? cot.resumo.custoSimples : cot.resumo.custoComCredito;
-    const custoB = tipo==='Simplificada' ? cot.resumo.custoLucroReal : cot.resumo.custoSemCredito;
-    const abrirAction = tipo==='Simplificada' ? 'abrir-cotacao' : 'abrir-cotacao-formal';
-    const pdfAction = tipo==='Simplificada' ? 'baixar-cotacao-pdf' : 'baixar-cotacao-formal-pdf';
-    const excluirKind = tipo==='Simplificada' ? 'cotacao' : 'cotacaoFormal';
-    const excluirAction = tipo==='Simplificada' ? 'excluir-cotacao' : 'excluir-cotacao-formal';
-    const duplicarAction = tipo==='Simplificada' ? 'duplicar-cotacao' : 'duplicar-cotacao-formal';
-    const statusLabels = {em_andamento:'Em Andamento', enviado_cliente:'Enviado Cliente', aceito:'Aprovado', negado:'Negado'};
-    const statusVal = cot.dados.statusCotacao||'em_andamento';
-    const statusClasse = statusVal==='aceito' ? 'badge-ok' : statusVal==='negado' ? 'badge-danger' : statusVal==='enviado_cliente' ? 'badge-amber' : 'badge-navy';
-    return `
+  const colunas = prefs.lista.map(id=>COT_CAMPO[id]);
+  const rows = list.length ? list.map(({tipo, cot})=>`
     <tr>
       <td><span class="stamp">${esc(cot.id)}</span></td>
-      <td><span class="badge ${tipo==='Simplificada'?'badge-navy':'badge-amber'}">${tipo}</span></td>
-      <td><span class="badge ${statusClasse}">${statusLabels[statusVal]||statusVal}</span></td>
-      <td>${esc(cot.dados.cliente)||'—'}</td>
-      <td>${fmtDate(cot.criadoEm)}</td>
-      <td>${fmtDateOnly(cot.dados.validadeCotacao)}</td>
-      <td class="num-mono">${cot.resumo.itens}</td>
-      <td class="num-mono" title="${custoLabel}">${fmtBRL(custoA)}</td>
-      <td class="num-mono" title="${custoLabel}">${fmtBRL(custoB)}</td>
-      <td>
-        <div class="ci-actions">
-          <button class="icon-btn" title="Abrir para edição" data-action="${abrirAction}:${cot.id}">${ICONS.open}</button>
-          <button class="icon-btn" title="Duplicar cotação" data-action="${duplicarAction}:${cot.id}">${ICONS.copy}</button>
-          <button class="icon-btn" title="Baixar PDF" data-action="${pdfAction}:${cot.id}">${ICONS.download}</button>
-          ${deleteBtnHtml(excluirKind, cot.id, excluirAction+':'+cot.id)}
-        </div>
-      </td>
-    </tr>`;
-  }).join('') : '';
+      ${colunas.map(c=>`<td class="${c.num?'num-mono':''}">${valorCampoCotacao(c, tipo, cot)}</td>`).join('')}
+      <td>${acoesCotacaoHtml(tipo, cot, false)}</td>
+    </tr>`).join('') : '';
 
   const viewToggle = `
-  <div class="view-toggle" style="margin-bottom:16px;">
-    <button class="view-toggle-btn ${state.cotacoesViewMode==='lista'?'active':''}" data-action="set-cotacoes-view:lista">${ICONS.file} Lista</button>
-    <button class="view-toggle-btn ${state.cotacoesViewMode==='cards'?'active':''}" data-action="set-cotacoes-view:cards">${ICONS.product} Cards</button>
+  <div class="cot-barra">
+    <div class="view-toggle">
+      <button class="view-toggle-btn ${state.cotacoesViewMode==='lista'?'active':''}" data-action="set-cotacoes-view:lista">${ICONS.file} Lista</button>
+      <button class="view-toggle-btn ${state.cotacoesViewMode==='cards'?'active':''}" data-action="set-cotacoes-view:cards">${ICONS.product} Cards</button>
+    </div>
+    <button class="btn btn-ghost btn-sm ${state.cotTemplateAberto?'ativo':''}" data-action="cot-template">${ICONS.gear} Template</button>
   </div>`;
 
+  const filtrosVisiveis = new Set(prefs.filtros);
+  const filtros = COT_FILTROS.filter(f=>filtrosVisiveis.has(f.id) && !(f.id==='statusCotacao' && state.cotacoesViewMode!=='lista'));
   const filterBar = `
   <div class="filter-bar">
-    <div class="field"><label>Tipo</label>
-      <select id="ft-tipo">
-        <option value="todos" ${state.filtrosTodas.tipo==='todos'?'selected':''}>Todos</option>
-        <option value="simplificada" ${state.filtrosTodas.tipo==='simplificada'?'selected':''}>Simplificada</option>
-        <option value="formal" ${state.filtrosTodas.tipo==='formal'?'selected':''}>Formal</option>
-      </select>
-    </div>
-    <div class="field"><label>Número</label><input id="ft-numero" placeholder="COT-0001 ou COTF-0001" value="${esc(state.filtrosTodas.numero)}"></div>
-    <div class="field"><label>Cliente / Fornecedor / Produto</label><input id="ft-texto" placeholder="Buscar..." value="${esc(state.filtrosTodas.texto)}"></div>
-    <div class="field"><label>De</label><input id="ft-de" type="date" value="${esc(state.filtrosTodas.de)}"></div>
-    <div class="field"><label>Até</label><input id="ft-ate" type="date" value="${esc(state.filtrosTodas.ate)}"></div>
-    <div class="field"><label>Vendedor</label><input id="ft-vendedor" placeholder="Nome do vendedor" value="${esc(state.filtrosTodas.vendedor)}"></div>
-    <div class="field"><label>Responsável</label><input id="ft-responsavel" placeholder="Nome do responsável" value="${esc(state.filtrosTodas.responsavel)}"></div>
-    <div class="field"><label>País de Origem</label><input id="ft-pais-origem" placeholder="Ex: China" value="${esc(state.filtrosTodas.paisOrigem)}"></div>
-    <div class="field"><label>País de Destino</label><input id="ft-pais-destino" placeholder="Ex: Brasil" value="${esc(state.filtrosTodas.paisDestino)}"></div>
-    <div class="field"><label>Cidade de Origem</label><input id="ft-cidade-origem" placeholder="Ex: Shanghai" value="${esc(state.filtrosTodas.cidadeOrigem)}"></div>
-    <div class="field"><label>Cidade de Destino</label><input id="ft-cidade-destino" placeholder="Ex: Santos" value="${esc(state.filtrosTodas.cidadeDestino)}"></div>
-    <div class="field"><label>Porto/Aeroporto de Origem</label><input id="ft-porto-origem" placeholder="Ex: Porto de Shanghai" value="${esc(state.filtrosTodas.portoOrigem)}"></div>
-    <div class="field"><label>Porto/Aeroporto de Destino</label><input id="ft-porto-destino" placeholder="Ex: Porto de Santos" value="${esc(state.filtrosTodas.portoDestino)}"></div>
-    <div class="field"><label>NCM</label><input id="ft-ncm" placeholder="0000.00.00" value="${esc(state.filtrosTodas.ncm)}"></div>
-    <div class="field"><label>Incoterm</label>
-      <select id="ft-incoterm">
-        <option value="" ${!state.filtrosTodas.incoterm?'selected':''}>Todos</option>
-        ${['FOB','CIF','CFR','EXW','FCA','CPT','CIP'].map(i=>`<option value="${i}" ${state.filtrosTodas.incoterm===i?'selected':''}>${i}</option>`).join('')}
-      </select>
-    </div>
-    ${state.cotacoesViewMode==='lista' ? `
-    <div class="field"><label>Status</label>
-      <select id="ft-status">
-        <option value="" ${!state.filtrosTodas.statusCotacao?'selected':''}>Todos</option>
-        <option value="em_andamento" ${state.filtrosTodas.statusCotacao==='em_andamento'?'selected':''}>Em Andamento</option>
-        <option value="enviado_cliente" ${state.filtrosTodas.statusCotacao==='enviado_cliente'?'selected':''}>Enviado Cliente</option>
-        <option value="aceito" ${state.filtrosTodas.statusCotacao==='aceito'?'selected':''}>Aprovado</option>
-        <option value="negado" ${state.filtrosTodas.statusCotacao==='negado'?'selected':''}>Negado</option>
-      </select>
-    </div>` : `<input type="hidden" id="ft-status" value="">`}
-    <div class="field"><label>Motivo da Negação</label>
-      <select id="ft-motivo">
-        <option value="" ${!state.filtrosTodas.statusMotivoNegado?'selected':''}>Todos</option>
-        <option value="frete" ${state.filtrosTodas.statusMotivoNegado==='frete'?'selected':''}>Frete</option>
-        <option value="produto" ${state.filtrosTodas.statusMotivoNegado==='produto'?'selected':''}>Produto</option>
-        <option value="servico" ${state.filtrosTodas.statusMotivoNegado==='servico'?'selected':''}>Serviço</option>
-        <option value="custo_geral" ${state.filtrosTodas.statusMotivoNegado==='custo_geral'?'selected':''}>Custo Geral</option>
-      </select>
-    </div>
-    <button class="btn btn-ghost btn-sm" data-action="aplicar-filtros-todas">${ICONS.filter} Filtrar</button>
-    <button class="btn btn-ghost btn-sm" data-action="limpar-filtros-todas">Limpar</button>
+    ${filtros.map(filtroCotacaoHtml).join('')}
+    ${filtros.length ? `<button class="btn btn-ghost btn-sm" data-action="aplicar-filtros-todas">${ICONS.filter} Filtrar</button>
+    <button class="btn btn-ghost btn-sm" data-action="limpar-filtros-todas">Limpar</button>` : ''}
     <div style="flex:1;"></div>
     <button class="btn btn-primary btn-sm" data-action="go:dados">${ICONS.plus} Nova Simplificada</button>
     <button class="btn btn-primary btn-sm" data-action="go:dadosFormal">${ICONS.plus} Nova Formal</button>
   </div>`;
 
+  const temCusto = prefs.lista.includes('custoA') || prefs.lista.includes('custoB');
   const corpo = state.cotacoesViewMode==='cards' ? renderCotacoesKanban() : (list.length ? `
   <div class="table-wrap">
     <table><thead><tr>
-      <th>Nº</th><th>Tipo</th><th>Status</th><th>Empresa</th><th>Data</th><th>Validade</th><th class="num-mono">Itens</th>
-      <th class="num-mono">Custo A (R$)</th><th class="num-mono">Custo B (R$)</th><th>Ações</th>
+      <th>Nº</th>${colunas.map(c=>`<th class="${c.num?'num-mono':''}">${esc(c.label)}</th>`).join('')}<th>Ações</th>
     </tr></thead><tbody>${rows}</tbody></table>
   </div>
-  <p class="hint" style="color:var(--ink-soft); font-size:12px;">Simplificada: Custo A = Simples Nacional, Custo B = Lucro Real. Formal: Custo A = com créditos, Custo B = sem créditos.</p>
+  ${temCusto ? `<p class="hint" style="color:var(--ink-soft); font-size:12px;">Simplificada: Custo A = Simples Nacional, Custo B = Lucro Real. Formal: Custo A = com créditos, Custo B = sem créditos.</p>` : ''}
   ` : `
   <div class="empty">${ICONS.quote}<h3>Nenhuma cotação encontrada</h3>
     <p>Ajuste os filtros ou crie uma nova cotação Simplificada ou Formal.</p>
@@ -4394,6 +4598,7 @@ function renderCotacoesTodas(){
   </div>
   <hr class="hairline">
   ${viewToggle}
+  ${state.cotTemplateAberto ? renderCotTemplate() : ''}
   ${filterBar}
   ${corpo}
   `;
@@ -4419,23 +4624,15 @@ function renderCotacoesKanban(){
       <div class="kanban-column-header"><span class="badge ${c.classe}">${c.label}</span><span class="kanban-count">${porColuna[c.key].length}</span></div>
       <div class="kanban-column-body" data-status="${c.key}">
         ${porColuna[c.key].length ? porColuna[c.key].map(({tipo,cot})=>{
-          const d = cot.dados;
-          const cidadeOrigem = tipo==='Simplificada' ? d.cidadeOrigem : d.freteOrigem;
-          const cidadeDestino = tipo==='Simplificada' ? d.cidadeDestino : d.freteDestino;
           const abrirAction = tipo==='Simplificada' ? 'abrir-cotacao' : 'abrir-cotacao-formal';
           return `
           <div class="kanban-card" draggable="true" data-cot-id="${cot.id}" data-cot-tipo="${tipo}" data-action="${abrirAction}:${cot.id}" title="Clique para abrir · arraste para mudar o status">
             <div class="kanban-card-top">
               <span class="stamp">${esc(cot.id)}</span>
               <span class="badge ${tipo==='Simplificada'?'badge-navy':'badge-amber'}" style="font-size:10px;">${tipo}</span>
-              <button class="icon-btn" title="Duplicar cotação" data-action="${tipo==='Simplificada'?'duplicar-cotacao':'duplicar-cotacao-formal'}:${cot.id}" style="margin-left:auto;">${ICONS.copy}</button>
+              <span class="kanban-card-acoes">${acoesCotacaoHtml(tipo, cot, true)}</span>
             </div>
-            <div class="kanban-card-cliente">${esc(d.cliente)||'(sem cliente)'}</div>
-            <div class="kanban-card-row">${ICONS.client} ${esc(d.vendedor)||'—'}</div>
-            <div class="kanban-card-row">${ICONS.data} Incoterm: ${esc(d.incoterm)||'—'}</div>
-            <div class="kanban-card-row">${ICONS.ship} ${esc(d.paisOrigem)||'—'} → ${esc(d.paisDestino)||'—'}</div>
-            <div class="kanban-card-row">${ICONS.ship} ${esc(cidadeOrigem)||'—'} → ${esc(cidadeDestino)||'—'}</div>
-            <div class="kanban-card-row">${ICONS.ship} ${esc(d.portoOrigem)||'—'} → ${esc(d.portoDestino)||'—'}</div>
+            <dl class="kanban-card-campos">${prefsCotacoes().card.map(id=>COT_CAMPO[id]).map(campo=>`<dt>${esc(campo.label)}</dt><dd>${valorCampoCotacao(campo, tipo, cot)}</dd>`).join('')}</dl>
           </div>`;
         }).join('') : `<div class="kanban-empty">Nenhuma cotação</div>`}
       </div>
@@ -6949,7 +7146,7 @@ async function excluirCotacao(id){
 function baixarCotacaoPdf(id){
   const item = state.cotacoesIndex.find(x=>x.id===id);
   if(!item) return;
-  gerarDashboardPDF(item.dados, {id:item.id, data:item.criadoEm});
+  gerarDashboardPDF(normalizeDados(JSON.parse(JSON.stringify(item.dados))), {id:item.id, data:item.criadoEm});
 }
 function novoNumeroSeqFormal(){
   const maxSeq = state.cotacoesFormalIndex.reduce((m,c)=>Math.max(m,c.seq||0),0);
@@ -6995,7 +7192,7 @@ async function excluirCotacaoFormal(id){
 function baixarCotacaoFormalPdf(id){
   const item = state.cotacoesFormalIndex.find(x=>x.id===id);
   if(!item) return;
-  gerarDashboardPDFFormal(item.dados, {id:item.id, data:item.criadoEm});
+  gerarDashboardPDFFormal(normalizeDadosFormal(JSON.parse(JSON.stringify(item.dados))), {id:item.id, data:item.criadoEm});
 }
 function novaCotacaoFormal(){
   state.dadosFormal = dadosFormalPadrao();
@@ -7353,6 +7550,7 @@ function onAppClick(e){
   const [cmd, a1, a2] = action.split(':');
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1))) return;
+  if(cmd.startsWith('cot-') && acaoTemplateCotacoes(cmd, a1, a2)) return;
   switch(cmd){
     case 'go': navigate(a1); break;
     case 'toggle-module':
@@ -7439,25 +7637,9 @@ function onAppClick(e){
       break;
     }
     case 'limpar-filtros-formal': state.filtrosFormal = {numero:'',texto:'',de:'',ate:''}; renderApp(); break;
-    case 'set-cotacoes-view': state.cotacoesViewMode = a1; renderApp(); break;
+    case 'set-cotacoes-view': state.cotacoesViewMode = a1; salvarPrefsCotacoes({ modo: a1 }); renderApp(); break;
     case 'aplicar-filtros-todas': {
-      state.filtrosTodas.tipo = document.getElementById('ft-tipo').value;
-      state.filtrosTodas.numero = document.getElementById('ft-numero').value.trim();
-      state.filtrosTodas.texto = document.getElementById('ft-texto').value.trim();
-      state.filtrosTodas.de = document.getElementById('ft-de').value;
-      state.filtrosTodas.ate = document.getElementById('ft-ate').value;
-      state.filtrosTodas.vendedor = document.getElementById('ft-vendedor').value.trim();
-      state.filtrosTodas.responsavel = document.getElementById('ft-responsavel').value.trim();
-      state.filtrosTodas.paisOrigem = document.getElementById('ft-pais-origem').value.trim();
-      state.filtrosTodas.paisDestino = document.getElementById('ft-pais-destino').value.trim();
-      state.filtrosTodas.cidadeOrigem = document.getElementById('ft-cidade-origem').value.trim();
-      state.filtrosTodas.cidadeDestino = document.getElementById('ft-cidade-destino').value.trim();
-      state.filtrosTodas.portoOrigem = document.getElementById('ft-porto-origem').value.trim();
-      state.filtrosTodas.portoDestino = document.getElementById('ft-porto-destino').value.trim();
-      state.filtrosTodas.ncm = document.getElementById('ft-ncm').value.trim();
-      state.filtrosTodas.incoterm = document.getElementById('ft-incoterm').value;
-      state.filtrosTodas.statusCotacao = document.getElementById('ft-status').value;
-      state.filtrosTodas.statusMotivoNegado = document.getElementById('ft-motivo').value;
+      lerFiltrosCotacoes();
       persistFiltrosTodas();
       toast('Filtro fixado — vai continuar aplicado até você clicar em "Limpar".', 'ok');
       renderApp();
@@ -7597,6 +7779,7 @@ function onAppChange(e){
   if(onConfigChange(el)) return;
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
+  if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
   if(el.id==='proc-status-filtro'){ state.procFiltroStatus = el.value; renderApp(); return; }
   if(el.id==='icms-input' || el.id==='icms-input-formal') return; // handled by input
   if(el.id==='doc-file-input'){ handleFilesSelected(el.files); return; }
@@ -7707,6 +7890,7 @@ async function init(){
   });
   try{
     if(!(await carregarUsuario())) return;
+    state.cotacoesViewMode = prefsCotacoes().modo;
     await loadInitialData();
   }catch(err){
     // Sem os dados do servidor não renderiza o ERP: salvar em cima de listas vazias apagaria as cotações.

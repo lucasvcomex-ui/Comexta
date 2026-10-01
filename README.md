@@ -33,6 +33,9 @@ Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
   Desembaraço. É uma área de permissão própria (visualizar, criar, editar); membros começam sem acesso.
   Em **Template** (à direita, na lista) cada usuário escolhe, por janela do processo, as informações que aparecem
   em **Configurar Card** e **Configurar Lista**, e alterna entre Lista e Cards. Fica em `perfis.preferencias`.
+- **Cotações Salvas**: em Cards, cada cotação tem duplicar, baixar PDF e excluir. O botão **Template** tem
+  **Configurar Card**, **Configurar Lista** e **Configurar Filtros** (quais filtros ficam na tela), por usuário,
+  no mesmo padrão de Processos (`perfis.preferencias.cotacoes`).
 - **Rascunhos e filtros** ficam só no navegador, separados por usuário.
 - A chave publishable em `js/supabase-client.js` é pública por natureza; a proteção dos dados vem das regras RLS.
 
