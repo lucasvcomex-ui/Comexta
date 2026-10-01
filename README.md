@@ -30,8 +30,10 @@ Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
   (Nova Cotação Simplificada e Formal, Processos, filtros de Cotações Salvas e de Processos) usam essas listas.
   Fica em `empresas.personalizacao`.
 - **Processos** (barra superior → Processos): lista dos processos de importação da empresa (PRC-0001…) com busca
-  e filtro de status, e "Cadastrar Novo Processo" com as janelas Cliente, Produto, Transporte, Financeiro e
-  Desembaraço. É uma área de permissão própria (visualizar, criar, editar); membros começam sem acesso.
+  e filtro de status, e "Cadastrar Novo Processo" com as janelas Cliente, Produto, Transporte, Desembaraço, Financeiro e
+  Numerário. O **Numerário** resume todos os custos lidos das janelas anteriores (mercadoria, frete e seguro em reais,
+  valor aduaneiro, tributos e despesas) e faz o rateio por produto, sem e com crédito de tributos, com PDF — nos
+  moldes do Numerário das cotações. Frete ou seguro em moeda diferente da mercadoria pedem câmbio próprio no Financeiro. É uma área de permissão própria (visualizar, criar, editar); membros começam sem acesso.
   Em **Template** (à direita, na lista) cada usuário escolhe, por janela do processo, as informações que aparecem
   em **Configurar Card** e **Configurar Lista**, quais filtros ficam na tela em **Configurar Filtros**, e alterna
   entre Lista e Cards. Fica em `perfis.preferencias`. A data de abertura fica no topo do processo (obrigatória).
@@ -45,6 +47,8 @@ Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
 - **Clientes e Empresas** e **Produtos**: Lista ou Cards e **Template** (Configurar Card, Lista e Filtros) por usuário
   (`perfis.preferencias.cad_cliente` / `cad_produto`). Todo campo do formulário pode ser filtro (Informações Gerais,
   Endereços e Contatos; em Produtos, todas as janelas).
+- **Exportar**: Cotações Salvas, Clientes e Empresas, Produtos e Processos têm botões **Excel** e **PDF** que baixam
+  só os registros filtrados, com as colunas do Template (Lista ou Card, conforme o modo em uso).
 - **Rascunhos e filtros** ficam só no navegador, separados por usuário.
 - A chave publishable em `js/supabase-client.js` é pública por natureza; a proteção dos dados vem das regras RLS.
 

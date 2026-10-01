@@ -989,7 +989,7 @@ const PERMISSAO_DA_ACAO = {
 
   'toggle-nav:proc':['processos','ver'], 'toggle-module:proc':['processos','ver'], 'go:processos':['processos','ver'],
   'go:processoForm':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
-  'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-duplicar':['processos','criar'],
+  'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-numerario-pdf':['processos','ver'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 };
 const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos' };
@@ -1778,11 +1778,11 @@ async function onPersonalizacaoChange(el){
 
 /* ------------------------------- Processos ---------------------------------- */
 // Processos de importação da empresa (dados_empresa, chave 'processos:index'), numerados PRC-0001...
-// "Cadastrar Novo Processo" tem as janelas Cliente, Produto, Transporte, Financeiro e Desembaraço.
+// "Cadastrar Novo Processo" tem as janelas Cliente, Produto, Transporte, Desembaraço, Financeiro e Numerário.
 // O processo em edição fica como rascunho neste navegador até ser salvo.
 const PROC_ABAS = [
   { id:'cliente', label:'Cliente' }, { id:'produto', label:'Produto' }, { id:'transporte', label:'Transporte' },
-  { id:'financeiro', label:'Financeiro' }, { id:'desembaraco', label:'Desembaraço' },
+  { id:'desembaraco', label:'Desembaraço' }, { id:'financeiro', label:'Financeiro' }, { id:'numerario', label:'Numerário' },
 ];
 // Status na ordem do fluxo (são as colunas do quadro de cards). "legado": só aparece em processos antigos.
 const PROC_STATUS = {
@@ -1823,7 +1823,7 @@ function novoProcesso(){
     transporte:{ modal:'maritimo', tipoCarga:'FCL', containerTipo:"40' HC", containerQtd:'', agenteCarga:'', armador:'', navioVoo:'',
                  booking:'', conhecimentoMaster:'', conhecimentoHouse:'', origem:'', destino:'', etd:'', eta:'', chegada:'',
                  freeTime:'', volumes:'', pesoBruto:'', cubagem:'' },
-    financeiro:{ taxaCambio:'', frete:'', freteMoeda:'USD', seguro:'', seguroMoeda:'USD', condicaoPagamento:'', banco:'', contratoCambio:'', parcelas:[] },
+    financeiro:{ taxaCambio:'', frete:'', freteMoeda:'USD', taxaCambioFrete:'', seguro:'', seguroMoeda:'USD', taxaCambioSeguro:'', condicaoPagamento:'', banco:'', contratoCambio:'', parcelas:[] },
     desembaraco:{ despachante:'', recinto:'', urf:'', tipoDeclaracao:'DUIMP', numeroDeclaracao:'', dataRegistro:'', canal:'', dataDesembaraco:'',
                   liNecessaria:'nao', numeroLi:'', tributos:{ ii:'', ipi:'', pis:'', cofins:'', icms:'', siscomex:'', afrmm:'', armazenagem:'' }, observacoes:'' },
   };
@@ -1867,7 +1867,7 @@ const saveDraftProcesso = debounce(()=>{ if(state.procDraft) storeSet('processo:
 // --------- Lista, cards e Template ---------
 // Catálogo de tudo o que pode aparecer na lista ou nos cards: todos os campos das janelas do processo,
 // agrupados pela janela de origem. Cada usuário escolhe os seus em Template (salvo nas preferências do perfil).
-const PROC_JANELAS_TEMPLATE = ['Geral', 'Cliente', 'Produto', 'Transporte', 'Financeiro', 'Desembaraço'];
+const PROC_JANELAS_TEMPLATE = ['Geral', 'Cliente', 'Produto', 'Transporte', 'Desembaraço', 'Financeiro', 'Numerário'];
 const PROC_CAMPOS = (()=>{
   const data = v => v ? fmtDateOnly(v) : '';
   const lista = (arr, k) => [...new Set((arr||[]).map(x=>x[k]).filter(Boolean))].join(', ');
@@ -1932,6 +1932,13 @@ const PROC_CAMPOS = (()=>{
     ['Desembaraço', 'desembaraco.totalTributos', 'Total de tributos e despesas', p=>{ const v = t(p).tributos; return v ? fmtMoeda(v, 'BRL') : ''; }],
     ...PROC_TRIBUTOS.map(([k,l])=>['Desembaraço', 'desembaraco.tributos.'+k, l, p=>{ const v = numProcSimples(((p.desembaraco||{}).tributos||{})[k]); return v ? fmtMoeda(v, 'BRL') : ''; }]),
     ['Desembaraço', 'desembaraco.observacoes', 'Observações do desembaraço'],
+
+    ['Numerário', 'numerario.mercadoriaBRL', 'Mercadoria em reais', p=>{ const x = computeNumerarioProcesso(p); return x.cambio ? fmtBRL(x.mercadoriaBRL) : ''; }],
+    ['Numerário', 'numerario.valorAduaneiro', 'Valor aduaneiro (R$)', p=>{ const v = computeNumerarioProcesso(p).valorAduaneiro; return v ? fmtBRL(v) : ''; }],
+    ['Numerário', 'numerario.tributos', 'Tributos (II, IPI, PIS, COFINS, ICMS)', p=>{ const v = computeNumerarioProcesso(p).impostosTotal; return v ? fmtBRL(v) : ''; }],
+    ['Numerário', 'numerario.despesas', 'Despesas (Siscomex, AFRMM, armazenagem)', p=>{ const v = computeNumerarioProcesso(p).despesasTotal; return v ? fmtBRL(v) : ''; }],
+    ['Numerário', 'numerario.custoTotal', 'Custo total da importação', p=>{ const v = computeNumerarioProcesso(p).custoSemCredito; return v ? fmtBRL(v) : ''; }],
+    ['Numerário', 'numerario.custoComCredito', 'Custo total com créditos (Lucro Real)', p=>{ const v = computeNumerarioProcesso(p).custoComCredito; return v ? fmtBRL(v) : ''; }],
   ];
   return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor: valor || (p=>{ const v = getPath(p, id); return v==null ? '' : String(v); }), ...(extra||{}) }));
 })();
@@ -2131,6 +2138,9 @@ function catalogoFiltrosProc(){
     'desembaraco.canal': { tipo:'opcao', valores:p=>[(p.desembaraco||{}).canal], opcoes:()=>Object.entries(PROC_CANAIS).filter(([k])=>k) },
     'desembaraco.dataDesembaraco': { tipo:'periodo', valores:p=>data((p.desembaraco||{}).dataDesembaraco) },
     'desembaraco.totalTributos': { tipo:'faixa', valores:p=>[String(t(p).tributos)] },
+    ...Object.fromEntries([['numerario.mercadoriaBRL','mercadoriaBRL'],['numerario.valorAduaneiro','valorAduaneiro'],['numerario.tributos','impostosTotal'],
+      ['numerario.despesas','despesasTotal'],['numerario.custoTotal','custoSemCredito'],['numerario.custoComCredito','custoComCredito']]
+      .map(([id, k])=>[id, { tipo:'faixa', valores:p=>{ const v = computeNumerarioProcesso(p)[k]; return v ? [String(v)] : []; } }])),
   };
   PROC_TRIBUTOS.forEach(([k])=>{ especial['desembaraco.tributos.'+k] = { tipo:'faixa', valores:p=>n(((p.desembaraco||{}).tributos||{})[k]) }; });
   const busca = { id:'busca', label:'Busca em qualquer campo', janela:'Geral', tipo:'texto', placeholder:'Buscar…',
@@ -2451,7 +2461,8 @@ function renderProcessoForm(){
   const aba = state.procTab || 'cliente';
   const i = PROC_ABAS.findIndex(a=>a.id===aba);
   const titulo = state.currentProcessoId ? `Processo ${state.currentProcessoId}` : 'Cadastrar Novo Processo';
-  const conteudo = { cliente:procAbaCliente, produto:procAbaProduto, transporte:procAbaTransporte, financeiro:procAbaFinanceiro, desembaraco:procAbaDesembaraco }[aba]();
+  const conteudo = ({ cliente:procAbaCliente, produto:procAbaProduto, transporte:procAbaTransporte, desembaraco:procAbaDesembaraco,
+                     financeiro:procAbaFinanceiro, numerario:procAbaNumerario }[aba] || procAbaCliente)();
   const leitura = !podeSalvarProcesso();
   return `
   <div class="page-title">${esc(titulo)}</div>
@@ -2578,19 +2589,20 @@ function procAbaFinanceiro(){
     <td><button class="row-remove" title="Remover" data-action="proc-rm-parcela:${pc.id}">${ICONS.trash}</button></td>
   </tr>`).join('');
   return `<div class="card">
-    <div class="section-title" style="margin-bottom:16px;"><span class="num">05</span> Valores e câmbio</div>
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">07</span> Valores e câmbio</div>
     <div class="field-row grid-4">
       ${procCampo('financeiro.taxaCambio', `Taxa de câmbio (R$ por ${moeda})`, { type:'number', step:'any', placeholder:'Ex.: 5,35' })}
       ${procCampo('financeiro.frete', 'Frete internacional', { type:'number', step:'any' })}
       ${procCampo('financeiro.freteMoeda', 'Moeda do frete', { options: opcoesLista(PROC_MOEDAS) })}
-      <div></div>
+      ${f.freteMoeda!==moeda && f.freteMoeda!=='BRL' ? procCampo('financeiro.taxaCambioFrete', `Câmbio do frete (R$ por ${esc(f.freteMoeda)})`, { type:'number', step:'any' }) : '<div></div>'}
       ${procCampo('financeiro.seguro', 'Seguro internacional', { type:'number', step:'any' })}
       ${procCampo('financeiro.seguroMoeda', 'Moeda do seguro', { options: opcoesLista(PROC_MOEDAS) })}
+      ${f.seguroMoeda!==moeda && f.seguroMoeda!=='BRL' ? procCampo('financeiro.taxaCambioSeguro', `Câmbio do seguro (R$ por ${esc(f.seguroMoeda)})`, { type:'number', step:'any' }) : ''}
     </div>
     <div class="proc-resumo" id="proc-resumo">${procResumoHtml(tot)}</div>
   </div>
   <div class="card">
-    <div class="section-title" style="margin-bottom:16px;"><span class="num">06</span> Pagamento ao exterior</div>
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">08</span> Pagamento ao exterior</div>
     <div class="field-row grid-3">
       ${procCampo('financeiro.condicaoPagamento', 'Condição de pagamento', { placeholder:'Ex.: 30% antecipado, 70% contra BL' })}
       ${procCampo('financeiro.banco', 'Banco do câmbio')}
@@ -2616,7 +2628,7 @@ function procAbaDesembaraco(){
   const d = state.procDraft.desembaraco;
   const tot = totaisProcesso(state.procDraft);
   return `<div class="card">
-    <div class="section-title" style="margin-bottom:16px;"><span class="num">07</span> Desembaraço aduaneiro</div>
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">05</span> Desembaraço aduaneiro</div>
     <div class="field-row grid-4">
       ${procCampoEmpresa('proc-despachante', { span:2 })}
       ${procCampo('desembaraco.recinto', 'Recinto alfandegado / terminal', { span:2 })}
@@ -2632,13 +2644,200 @@ function procAbaDesembaraco(){
     </div>
   </div>
   <div class="card">
-    <div class="section-title" style="margin-bottom:16px;"><span class="num">08</span> Tributos e despesas (R$)</div>
+    <div class="section-title" style="margin-bottom:16px;"><span class="num">06</span> Tributos e despesas (R$)</div>
     <div class="field-row grid-4">
       ${PROC_TRIBUTOS.map(([k,l])=>procCampo('desembaraco.tributos.'+k, l, { type:'number', step:'any', placeholder:'0,00' })).join('')}
     </div>
     <div class="proc-total-tributos">Total: <b id="proc-total-tributos">${fmtMoeda(tot.tributos, 'BRL')}</b></div>
     <div class="field-row" style="margin-top:16px;">${procCampo('desembaraco.observacoes', 'Observações do desembaraço', { textarea:true })}</div>
   </div>`;
+}
+
+
+// --------- Numerário do processo ---------
+// Resumo de todos os custos da operação a partir das janelas anteriores (mesmos moldes do Numerário das cotações):
+// mercadoria, frete e seguro convertidos em reais, valor aduaneiro, tributos e despesas do Desembaraço,
+// e o rateio por produto (frete pelo peso líquido; seguro, tributos e despesas pelo valor).
+const PROC_TRIBUTOS_IMPOSTOS = ['ii','ipi','pis','cofins','icms'];
+const PROC_TRIBUTOS_CREDITO = ['ipi','pis','cofins','icms'];   // geram crédito no Lucro Real
+// Taxa (R$ por unidade) de uma moeda do processo: real = 1; moeda da mercadoria = câmbio do Financeiro;
+// outra moeda do frete/seguro = câmbio próprio informado no Financeiro.
+function cambioProcesso(p, moeda, campoProprio){
+  const f = p.financeiro;
+  if(moeda==='BRL') return 1;
+  if(moeda===(p.produto.moeda||'USD')) return numProcSimples(f.taxaCambio);
+  return numProcSimples(f[campoProprio]);
+}
+function computeNumerarioProcesso(proc){
+  const p = normalizarProcesso(proc), f = p.financeiro, tr = p.desembaraco.tributos || {};
+  const moeda = p.produto.moeda || 'USD';
+  const cambio = moeda==='BRL' ? 1 : numProcSimples(f.taxaCambio);
+  const cambioFrete = cambioProcesso(p, f.freteMoeda||'USD', 'taxaCambioFrete');
+  const cambioSeguro = cambioProcesso(p, f.seguroMoeda||'USD', 'taxaCambioSeguro');
+  const freteExt = numProcSimples(f.frete), seguroExt = numProcSimples(f.seguro);
+  const freteBRL = freteExt*cambioFrete, seguroBRL = seguroExt*cambioSeguro;
+  const imposto = k => numProcSimples(tr[k]);
+  const despesasLista = PROC_TRIBUTOS.filter(([k])=>!PROC_TRIBUTOS_IMPOSTOS.includes(k));
+  const despesasTotal = despesasLista.reduce((s,[k])=>s + imposto(k), 0);
+  const impostosTotal = PROC_TRIBUTOS_IMPOSTOS.reduce((s,k)=>s + imposto(k), 0);
+  const creditoTotal = PROC_TRIBUTOS_CREDITO.reduce((s,k)=>s + imposto(k), 0);
+
+  const itens = (p.produto.itens||[]).filter(i=>i.produto || i.quantidade || i.valorUnit).map(i=>{
+    const qty = numProcSimples(i.quantidade), vu = numProcSimples(i.valorUnit), peso = numProcSimples(i.pesoLiquido);
+    return { produto:i.produto, ncm:i.ncm, unidade:i.unidade, qty, vu, peso, totalExt: qty*vu, totalBRL: qty*vu*cambio };
+  });
+  const somaExt = itens.reduce((s,i)=>s + i.totalExt, 0), somaPeso = itens.reduce((s,i)=>s + i.peso, 0);
+  const n = itens.length || 1;
+  const linhas = itens.map(i=>{
+    const valorShare = somaExt>0 ? i.totalExt/somaExt : 1/n;
+    const pesoShare = somaPeso>0 ? i.peso/somaPeso : valorShare;   // sem pesos, o frete vai pelo valor
+    const rateioFrete = pesoShare*freteBRL, rateioSeguro = valorShare*seguroBRL;
+    const valorAduaneiro = i.totalBRL + rateioFrete + rateioSeguro;
+    const tributos = Object.fromEntries(PROC_TRIBUTOS_IMPOSTOS.map(k=>[k, valorShare*imposto(k)]));
+    const despesas = valorShare*despesasTotal;
+    const credito = PROC_TRIBUTOS_CREDITO.reduce((s,k)=>s + tributos[k], 0);
+    const custoSemCredito = valorAduaneiro + PROC_TRIBUTOS_IMPOSTOS.reduce((s,k)=>s + tributos[k], 0) + despesas;
+    const custoComCredito = custoSemCredito - credito;
+    return { ...i, rateioFrete, rateioSeguro, valorAduaneiro, ...tributos, despesas, custoSemCredito, custoComCredito,
+      unitSemCredito: i.qty>0 ? custoSemCredito/i.qty : 0, unitComCredito: i.qty>0 ? custoComCredito/i.qty : 0 };
+  });
+  const soma = k => linhas.reduce((s,l)=>s + (l[k]||0), 0);
+  const totais = Object.fromEntries(['qty','peso','totalExt','totalBRL','rateioFrete','rateioSeguro','valorAduaneiro',...PROC_TRIBUTOS_IMPOSTOS,'despesas','custoSemCredito','custoComCredito'].map(k=>[k, soma(k)]));
+  const mercadoriaBRL = somaExt*cambio;
+  const valorAduaneiro = mercadoriaBRL + freteBRL + seguroBRL;
+  const avisos = [];
+  if(somaExt>0 && !cambio) avisos.push(`Informe a taxa de câmbio (R$ por ${moeda}) na janela Financeiro.`);
+  if(freteExt && !cambioFrete) avisos.push(`Informe o câmbio do frete (R$ por ${f.freteMoeda}) na janela Financeiro.`);
+  if(seguroExt && !cambioSeguro) avisos.push(`Informe o câmbio do seguro (R$ por ${f.seguroMoeda}) na janela Financeiro.`);
+  return { p, moeda, cambio, cambioFrete, cambioSeguro, freteExt, seguroExt, freteBRL, seguroBRL, mercadoriaExt: somaExt, mercadoriaBRL,
+    valorAduaneiro, imposto, impostosTotal, creditoTotal, despesasLista, despesasTotal,
+    custoSemCredito: valorAduaneiro + impostosTotal + despesasTotal, custoComCredito: valorAduaneiro + impostosTotal + despesasTotal - creditoTotal,
+    linhas, totais, avisos };
+}
+const fmtTaxaProc = v => v ? fmtNum(v, 4) : '—';
+
+function procAbaNumerario(){
+  const nm = computeNumerarioProcesso(state.procDraft), p = nm.p, M = nm.moeda;
+  const linhaResumo = (rot, ext, brl, taxa, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${rot}</td><td class="num-mono">${ext}</td><td class="num-mono">${brl}</td><td class="num-mono">${taxa}</td></tr>`;
+  const resumo = [
+    linhaResumo(`Mercadoria (${esc(p.produto.incoterm||'—')})`, fmtMoeda(nm.mercadoriaExt, M), fmtBRL(nm.mercadoriaBRL), fmtTaxaProc(nm.cambio)),
+    linhaResumo('Frete internacional', nm.freteExt ? fmtMoeda(nm.freteExt, p.financeiro.freteMoeda) : '—', fmtBRL(nm.freteBRL), nm.freteExt ? fmtTaxaProc(nm.cambioFrete) : ''),
+    linhaResumo('Seguro internacional', nm.seguroExt ? fmtMoeda(nm.seguroExt, p.financeiro.seguroMoeda) : '—', fmtBRL(nm.seguroBRL), nm.seguroExt ? fmtTaxaProc(nm.cambioSeguro) : ''),
+    linhaResumo('<b>Valor aduaneiro (CIF)</b>', '', `<b>${fmtBRL(nm.valorAduaneiro)}</b>`, ''),
+    ...PROC_TRIBUTOS.filter(([k])=>PROC_TRIBUTOS_IMPOSTOS.includes(k)).map(([k,l])=>linhaResumo(l, '', fmtBRL(nm.imposto(k)), '')),
+    ...nm.despesasLista.map(([k,l])=>linhaResumo(l, '', fmtBRL(nm.imposto(k)), '')),
+  ].join('');
+  const rows = nm.linhas.length ? nm.linhas.map(l=>`<tr>
+      <td>${esc(l.produto)||'—'}</td><td>${esc(l.ncm)||'—'}</td>
+      <td class="num-mono">${fmtNum(l.qty)}</td><td class="num-mono">${fmtMoeda(l.vu, M)}</td><td class="num-mono">${fmtNum(l.peso)} kg</td>
+      <td class="num-mono">${fmtMoeda(l.totalExt, M)}</td><td class="num-mono">${fmtBRL(l.totalBRL)}</td>
+      <td class="num-mono">${fmtBRL(l.rateioFrete)}</td><td class="num-mono">${fmtBRL(l.rateioSeguro)}</td><td class="num-mono">${fmtBRL(l.valorAduaneiro)}</td>
+      ${PROC_TRIBUTOS_IMPOSTOS.map(k=>`<td class="num-mono">${fmtBRL(l[k])}</td>`).join('')}
+      <td class="num-mono">${fmtBRL(l.despesas)}</td>
+      <td class="num-mono" style="font-weight:700;">${fmtBRL(l.custoSemCredito)}</td><td class="num-mono">${fmtBRL(l.unitSemCredito)}</td>
+      <td class="num-mono" style="font-weight:700;">${fmtBRL(l.custoComCredito)}</td><td class="num-mono">${fmtBRL(l.unitComCredito)}</td>
+    </tr>`).join('') : `<tr><td colspan="20" style="text-align:center; color:var(--ink-soft); padding:24px;">Nenhum item preenchido na janela Produto ainda.</td></tr>`;
+  const T = nm.totais;
+  const obs = [p.cliente.observacoes, p.desembaraco.observacoes].filter(Boolean);
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">09</span> Resumo das despesas</div>
+    <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 14px;">Leitura automática das janelas Produto, Transporte, Desembaraço e Financeiro. Os valores mudam assim que essas janelas são alteradas.</p>
+    ${nm.avisos.length ? `<div class="alert alert-amber" style="margin-bottom:14px;">${nm.avisos.map(esc).join('<br>')}</div>` : ''}
+    <div class="table-wrap" style="margin-bottom:8px;">
+      <table><thead><tr><th>Despesa</th><th class="num-mono">Moeda ext.</th><th class="num-mono">Moeda R$</th><th class="num-mono">Taxa</th></tr></thead>
+      <tbody>${resumo}</tbody>
+      <tfoot><tr><td colspan="2">CUSTO TOTAL DA IMPORTAÇÃO</td><td class="num-mono">${fmtBRL(nm.custoSemCredito)}</td><td></td></tr></tfoot></table>
+    </div>
+    <div class="kpi-row" style="margin-top:16px;">
+      <div class="kpi"><div class="k-lbl">Valor aduaneiro</div><div class="k-val">${fmtBRL(nm.valorAduaneiro)}</div></div>
+      <div class="kpi"><div class="k-lbl">Tributos</div><div class="k-val">${fmtBRL(nm.impostosTotal)}</div></div>
+      <div class="kpi"><div class="k-lbl">Despesas</div><div class="k-val">${fmtBRL(nm.despesasTotal)}</div></div>
+      <div class="kpi"><div class="k-lbl">Custo total</div><div class="k-val">${fmtBRL(nm.custoSemCredito)}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:12px;"><span class="num">10</span> Rateio dos custos por produto</div>
+    <div class="table-wrap" style="margin-bottom:10px;">
+      <table style="min-width:1700px;">
+        <thead>
+          <tr>
+            <th rowspan="2">Produto</th><th rowspan="2">NCM</th><th rowspan="2" class="num-mono">Qtd.</th><th rowspan="2" class="num-mono">Vlr unit.</th><th rowspan="2" class="num-mono">Peso líq.</th>
+            <th rowspan="2" class="num-mono">Vlr total ${esc(M)}</th><th rowspan="2" class="num-mono">Vlr total R$</th>
+            <th rowspan="2" class="num-mono">Rateio frete</th><th rowspan="2" class="num-mono">Rateio seguro</th><th rowspan="2" class="num-mono">Vlr aduaneiro</th>
+            ${PROC_TRIBUTOS_IMPOSTOS.map(k=>`<th rowspan="2" class="num-mono">${PROC_TRIBUTOS.find(([x])=>x===k)[1]}</th>`).join('')}
+            <th rowspan="2" class="num-mono">Despesas</th>
+            <th colspan="2" style="text-align:center;">Sem crédito (Simples Nacional)</th><th colspan="2" style="text-align:center;">Com crédito (Lucro Real)</th>
+          </tr>
+          <tr><th class="num-mono">Custo total</th><th class="num-mono">Custo unit.</th><th class="num-mono">Custo total</th><th class="num-mono">Custo unit.</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr>
+          <td colspan="2">TOTAL</td><td class="num-mono">${fmtNum(T.qty)}</td><td></td><td class="num-mono">${fmtNum(T.peso)} kg</td>
+          <td class="num-mono">${fmtMoeda(T.totalExt, M)}</td><td class="num-mono">${fmtBRL(T.totalBRL)}</td>
+          <td class="num-mono">${fmtBRL(T.rateioFrete)}</td><td class="num-mono">${fmtBRL(T.rateioSeguro)}</td><td class="num-mono">${fmtBRL(T.valorAduaneiro)}</td>
+          ${PROC_TRIBUTOS_IMPOSTOS.map(k=>`<td class="num-mono">${fmtBRL(T[k])}</td>`).join('')}
+          <td class="num-mono">${fmtBRL(T.despesas)}</td>
+          <td class="num-mono">${fmtBRL(T.custoSemCredito)}</td><td></td><td class="num-mono">${fmtBRL(T.custoComCredito)}</td><td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <p class="hint" style="color:var(--ink-soft); font-size:12px; margin-top:0;">
+      Frete rateado pelo peso líquido (pelo valor, se não houver pesos); seguro, tributos e despesas pelo valor da mercadoria.
+      Sem crédito: todos os tributos integram o custo. Com crédito (Lucro Real): IPI, PIS, COFINS e ICMS geram crédito e saem do custo.
+    </p>
+  </div>
+  ${obs.length ? `<div class="card">
+    <div class="section-title" style="margin-bottom:12px;"><span class="num">11</span> Observações</div>
+    <div style="white-space:pre-wrap; font-size:13.5px; line-height:1.55; color:var(--ink);">${obs.map(esc).join('\n\n')}</div>
+  </div>` : ''}
+  <div class="btn-row"><button class="btn btn-ghost" data-action="proc-numerario-pdf">${ICONS.download} Baixar PDF do Numerário</button></div>`;
+}
+
+async function baixarNumerarioProcessoPdf(){
+  const nm = computeNumerarioProcesso(state.procDraft), p = nm.p, M = nm.moeda;
+  if(!nm.linhas.length){ toast('Preencha ao menos um item na janela Produto antes de exportar.'); return; }
+  if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){ toast('Não foi possível carregar o gerador de PDF. Recarregue a página.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+  prepararFundoPdf(doc);
+  const numero = state.currentProcessoId || 'Processo não salvo';
+  pdfHeader(doc, 'Numerário do Processo', `${numero}${p.cliente.nome ? ' · ' + p.cliente.nome : ''}`, fmtDate(new Date().toISOString()));
+  const cab = { fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf() };
+  let y = 76;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(75,90,104);
+  const info = [p.produto.fornecedor && 'Fornecedor: ' + p.produto.fornecedor, 'Incoterm: ' + (p.produto.incoterm||'—'),
+    PROC_MODAIS[p.transporte.modal] && 'Modal: ' + PROC_MODAIS[p.transporte.modal],
+    (p.transporte.origem||p.transporte.destino) && `Rota: ${p.transporte.origem||'—'} -> ${p.transporte.destino||'—'}`,
+    p.desembaraco.numeroDeclaracao && `${p.desembaraco.tipoDeclaracao}: ${p.desembaraco.numeroDeclaracao}`].filter(Boolean).join('   ·   ');
+  doc.text(info, 28, y); y += 12;
+  y = pdfKpiCards(doc, y, [
+    { label:'Valor aduaneiro', value:fmtBRL(nm.valorAduaneiro) }, { label:'Tributos', value:fmtBRL(nm.impostosTotal) },
+    { label:'Despesas', value:fmtBRL(nm.despesasTotal) }, { label:'Custo total', value:fmtBRL(nm.custoSemCredito) } ]) + 14;
+  const resumo = [
+    [`Mercadoria (${p.produto.incoterm||'—'})`, fmtMoeda(nm.mercadoriaExt, M), fmtBRL(nm.mercadoriaBRL), fmtTaxaProc(nm.cambio)],
+    ['Frete internacional', nm.freteExt ? fmtMoeda(nm.freteExt, p.financeiro.freteMoeda) : '—', fmtBRL(nm.freteBRL), nm.freteExt ? fmtTaxaProc(nm.cambioFrete) : ''],
+    ['Seguro internacional', nm.seguroExt ? fmtMoeda(nm.seguroExt, p.financeiro.seguroMoeda) : '—', fmtBRL(nm.seguroBRL), nm.seguroExt ? fmtTaxaProc(nm.cambioSeguro) : ''],
+    ['Valor aduaneiro (CIF)', '', fmtBRL(nm.valorAduaneiro), ''],
+    ...PROC_TRIBUTOS.map(([k,l])=>[l, '', fmtBRL(nm.imposto(k)), '']),
+  ];
+  doc.autoTable({ startY:y, head:[['Despesa','Moeda ext.','Moeda R$','Taxa']], body:resumo, foot:[['Custo total da importação','',fmtBRL(nm.custoSemCredito),'']],
+    theme:'grid', margin:{ left:28, right:28 }, tableWidth:420, styles:{ fontSize:8, cellPadding:3 }, headStyles:cab, footStyles:cab,
+    columnStyles:{ 1:{ halign:'right' }, 2:{ halign:'right' }, 3:{ halign:'right' } } });
+  y = doc.lastAutoTable.finalY + 18;
+  const T = nm.totais, impostos = PROC_TRIBUTOS_IMPOSTOS.map(k=>PROC_TRIBUTOS.find(([x])=>x===k)[1]);
+  doc.autoTable({ startY:y,
+    head:[['Produto','NCM','Qtd.','Vlr unit.','Vlr total '+M,'Vlr total R$','Frete','Seguro','Vlr aduaneiro',...impostos,'Despesas','Custo s/ crédito','Unit. s/ crédito','Custo c/ crédito','Unit. c/ crédito']],
+    body: nm.linhas.map(l=>[l.produto||'—', l.ncm||'—', fmtNum(l.qty), fmtMoeda(l.vu, M), fmtMoeda(l.totalExt, M), fmtBRL(l.totalBRL), fmtBRL(l.rateioFrete), fmtBRL(l.rateioSeguro),
+      fmtBRL(l.valorAduaneiro), ...PROC_TRIBUTOS_IMPOSTOS.map(k=>fmtBRL(l[k])), fmtBRL(l.despesas), fmtBRL(l.custoSemCredito), fmtBRL(l.unitSemCredito), fmtBRL(l.custoComCredito), fmtBRL(l.unitComCredito)]),
+    foot:[['TOTAL','',fmtNum(T.qty),'',fmtMoeda(T.totalExt, M),fmtBRL(T.totalBRL),fmtBRL(T.rateioFrete),fmtBRL(T.rateioSeguro),fmtBRL(T.valorAduaneiro),
+      ...PROC_TRIBUTOS_IMPOSTOS.map(k=>fmtBRL(T[k])),fmtBRL(T.despesas),fmtBRL(T.custoSemCredito),'',fmtBRL(T.custoComCredito),'']],
+    theme:'grid', margin:{ left:28, right:28 }, styles:{ fontSize:6.3, cellPadding:2.2 }, headStyles:{ ...cab, fontSize:6.3 }, footStyles:{ ...cab, fontSize:6.3 },
+    didDrawPage:(info)=>{ doc.setFontSize(7.5); doc.setTextColor(120,130,140);
+      doc.text(`Página ${info.pageNumber}`, doc.internal.pageSize.getWidth() - 28, doc.internal.pageSize.getHeight() - 14, { align:'right' }); } });
+  y = doc.lastAutoTable.finalY + 12;
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(75,90,104);
+  doc.text(doc.splitTextToSize('Frete rateado pelo peso líquido; seguro, tributos e despesas pelo valor da mercadoria. Com crédito (Lucro Real): IPI, PIS, COFINS e ICMS saem do custo.', doc.internal.pageSize.getWidth()-56), 28, y);
+  await downloadPdfBlob(doc, `numerario-${String(numero).toLowerCase().replace(/\s+/g,'-')}.pdf`);
 }
 
 // Atualiza totais sem redesenhar a tela (para não perder o foco enquanto digita).
@@ -2657,7 +2856,7 @@ function atualizarTotaisProcesso(){
 }
 
 // Campos que mudam a estrutura da janela (redesenha) — o resto só guarda o valor.
-const PROC_REDESENHA = /^(transporte\.(modal|tipoCarga)|desembaraco\.(liNecessaria|tipoDeclaracao)|produto\.moeda|status)$/;
+const PROC_REDESENHA = /^(transporte\.(modal|tipoCarga)|desembaraco\.(liNecessaria|tipoDeclaracao)|financeiro\.(freteMoeda|seguroMoeda)|produto\.moeda|status)$/;
 function onProcessoInput(el, evento){
   const path = el.getAttribute('data-proc');
   if(!path || !state.procDraft) return false;
@@ -2779,6 +2978,7 @@ function acaoProcesso(cmd, a1){
     case 'proc-aba': state.procTab = a1; saveDraftProcesso(); renderApp(); window.scrollTo({ top:0, behavior:'instant' }); return true;
     case 'proc-cancelar': navigate('processos'); return true;
     case 'proc-salvar': salvarProcesso(); return true;
+    case 'proc-numerario-pdf': baixarNumerarioProcessoPdf(); return true;
     case 'proc-add-item': p.produto.itens.push(novoItemProcesso()); saveDraftProcesso(); renderApp(); return true;
     case 'proc-rm-item': p.produto.itens = p.produto.itens.filter(x=>x.id!==a1); saveDraftProcesso(); renderApp(); return true;
     case 'proc-add-parcela': p.financeiro.parcelas.push({ ...novaParcelaProcesso(), moeda: p.produto.moeda }); saveDraftProcesso(); renderApp(); return true;
@@ -3492,10 +3692,12 @@ async function exportarTela(tela, formato){
     pdfHeader(doc, d.titulo, `${empresa} · ${d.linhas.length} registro${d.linhas.length===1?'':'s'}`, fmtDate(new Date().toISOString()));
     let y = 74;
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(75,90,104);
-    const filtrosTxt = doc.splitTextToSize(d.filtros.length ? 'Filtros: ' + d.filtros.join(' · ') : 'Sem filtros aplicados', doc.internal.pageSize.getWidth() - 56);
+    const filtrosTxt = doc.splitTextToSize((d.filtros.length ? 'Filtros: ' + d.filtros.join(' · ') : 'Sem filtros aplicados').replace(/→/g, '->'), doc.internal.pageSize.getWidth() - 56);
     doc.text(filtrosTxt, 28, y); y += filtrosTxt.length * 11 + 6;
     const fonte = d.colunas.length > 12 ? 6 : d.colunas.length > 8 ? 7 : 8;
-    doc.autoTable({ startY:y, head:[d.colunas], body:d.linhas, theme:'grid', margin:{ left:28, right:28 },
+    // as fontes padrão do PDF não têm a seta "→" (sairia "!’")
+    const semSeta = x => String(x ?? '').replace(/→/g, '->');
+    doc.autoTable({ startY:y, head:[d.colunas.map(semSeta)], body:d.linhas.map(l=>l.map(semSeta)), theme:'grid', margin:{ left:28, right:28 },
       styles:{ fontSize:fonte, cellPadding:3, overflow:'linebreak', valign:'top' },
       headStyles:{ fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:fonte },
       didDrawPage:(info)=>{ doc.setFontSize(7.5); doc.setTextColor(120,130,140);
