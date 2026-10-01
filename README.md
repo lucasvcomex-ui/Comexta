@@ -38,6 +38,10 @@ Projeto `oirmqirfhwaypfkkdvuy` (região São Paulo).
 - **Cotações Salvas**: em Cards, cada cotação tem duplicar, baixar PDF e excluir. O botão **Template** tem
   **Configurar Card**, **Configurar Lista** e **Configurar Filtros** (quais filtros ficam na tela), por usuário,
   no mesmo padrão de Processos (`perfis.preferencias.cotacoes`).
+- **Cadastro → Clientes e Empresas**: uma lista só (chave `clientes:list`), com **Tipo de Cadastro** obrigatório
+  (Cliente, Fabricante, Fornecedor, Despachante Aduaneiro, Agente de Carga, Armador, Transportadora, Funcionário).
+  A antiga lista de Fornecedores é unida a ela automaticamente. Em Processos, Cliente, Agente de Carga e Despachante
+  só aceitam empresas cadastradas do tipo correspondente (sugestões a partir de 3 letras; outro texto é apagado).
 - **Rascunhos e filtros** ficam só no navegador, separados por usuário.
 - A chave publishable em `js/supabase-client.js` é pública por natureza; a proteção dos dados vem das regras RLS.
 

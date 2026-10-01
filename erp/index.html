@@ -685,7 +685,7 @@ const SECAO_DA_CHAVE = {
 };
 const ESTADO_DA_CHAVE = {
   'cotacoes:index':'cotacoesIndex', 'cotacoesFormal:index':'cotacoesFormalIndex', 'simulacoes:index':'simulacoesIndex',
-  'clientes:list':'clientes', 'fornecedores:list':'fornecedores', 'produtos:list':'produtos',
+  'clientes:list':'clientes', 'produtos:list':'produtos',
   'processos:index':'processosIndex',
 };
 // Itens numerados em sequência: se dois usuários criarem o mesmo número ao mesmo tempo, o segundo é renumerado.
@@ -809,6 +809,7 @@ function aplicarNoEstado(key, valor){
   const campo = ESTADO_DA_CHAVE[key];
   if(!campo) return;
   if(key==='produtos:list') state.produtos = (valor||[]).map(normalizeProdutoCadastro);
+  else if(key==='clientes:list') state.clientes = (valor||[]).map(e=>({ ...e, tipoCadastro: e.tipoCadastro || 'cliente' }));
   else state[campo] = valor || [];
 }
 
@@ -2155,6 +2156,63 @@ function onTemplateCampo(el){
   return true;
 }
 
+// --------- Campos de empresa (Cliente, Agente de Carga, Despachante) ---------
+// Só aceitam empresas de Cadastro → Clientes e Empresas do tipo certo: ao digitar 3 letras aparecem as
+// sugestões; ao sair do campo, um nome que não é de empresa cadastrada é apagado.
+const PROC_EMPRESA_CAMPOS = {
+  'proc-cliente':     { path:'cliente.nome',            tipo:'cliente',      label:'Cliente' },
+  'proc-agente':      { path:'transporte.agenteCarga',  tipo:'agente_carga', label:'Agente de carga' },
+  'proc-despachante': { path:'desembaraco.despachante', tipo:'despachante',  label:'Despachante aduaneiro' },
+};
+function procCampoEmpresa(chave, opts){
+  const c = PROC_EMPRESA_CAMPOS[chave];
+  const qtd = empresasDoTipo(c.tipo).length;
+  const tipoNome = TIPOS_CADASTRO[c.tipo];
+  const v = getPath(state.procDraft, c.path) || '';
+  const span = opts && opts.span ? ` style="grid-column:span ${opts.span};"` : '';
+  const dica = qtd
+    ? `Digite 3 letras e escolha uma empresa cadastrada como "${tipoNome}".`
+    : `Nenhuma empresa cadastrada como "${tipoNome}". Cadastre em Cadastro → Clientes e Empresas.`;
+  return `<div class="field"${span}><label>${c.label}</label>
+    <input data-proc="${c.path}" data-proc-empresa="${chave}" value="${esc(v)}" placeholder="Digite 3 letras para buscar…" autocomplete="off">
+    <span class="hint ${qtd ? '' : 'aviso-lista'}">${dica}</span></div>`;
+}
+function empresaPorNome(tipo, nome){
+  const n = String(nome||'').trim().toLowerCase();
+  return n ? empresasDoTipo(tipo).find(e=>nomeEmpresaCad(e).trim().toLowerCase()===n) : null;
+}
+// Confere o campo: vazio ou empresa cadastrada do tipo certo. Se não for, apaga (e avisa, se pedido).
+function validarEmpresaProcesso(chave, avisar){
+  const c = PROC_EMPRESA_CAMPOS[chave];
+  const v = String(getPath(state.procDraft, c.path)||'').trim();
+  if(!v) return true;
+  const e = empresaPorNome(c.tipo, v);
+  if(e){ setPath(state.procDraft, c.path, nomeEmpresaCad(e)); return true; }
+  setPath(state.procDraft, c.path, '');
+  if(avisar){
+    toast(`"${v}" não é uma empresa cadastrada como ${TIPOS_CADASTRO[c.tipo]}. O campo ${c.label} ficou em branco.`);
+    renderApp();
+  }
+  return false;
+}
+function escolherEmpresaProcesso(chave, empresa){
+  const c = PROC_EMPRESA_CAMPOS[chave];
+  setPath(state.procDraft, c.path, nomeEmpresaCad(empresa));
+  if(chave==='proc-cliente'){
+    // Traz CNPJ e o primeiro contato do cadastro para os campos vazios
+    const cli = state.procDraft.cliente;
+    const ct = ((empresa.enderecos||[])[0]||{}).contatos ? empresa.enderecos[0].contatos[0] : null;
+    if(!cli.cnpjCpf) cli.cnpjCpf = empresa.cnpjCpf || '';
+    if(ct){
+      if(!cli.contato) cli.contato = ct.nome || '';
+      if(!cli.email) cli.email = ct.email || '';
+      if(!cli.telefone && ct.telefone) cli.telefone = [ct.ddd ? '('+ct.ddd+')' : '', ct.telefone].filter(Boolean).join(' ');
+    }
+  }
+  saveDraftProcesso();
+  renderApp();
+}
+
 // --------- Formulário ---------
 function procCampo(path, label, opts){
   const o = opts || {};
@@ -2209,10 +2267,8 @@ function procAbaCliente(){
   const c = state.procDraft.cliente;
   return `<div class="card">
     <div class="section-title" style="margin-bottom:16px;"><span class="num">01</span> Cliente</div>
-    <datalist id="dl-proc-clientes">${state.clientes.map(x=>`<option value="${esc(nomeCadastro(x))}">`).join('')}</datalist>
     <div class="field-row grid-3">
-      ${procCampo('cliente.nome', 'Cliente (nome ou razão social)', { list:'dl-proc-clientes', placeholder:'Digite ou escolha um cliente cadastrado', span:2,
-         hint: state.clientes.length ? 'Ao escolher um cliente cadastrado, o CNPJ/CPF é preenchido.' : '' })}
+      ${procCampoEmpresa('proc-cliente', { span:2 })}
       ${procCampo('cliente.cnpjCpf', 'CNPJ/CPF', { placeholder:'00.000.000/0000-00' })}
       ${procCampo('cliente.contato', 'Contato')}
       ${procCampo('cliente.email', 'E-mail', { type:'email' })}
@@ -2276,7 +2332,7 @@ function procAbaTransporte(){
       ${maritimo ? procCampo('transporte.tipoCarga', 'Tipo de carga', { options:[['FCL','FCL (container cheio)'],['LCL','LCL (carga consolidada)'],['BREAK','Carga solta / break bulk']] }) : ''}
       ${maritimo && t.tipoCarga==='FCL' ? procCampo('transporte.containerTipo', 'Tipo de container', { options: opcoesLista(["20' DC","40' DC","40' HC","20' RF","40' RF","20' OT","40' OT","20' FR","40' FR"]) }) : ''}
       ${maritimo && t.tipoCarga==='FCL' ? procCampo('transporte.containerQtd', 'Qtd. de containers', { type:'number', step:'1' }) : ''}
-      ${procCampo('transporte.agenteCarga', 'Agente de carga / forwarder', { span:2 })}
+      ${procCampoEmpresa('proc-agente', { span:2 })}
       ${procCampo('transporte.armador', maritimo ? 'Armador' : aereo ? 'Companhia aérea' : 'Transportadora')}
       ${procCampo('transporte.navioVoo', maritimo ? 'Navio / viagem' : aereo ? 'Voo' : 'Veículo / placa')}
       ${procCampo('transporte.booking', 'Booking')}
@@ -2348,7 +2404,7 @@ function procAbaDesembaraco(){
   return `<div class="card">
     <div class="section-title" style="margin-bottom:16px;"><span class="num">07</span> Desembaraço aduaneiro</div>
     <div class="field-row grid-4">
-      ${procCampo('desembaraco.despachante', 'Despachante aduaneiro', { span:2 })}
+      ${procCampoEmpresa('proc-despachante', { span:2 })}
       ${procCampo('desembaraco.recinto', 'Recinto alfandegado / terminal', { span:2 })}
       ${procCampo('desembaraco.urf', 'URF de despacho', { placeholder:'Ex.: 0817800 – Porto de Santos' , span:2 })}
       ${procCampo('desembaraco.tipoDeclaracao', 'Declaração', { options:[['DUIMP','DUIMP'],['DI','DI'],['DSI','DSI']] })}
@@ -2394,9 +2450,13 @@ function onProcessoInput(el, evento){
   const valor = el.type==='checkbox' ? el.checked : el.value;
   setPath(state.procDraft, path, valor);
   // Autopreenchimento a partir dos cadastros
-  if(evento==='change' && path==='cliente.nome'){
-    const c = state.clientes.find(x=>nomeCadastro(x)===valor);
-    if(c){ if(!state.procDraft.cliente.cnpjCpf) state.procDraft.cliente.cnpjCpf = c.cnpjCpf || ''; renderApp(); }
+  const campoEmpresa = Object.entries(PROC_EMPRESA_CAMPOS).find(([,c])=>c.path===path);
+  if(campoEmpresa){
+    if(evento==='input'){
+      if(String(valor).trim().length>=3) showAutocomplete(el, campoEmpresa[0], null); else hideAutocomplete();
+    }else validarEmpresaProcesso(campoEmpresa[0], true);
+    saveDraftProcesso();
+    return true;
   }
   const mItem = /^produto\.itens\.(\d+)\.produto$/.exec(path);
   if(evento==='change' && mItem){
@@ -2423,7 +2483,13 @@ function novoNumeroProcesso(){ return (state.processosIndex||[]).reduce((m,p)=>M
 async function salvarProcesso(){
   const p = state.procDraft;
   if(!p.cliente.dataAbertura){ renderApp(); return toast('Informe a data de abertura do processo.'); }
-  if(!p.cliente.nome.trim()){ state.procTab = 'cliente'; renderApp(); return toast('Informe o cliente do processo.'); }
+  const invalidos = Object.keys(PROC_EMPRESA_CAMPOS).filter(t=>!validarEmpresaProcesso(t, false));
+  if(invalidos.length){
+    renderApp();
+    toast('Apagado por não ser empresa cadastrada: ' + invalidos.map(t=>PROC_EMPRESA_CAMPOS[t].label).join(', ') + '. Escolha na lista e salve de novo.');
+    return;
+  }
+  if(!p.cliente.nome.trim()){ state.procTab = 'cliente'; renderApp(); return toast('Informe o cliente do processo (empresa cadastrada como Cliente).'); }
   const agora = new Date().toISOString();
   const copia = JSON.parse(JSON.stringify(p));
   if(state.currentProcessoId){
@@ -3236,8 +3302,7 @@ const state = {
   lightbox3D: null,            // {mode:'container'|'pallet', key, sub} — visualização 3D ampliada
   pendingDelete: null,        // 'kind:id' — confirmação de exclusão em 2 cliques (sem depender de window.confirm)
   cadFiltros: {
-    cliente:    {texto:'', status:'', tipoPessoa:'', regime:''},
-    fornecedor: {texto:'', status:'', tipoPessoa:'', regime:''},
+    cliente:    {texto:'', tipoCadastro:'', status:'', tipoPessoa:'', regime:''},
     produto:    {texto:'', categoria:'', fornecedorTipo:''},
   },
   dadosFormal: dadosFormalPadrao(),
@@ -3362,8 +3427,7 @@ async function loadInitialData(){
   ];
   if(draft) state.dados = normalizeDados(draft);
   if(idx) state.cotacoesIndex = idx;
-  if(cli) state.clientes = cli;
-  if(forn) state.fornecedores = forn;
+  await unificarEmpresas(cli, forn);
   if(prod) state.produtos = prod.map(normalizeProdutoCadastro);
   if(draftF) state.dadosFormal = normalizeDadosFormal(draftF);
   if(idxF) state.cotacoesFormalIndex = idxF;
@@ -3376,10 +3440,24 @@ async function limparFiltrosTodasPersistidos(){ await storeDelete('filtrosTodas:
 async function persistCotacoesIndex(){ await storeSet('cotacoes:index', state.cotacoesIndex); }
 async function persistCotacoesFormalIndex(){ await storeSet('cotacoesFormal:index', state.cotacoesFormalIndex); }
 async function persistSimulacoesIndex(){ await storeSet('simulacoes:index', state.simulacoesIndex); }
+// Une a antiga lista de Fornecedores à de Clientes (agora "Clientes e Empresas"). Quem pode gravar em
+// Cadastros salva a união e esvazia a lista antiga; os demais só veem a união.
+async function unificarEmpresas(cli, forn){
+  const clientes = (cli||[]).map(e=>({ ...e, tipoCadastro: e.tipoCadastro || 'cliente' }));
+  const fornecedores = (forn||[]).filter(x=>!clientes.some(c=>c.id===x.id)).map(e=>({ ...e, tipoCadastro: e.tipoCadastro || 'fornecedor' }));
+  state.clientes = [...clientes, ...fornecedores];
+  if(!fornecedores.length || !(pode('cadastros','criar') || pode('cadastros','editar'))) return;
+  if(!(await storeSet('clientes:list', state.clientes))) return;
+  const { data: v } = await sb.rpc('salvar_dado', { p_chave:'fornecedores:list', p_valor:[], p_versao: versoes['fornecedores:list']||0 });
+  if(v) versoes['fornecedores:list'] = v;
+}
 async function persistCadastro(tipo){
-  const map = {cliente:'clientes', fornecedor:'fornecedores', produto:'produtos'};
+  const map = {cliente:'clientes', produto:'produtos'};
   await storeSet(map[tipo]+':list', state[map[tipo]]);
 }
+
+Object.defineProperty(state, 'fornecedores', { configurable:true, enumerable:true, set(){},
+  get(){ return empresasDoTipo('fornecedor', 'fabricante'); } });
 
 /* --------------------------------- Rotas -------------------------------- */
 const ROUTE_META = {
@@ -3396,8 +3474,7 @@ const ROUTE_META = {
   'simEquipamentos': {group:'sim', label:'Equipamentos'},
   'simEmbalagem':    {group:'sim', label:'Embalagem'},
   'simResultado':    {group:'sim', label:'Resultado'},
-  'cad-cliente':    {group:'cad', label:'Cliente'},
-  'cad-fornecedor': {group:'cad', label:'Fornecedor'},
+  'cad-cliente':    {group:'cad', label:'Clientes e Empresas'},
   'cad-produto':    {group:'cad', label:'Produto'},
   'config':         {group:null, label:'Configurações'},
   'processos':      {group:'proc', label:'Processos'},
@@ -3479,8 +3556,7 @@ function topbarHtml(){
       <div class="nav-group">
         <button class="nav-btn ${meta.group==='cad'?'active':''}" data-action="toggle-nav:cad">${ICONS.users} Cadastro ${ICONS.chevronDown}</button>
         <div class="nav-dropdown ${state.navDropdown==='cad'?'open':''}">
-          <div class="nav-drop-item" data-action="go:cad-cliente">${ICONS.client} Cliente</div>
-          <div class="nav-drop-item" data-action="go:cad-fornecedor">${ICONS.supplier} Fornecedor</div>
+          <div class="nav-drop-item" data-action="go:cad-cliente">${ICONS.client} Clientes e Empresas</div>
           <div class="nav-drop-item" data-action="go:cad-produto">${ICONS.product} Produto</div>
         </div>
       </div>
@@ -3540,8 +3616,7 @@ function sideNavHtml(){
   }
   return `<div class="sidenav">
     <div class="grp-label">Cadastro</div>
-    <div class="side-link ${state.route==='cad-cliente'?'active':''}" data-action="go:cad-cliente">${ICONS.client} Cliente</div>
-    <div class="side-link ${state.route==='cad-fornecedor'?'active':''}" data-action="go:cad-fornecedor">${ICONS.supplier} Fornecedor</div>
+    <div class="side-link ${state.route==='cad-cliente'?'active':''}" data-action="go:cad-cliente">${ICONS.client} Clientes e Empresas</div>
     <div class="side-link ${state.route==='cad-produto'?'active':''}" data-action="go:cad-produto">${ICONS.product} Produto</div>
   </div>`;
 }
@@ -3561,7 +3636,6 @@ function viewFor(route){
     case 'simEmbalagem': return renderSimEmbalagem();
     case 'simResultado': return renderSimResultado();
     case 'cad-cliente': return renderCadastro('cliente');
-    case 'cad-fornecedor': return renderCadastro('fornecedor');
     case 'cad-produto': return renderCadastro('produto');
     case 'config': return renderConfig();
     case 'processos': return renderProcessos();
@@ -4176,18 +4250,22 @@ function acSearch(type, query){
   const q = String(query||'').trim().toLowerCase();
   if(q.length<3) return [];
   if(type==='cliente'){
-    return state.clientes.filter(c=>((c.nomeFantasia||c.razaoSocial||'')).toLowerCase().includes(q))
+    return empresasDoTipo('cliente').filter(c=>((c.nomeFantasia||c.razaoSocial||'')).toLowerCase().includes(q))
       .slice(0,6).map(c=>({label:c.nomeFantasia||c.razaoSocial||'(sem nome)', sub:c.cnpjCpf||'', data:c}));
   }
   if(type==='clienteCnpj'){
     const qDigits = q.replace(/\D/g,'');
     if(qDigits.length<3) return [];
-    return state.clientes.filter(c=>(c.cnpjCpf||'').replace(/\D/g,'').includes(qDigits))
+    return empresasDoTipo('cliente').filter(c=>(c.cnpjCpf||'').replace(/\D/g,'').includes(qDigits))
       .slice(0,6).map(c=>({label:c.cnpjCpf, sub:c.nomeFantasia||c.razaoSocial||'', data:c}));
   }
   if(type==='fornecedor'){
     return state.fornecedores.filter(f=>((f.nomeFantasia||f.razaoSocial||'')).toLowerCase().includes(q))
       .slice(0,6).map(f=>({label:f.nomeFantasia||f.razaoSocial||'(sem nome)', sub:f.cnpjCpf||'', data:f}));
+  }
+  if(PROC_EMPRESA_CAMPOS[type]){
+    return empresasDoTipo(PROC_EMPRESA_CAMPOS[type].tipo).filter(e=>nomeEmpresaCad(e).toLowerCase().includes(q))
+      .slice(0,8).map(e=>({label:nomeEmpresaCad(e), sub:[e.cnpjCpf, e.razaoSocial && e.razaoSocial!==e.nomeFantasia ? e.razaoSocial : ''].filter(Boolean).join(' · '), data:e}));
   }
   if(type==='produto'){
     return state.produtos.filter(p=>(p.nome||'').toLowerCase().includes(q))
@@ -4223,6 +4301,7 @@ function selectAutocomplete(optIdx){
   if(!r) return;
   const { type, idx } = acCurrentField;
   const nome = r.data.nomeFantasia || r.data.razaoSocial || r.data.nome || '';
+  if(PROC_EMPRESA_CAMPOS[type]){ escolherEmpresaProcesso(type, r.data); hideAutocomplete(); return; }
   if(type==='cliente'){
     state.dados.cliente = nome;
     state.dados.clienteCnpjCpf = r.data.cnpjCpf || state.dados.clienteCnpjCpf;
@@ -5931,12 +6010,18 @@ async function gerarRelatorioSimulacaoPDF(id){
 }
 
 /* -------------------------------- Cadastro ---------------------------------- */
+// Clientes e Empresas: uma lista só (state.clientes, chave 'clientes:list'), separada pelo Tipo de Cadastro.
+// (A antiga lista de Fornecedores é unida a ela ao carregar — ver unificarEmpresas.)
 const CAD_CONFIG = {
-  cliente:    {icon:'client',   titulo:'Clientes',    singular:'Cliente',    stateKey:'clientes',    rich:true, richKind:'pessoa'},
-  fornecedor: {icon:'supplier', titulo:'Fornecedores', singular:'Fornecedor', stateKey:'fornecedores', rich:true, richKind:'pessoa'},
+  cliente:    {icon:'client',   titulo:'Clientes e Empresas', singular:'Cadastro', stateKey:'clientes', rich:true, richKind:'pessoa'},
   produto:    {icon:'product',  titulo:'Produtos',     singular:'Produto',    stateKey:'produtos',    rich:true, richKind:'produto'},
 };
 const STATUS_LABELS = {ATIVO:'Ativo', INATIVO:'Inativo'};
+const TIPOS_CADASTRO = { cliente:'Cliente', fabricante:'Fabricante', fornecedor:'Fornecedor', despachante:'Despachante Aduaneiro',
+  agente_carga:'Agente de Carga', armador:'Armador', transportadora:'Transportadora', funcionario:'Funcionário' };
+// Empresas cadastradas de determinados tipos (ex.: empresasDoTipo('cliente'))
+function empresasDoTipo(...tipos){ return (state.clientes||[]).filter(e=>tipos.includes(e.tipoCadastro||'cliente')); }
+const nomeEmpresaCad = e => (e && (e.nomeFantasia || e.razaoSocial)) || '';
 const TIPO_PESSOA_LABELS = {JURIDICA:'Pessoa Jurídica', FISICA:'Pessoa Física'};
 const REGIME_LABELS = {SIMPLES:'Simples', LUCRO_REAL:'Lucro Real', LUCRO_PRESUMIDO:'Lucro Presumido'};
 const ENDERECO_TIPO_LABELS = {PRINCIPAL:'Principal', ENTREGA:'Entrega', COBRANCA:'Cobrança'};
@@ -5956,7 +6041,7 @@ function novoEndereco(){
     uf:'SP', municipio:'', pais:'Brasil', empresaEstrangeira:false, contatos:[novoContato()]};
 }
 function novoClienteFornecedor(){
-  return {id:uid(), status:'ATIVO', tipoPessoa:'JURIDICA', nomeFantasia:'', razaoSocial:'', cnpjCpf:'',
+  return {id:uid(), tipoCadastro:'', status:'ATIVO', tipoPessoa:'JURIDICA', nomeFantasia:'', razaoSocial:'', cnpjCpf:'',
     regimeTributario:'SIMPLES', inscricaoEstadual:'', inscricaoMunicipal:'',
     enderecos:[novoEndereco()], documentos:[]};
 }
@@ -6069,6 +6154,7 @@ function filtrarListaCadastro(tipo){
       const hay = [item.nomeFantasia,item.razaoSocial,item.cnpjCpf].filter(Boolean).join(' ').toLowerCase();
       if(!hay.includes(t)) return false;
     }
+    if(f.tipoCadastro && (item.tipoCadastro||'cliente')!==f.tipoCadastro) return false;
     if(f.status && item.status!==f.status) return false;
     if(f.tipoPessoa && item.tipoPessoa!==f.tipoPessoa) return false;
     if(f.regime && item.regimeTributario!==f.regime) return false;
@@ -6103,6 +6189,12 @@ function renderCadFilterBar(tipo){
   return `
   <div class="filter-bar">
     <div class="field"><label>Buscar</label><input id="cf-texto-${tipo}" placeholder="Nome, CNPJ/CPF..." value="${esc(f.texto)}"></div>
+    <div class="field"><label>Tipo de Cadastro</label>
+      <select id="cf-tipocadastro-${tipo}">
+        <option value="">Todos</option>
+        ${Object.entries(TIPOS_CADASTRO).map(([k,l])=>`<option value="${k}" ${f.tipoCadastro===k?'selected':''}>${l} (${empresasDoTipo(k).length})</option>`).join('')}
+      </select>
+    </div>
     <div class="field"><label>Status</label>
       <select id="cf-status-${tipo}">
         <option value="">Todos</option>
@@ -6139,7 +6231,7 @@ function renderCadastroRico(tipo){
   </div></div>` : `<div class="empty">${ICONS[cfg.icon]}<h3>Nenhum ${cfg.singular.toLowerCase()} encontrado</h3><p>${totalCount ? 'Ajuste os filtros para ver outros registros.' : 'Cadastre para agilizar o preenchimento da aba Dados.'}</p></div>`;
   const subText = cfg.richKind==='produto'
     ? 'Ficha completa do produto: dados gerais, fornecedor/fabricante, medidas, matéria-prima e lote.'
-    : `Dados gerais, endereços, contatos e documentos de ${cfg.singular.toLowerCase()}s.`;
+    : 'Clientes, fabricantes, fornecedores, despachantes aduaneiros, agentes de carga, armadores, transportadoras e funcionários: dados gerais, endereços, contatos e documentos.';
 
   return `
   <div class="page-title">Cadastro — ${cfg.titulo}</div>
@@ -6174,7 +6266,7 @@ function renderCadPessoaListItem(tipo, item){
   <div class="cad-item">
     <div class="cad-avatar">${initials(nome)}</div>
     <div class="ci-main">
-      <div class="ci-name">${esc(nome)} ${statusBadge}</div>
+      <div class="ci-name">${esc(nome)} <span class="badge badge-navy">${esc(TIPOS_CADASTRO[item.tipoCadastro||'cliente']||'—')}</span> ${statusBadge}</div>
       <div class="ci-sub">${sub}</div>
     </div>
     <div class="ci-actions">
@@ -6233,6 +6325,7 @@ function renderCadViewPessoa(tipo, item){
 
     <div class="view-section-title">Informações Gerais</div>
     <div class="view-grid">${viewRows([
+      ['Tipo de Cadastro', TIPOS_CADASTRO[item.tipoCadastro||'cliente']],
       ['Nome Fantasia', esc(item.nomeFantasia)], ['Razão Social', esc(item.razaoSocial)], ['CNPJ/CPF', esc(item.cnpjCpf)],
       ['Tipo de Pessoa', TIPO_PESSOA_LABELS[item.tipoPessoa]], ['Regime Tributário', REGIME_LABELS[item.regimeTributario]],
       ['Inscrição Estadual', esc(item.inscricaoEstadual)], ['Inscrição Municipal', esc(item.inscricaoMunicipal)],
@@ -6369,6 +6462,14 @@ function renderCadRichFormPessoa(tipo){
 
 function renderCadGeralTab(d){
   return `
+    <div class="field-row grid-3" style="margin-bottom:16px;">
+      <div class="field"><label>Tipo de Cadastro *</label>
+        <select data-bind="tipoCadastro">
+          <option value="" ${!d.tipoCadastro?'selected':''}>Selecione…</option>
+          ${Object.entries(TIPOS_CADASTRO).map(([k,l])=>`<option value="${k}" ${d.tipoCadastro===k?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
     <div class="field-row grid-3" style="margin-bottom:16px;">
       <div class="field"><label>Status</label>
         <select data-bind="status">
@@ -7522,6 +7623,7 @@ async function cadSaveRico(tipo){
   if(cfg.richKind==='produto'){
     if(!d.nome.trim()){ toast('Informe ao menos o Nome do produto.'); return; }
   } else {
+    if(!d.tipoCadastro){ state.cadFormTab = 'geral'; renderApp(); toast('Escolha o Tipo de Cadastro.'); return; }
     if(!d.nomeFantasia.trim() && !d.razaoSocial.trim()){
       toast('Informe ao menos o Nome Fantasia ou a Razão Social.');
       return;
@@ -7800,6 +7902,7 @@ function onAppClick(e){
         state.cadFiltros[tipo].categoria = gv('cf-categoria-'+tipo);
         state.cadFiltros[tipo].fornecedorTipo = gv('cf-fornecedortipo-'+tipo);
       } else {
+        state.cadFiltros[tipo].tipoCadastro = gv('cf-tipocadastro-'+tipo);
         state.cadFiltros[tipo].status = gv('cf-status-'+tipo);
         state.cadFiltros[tipo].tipoPessoa = gv('cf-tipopessoa-'+tipo);
         state.cadFiltros[tipo].regime = gv('cf-regime-'+tipo);
@@ -7809,7 +7912,7 @@ function onAppClick(e){
     }
     case 'cad-limpar-filtros': {
       const tipo = a1, cfg = CAD_CONFIG[tipo];
-      state.cadFiltros[tipo] = cfg.richKind==='produto' ? {texto:'',categoria:'',fornecedorTipo:''} : {texto:'',status:'',tipoPessoa:'',regime:''};
+      state.cadFiltros[tipo] = cfg.richKind==='produto' ? {texto:'',categoria:'',fornecedorTipo:''} : {texto:'',tipoCadastro:'',status:'',tipoPessoa:'',regime:''};
       renderApp();
       break;
     }
@@ -7904,7 +8007,7 @@ function onAppInput(e){
     else hideAutocomplete();
   }
   if(bind==='cliente'){
-    const match = state.clientes.find(cl=>(cl.nomeFantasia||cl.razaoSocial||'').trim().toLowerCase()===val.trim().toLowerCase());
+    const match = empresasDoTipo('cliente').find(cl=>(cl.nomeFantasia||cl.razaoSocial||'').trim().toLowerCase()===val.trim().toLowerCase());
     if(match && match.cnpjCpf){
       state.dados.clienteCnpjCpf = match.cnpjCpf;
       const cnpjInput = document.getElementById('dados-form') ? el.closest('.card').querySelector('[data-bind="clienteCnpjCpf"]') : null;
@@ -8048,7 +8151,7 @@ init();
 /* --------------------------------- Home ----------------------------------- */
 function renderHome(){
   const nCot = state.cotacoesIndex.length + state.cotacoesFormalIndex.length;
-  const nCli = state.clientes.length, nForn = state.fornecedores.length, nProd = state.produtos.length;
+  const nCli = state.clientes.length, nProd = state.produtos.length;
   return `
   <div class="home-hero">
     <div class="kicker">Painel de controle</div>
@@ -8085,12 +8188,11 @@ function renderHome(){
     <div class="module-card amber ${state.openModule==='cad'?'open':''}" id="mod-cad">
       <div class="module-head" data-action="toggle-module:cad">
         <div class="module-icon">${ICONS.users}</div>
-        <div class="mt"><h3>Cadastro</h3><p>Base de clientes, fornecedores e produtos usada para agilizar o preenchimento.</p></div>
+        <div class="mt"><h3>Cadastro</h3><p>Clientes e empresas (fornecedores, agentes, despachantes…) e produtos usados para agilizar o preenchimento.</p></div>
         <div class="module-chevron">${ICONS.chevron}</div>
       </div>
       <div class="module-sub"><div class="module-sub-inner">
-        <div class="sub-btn" data-action="go:cad-cliente">${ICONS.client} Cliente <span class="desc">${nCli} cadastrado${nCli===1?'':'s'}</span></div>
-        <div class="sub-btn" data-action="go:cad-fornecedor">${ICONS.supplier} Fornecedor <span class="desc">${nForn} cadastrado${nForn===1?'':'s'}</span></div>
+        <div class="sub-btn" data-action="go:cad-cliente">${ICONS.client} Clientes e Empresas <span class="desc">${nCli} cadastro${nCli===1?'':'s'}</span></div>
         <div class="sub-btn" data-action="go:cad-produto">${ICONS.product} Produto <span class="desc">${nProd} cadastrado${nProd===1?'':'s'}</span></div>
       </div></div>
     </div>
@@ -8099,7 +8201,7 @@ function renderHome(){
   <div class="home-stats">
     <div class="stat-card"><div class="lbl">Cotações salvas</div><div class="val">${String(nCot).padStart(2,'0')}</div><div class="sub">Registradas na aba Cotação</div></div>
     <div class="stat-card"><div class="lbl">Limite importação simplificada</div><div class="val">US$ 3.000</div><div class="sub">Mercadoria + frete + seguro</div></div>
-    <div class="stat-card"><div class="lbl">Cadastros ativos</div><div class="val">${nCli+nForn+nProd}</div><div class="sub">Clientes, fornecedores e produtos</div></div>
+    <div class="stat-card"><div class="lbl">Cadastros ativos</div><div class="val">${nCli+nProd}</div><div class="sub">Clientes e empresas e produtos</div></div>
   </div>
 
   <div class="section-title" style="margin:34px 0 16px;"><span class="num">•</span> Dashboards</div>
@@ -8138,9 +8240,10 @@ function renderHomeCharts(){
   if(ctxCad){
     homeCharts.cadastros = new Chart(ctxCad, {
       type:'bar',
-      data:{ labels:['Clientes','Fornecedores','Produtos'],
-        datasets:[{ label:'Cadastros', data:[state.clientes.length, state.fornecedores.length, state.produtos.length],
-          backgroundColor:['#173A5E','#C07A25','#2F6B4F'], borderRadius:5, maxBarThickness:46 }] },
+      data:{ labels:['Clientes','Fornecedores','Outras empresas','Produtos'],
+        datasets:[{ label:'Cadastros', data:[empresasDoTipo('cliente').length, state.fornecedores.length,
+          state.clientes.length - empresasDoTipo('cliente').length - state.fornecedores.length, state.produtos.length],
+          backgroundColor:['#173A5E','#C07A25','#6E5EA6','#2F6B4F'], borderRadius:5, maxBarThickness:46 }] },
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(c)=>' '+c.parsed.y+' cadastro(s)'}} },
         scales:{ y:{ beginAtZero:true, ticks:{precision:0} } } }
