@@ -638,6 +638,13 @@ td.num-mono, th.num-mono{text-align:right;}
   .topbar{flex-wrap:wrap; row-gap:10px;}
   .topnav{order:3; width:100%; flex-wrap:wrap;}
 }
+
+/* ---------- Quadro de processos e tipos de filtro ---------- */
+.kanban-scroll{overflow-x:auto; padding-bottom:8px;}
+.kanban-board.proc-board{display:grid; gap:12px; align-items:start; width:max-content;}
+.proc-board .kanban-column{min-height:160px;}
+.tpl-tipo{font-size:10.5px; color:var(--ink-soft); background:var(--paper-2); border-radius:999px; padding:1px 7px; margin-left:auto; white-space:nowrap;}
+.tpl-campo{justify-content:flex-start;}
 </style>
 </head>
 <body>
@@ -696,7 +703,7 @@ function toast(msg, kind){
 // Rascunhos e filtros ficam só neste navegador, separados por usuário.
 // Cada chave tem uma versão: se outra pessoa salvou antes, as alterações são mescladas item a item.
 const sb = window.comextaSupabase;
-const CHAVE_LOCAL = /:draft$|^filtrosTodas:/;
+const CHAVE_LOCAL = /:draft$|^filtros(Todas|Proc|Cot):/;
 const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','processos:index'];
 const SECAO_DA_CHAVE = {
   'cotacoes:index':'cotacoes', 'cotacoesFormal:index':'cotacoes', 'simulacoes:index':'simulador',
@@ -1775,12 +1782,25 @@ const PROC_ABAS = [
   { id:'cliente', label:'Cliente' }, { id:'produto', label:'Produto' }, { id:'transporte', label:'Transporte' },
   { id:'financeiro', label:'Financeiro' }, { id:'desembaraco', label:'Desembaraço' },
 ];
+// Status na ordem do fluxo (são as colunas do quadro de cards). "legado": só aparece em processos antigos.
 const PROC_STATUS = {
-  aberto:{ label:'Aberto', cls:'badge-navy' }, producao:{ label:'Em produção', cls:'badge-amber' },
-  transito:{ label:'Em trânsito', cls:'badge-amber' }, chegada:{ label:'Chegou ao destino', cls:'badge-amber' },
-  desembaraco:{ label:'Em desembaraço', cls:'badge-amber' }, desembaracado:{ label:'Desembaraçado', cls:'badge-green' },
-  entregue:{ label:'Entregue', cls:'badge-green' }, cancelado:{ label:'Cancelado', cls:'badge-red' },
+  aberto:{ label:'Aberto', cls:'badge-navy' },
+  producao:{ label:'Em Produção', cls:'badge-navy' },
+  transito_origem:{ label:'Em Trânsito Origem', cls:'badge-amber' },
+  warehouse_origem:{ label:'Warehouse Origem', cls:'badge-amber' },
+  desembaraco_origem:{ label:'Desembaraço Origem', cls:'badge-amber' },
+  porto_origem:{ label:'Porto Origem', cls:'badge-amber' },
+  transito_internacional:{ label:'Trânsito Internacional', cls:'badge-amber' },
+  porto_destino:{ label:'Porto Destino', cls:'badge-amber' },
+  desembaraco:{ label:'Desembaraço', cls:'badge-amber' },
+  desembaracado:{ label:'Desembaraçado', cls:'badge-green' },
+  transito_destino:{ label:'Em Trânsito Destino', cls:'badge-green' },
+  entregue:{ label:'Entregue', cls:'badge-green' },
+  finalizado:{ label:'Finalizado', cls:'badge-green' },
+  cancelado:{ label:'Cancelado', cls:'badge-red', legado:true },
 };
+// Status antigos convertidos para os novos
+const PROC_STATUS_LEGADO = { transito:'transito_internacional', chegada:'porto_destino' };
 const PROC_MODAIS = { maritimo:'Marítimo', aereo:'Aéreo', rodoviario:'Rodoviário', ferroviario:'Ferroviário', multimodal:'Multimodal' };
 const PROC_CANAIS = { '':'—', verde:'Verde', amarelo:'Amarelo', vermelho:'Vermelho', cinza:'Cinza' };
 const PROC_MOEDAS = ['USD','EUR','CNY','GBP','JPY','BRL'];
@@ -1809,6 +1829,7 @@ function novoProcesso(){
 // Completa campos que faltem (processos salvos antes de algum campo novo existir).
 function normalizarProcesso(p){
   const base = novoProcesso(), r = { ...base, ...(p||{}) };
+  r.status = statusProc(r);
   if(p && !(p.cliente||{}).dataAbertura) base.cliente.dataAbertura = p.criadoEm ? String(p.criadoEm).slice(0,10) : '';
   for(const k of ['cliente','produto','transporte','financeiro','desembaraco']) r[k] = { ...base[k], ...((p||{})[k]||{}) };
   r.desembaraco.tributos = { ...base.desembaraco.tributos, ...(((p||{}).desembaraco||{}).tributos||{}) };
@@ -1852,7 +1873,7 @@ const PROC_CAMPOS = (()=>{
   const t = p => totaisProcesso(normalizarProcesso(p));
   const campos = [
     ['Geral', 'id', 'Nº do processo', p=>p.id],
-    ['Geral', 'status', 'Status', p=>(PROC_STATUS[p.status]||PROC_STATUS.aberto).label, { badge:true }],
+    ['Geral', 'status', 'Status', p=>(PROC_STATUS[statusProc(p)]||PROC_STATUS.aberto).label, { badge:true }],
     ['Geral', 'criadoEm', 'Criado em', p=>p.criadoEm ? fmtDate(p.criadoEm) : ''],
     ['Geral', 'criadoPor', 'Criado por', p=>p.criadoPor],
     ['Geral', 'atualizadoEm', 'Atualizado em', p=>p.atualizadoEm ? fmtDate(p.atualizadoEm) : ''],
@@ -1913,86 +1934,8 @@ const PROC_CAMPOS = (()=>{
   return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor: valor || (p=>{ const v = getPath(p, id); return v==null ? '' : String(v); }), ...(extra||{}) }));
 })();
 const PROC_CAMPO = Object.fromEntries(PROC_CAMPOS.map(c=>[c.id, c]));
-// Filtros da lista de processos (Template → Configurar Filtros escolhe quais ficam na tela).
-//   texto: contém o texto · opcao: igual ao valor escolhido · periodo: data entre "de" e "até"
-const PROC_FILTROS = [
-  { id:'busca', label:'Busca em qualquer campo', tipo:'texto', placeholder:'Buscar em qualquer campo…',
-    teste:(p, v)=>PROC_CAMPOS.some(c=>{ try{ return String(c.valor(p)||'').toLowerCase().includes(v); }catch(e){ return false; } }) },
-  { id:'status', label:'Status', tipo:'opcao', opcoes:()=>Object.entries(PROC_STATUS).map(([k,v])=>[k,v.label]), valor:p=>p.status||'aberto' },
-  { id:'abertura', label:'Data de abertura', tipo:'periodo', valor:p=>dataAberturaProcesso(p) },
-  { id:'cliente', label:'Cliente', tipo:'texto', placeholder:'Nome do cliente', valor:p=>(p.cliente||{}).nome },
-  { id:'responsavel', label:'Responsável', tipo:'opcao', dinamico:true, valor:p=>(p.cliente||{}).responsavel },
-  { id:'vendedor', label:'Vendedor', tipo:'opcao', dinamico:true, valor:p=>(p.cliente||{}).vendedor },
-  { id:'fornecedor', label:'Fornecedor / exportador', tipo:'texto', placeholder:'Nome do fornecedor', valor:p=>(p.produto||{}).fornecedor },
-  { id:'modal', label:'Modal', tipo:'opcao', opcoes:()=>Object.entries(PROC_MODAIS), valor:p=>(p.transporte||{}).modal },
-  { id:'origem', label:'Origem', tipo:'texto', placeholder:'Porto, aeroporto ou cidade', valor:p=>(p.transporte||{}).origem },
-  { id:'destino', label:'Destino', tipo:'texto', placeholder:'Porto, aeroporto ou cidade', valor:p=>(p.transporte||{}).destino },
-  { id:'etd', label:'ETD (saída)', tipo:'periodo', valor:p=>(p.transporte||{}).etd },
-  { id:'eta', label:'ETA (chegada)', tipo:'periodo', valor:p=>(p.transporte||{}).eta },
-  { id:'canal', label:'Canal de parametrização', tipo:'opcao', opcoes:()=>Object.entries(PROC_CANAIS).filter(([k])=>k), valor:p=>(p.desembaraco||{}).canal },
-  { id:'declaracao', label:'Nº da declaração (DI/DUIMP)', tipo:'texto', placeholder:'Número', valor:p=>(p.desembaraco||{}).numeroDeclaracao },
-  { id:'incoterm', label:'Incoterm', tipo:'opcao', opcoes:()=>PROC_INCOTERMS.map(i=>[i,i]), valor:p=>(p.produto||{}).incoterm },
-];
-const PROC_FILTRO = Object.fromEntries(PROC_FILTROS.map(f=>[f.id, f]));
-
-function filtroProcAtivo(f){
-  const v = state.procFiltros || {};
-  return f.tipo==='periodo' ? !!(v[f.id+':de'] || v[f.id+':ate']) : !!v[f.id];
-}
-function processosFiltrados(){
-  const visiveis = prefsProcessos().filtros.map(id=>PROC_FILTRO[id]);
-  const v = state.procFiltros || {};
-  return [...(state.processosIndex||[])].sort((a,b)=>(b.seq||0)-(a.seq||0)).filter(p=>visiveis.every(f=>{
-    if(!filtroProcAtivo(f)) return true;
-    if(f.tipo==='periodo'){
-      const d = f.valor(p) || '';
-      if(!d) return false;
-      if(v[f.id+':de'] && d < v[f.id+':de']) return false;
-      if(v[f.id+':ate'] && d > v[f.id+':ate']) return false;
-      return true;
-    }
-    const alvo = v[f.id];
-    if(f.teste) return f.teste(p, String(alvo).toLowerCase());
-    if(f.tipo==='opcao') return String(f.valor(p)||'')===alvo;
-    return String(f.valor(p)||'').toLowerCase().includes(String(alvo).toLowerCase());
-  }));
-}
-function opcoesFiltroProc(f){
-  if(!f.dinamico) return f.opcoes();
-  // Responsável / vendedor: nomes das listas da Personalização e os que já aparecem nos processos
-  const tipo = f.id==='responsavel' ? 'responsaveis' : 'vendedores';
-  const nomes = new Set([...listaPessoas(tipo).map(x=>x.nome), ...(state.processosIndex||[]).map(p=>f.valor(p)).filter(Boolean)]);
-  return [...nomes].sort((a,b)=>a.localeCompare(b, 'pt-BR')).map(n=>[n, n]);
-}
-function filtroProcHtml(f){
-  const v = state.procFiltros || {};
-  if(f.tipo==='periodo'){
-    return `<div class="field filtro-periodo"><label>${esc(f.label)}</label><div class="periodo">
-      <input type="date" data-proc-filtro="${f.id}:de" value="${esc(v[f.id+':de']||'')}" title="${esc(f.label)} — de">
-      <span>até</span>
-      <input type="date" data-proc-filtro="${f.id}:ate" value="${esc(v[f.id+':ate']||'')}" title="${esc(f.label)} — até"></div></div>`;
-  }
-  if(f.tipo==='opcao'){
-    return `<div class="field"><label>${esc(f.label)}</label><select data-proc-filtro="${f.id}">
-      <option value="">Todos</option>${opcoesFiltroProc(f).map(([k,t])=>`<option value="${esc(k)}" ${v[f.id]===k?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
-  }
-  return `<div class="field" ${f.id==='busca'?'style="min-width:240px;"':''}><label>${esc(f.label)}</label>
-    <input data-proc-filtro="${f.id}" value="${esc(v[f.id]||'')}" placeholder="${esc(f.placeholder||'')}" autocomplete="off"></div>`;
-}
-// Texto filtra enquanto digita (mantendo o cursor); listas e datas filtram ao escolher.
-function onFiltroProcesso(el, evento){
-  const chave = el.getAttribute('data-proc-filtro'); if(!chave) return false;
-  const texto = el.tagName==='INPUT' && el.type!=='date';
-  if(texto ? evento!=='input' : evento!=='change') return true;
-  if(!state.procFiltros) state.procFiltros = {};
-  state.procFiltros[chave] = el.value;
-  const pos = el.selectionStart;
-  renderApp();
-  if(texto){ const novo = document.querySelector(`[data-proc-filtro="${chave}"]`); if(novo){ novo.focus(); try{ novo.setSelectionRange(pos, pos); }catch(e){} } }
-  return true;
-}
 const PROC_TEMPLATE_PADRAO = {
-  filtros: ['busca', 'status', 'abertura'],
+  filtros: ['busca', 'status', 'cliente.dataAbertura'],
   lista: ['cliente.dataAbertura', 'cliente.nome', 'transporte.modal', 'transporte.rota', 'transporte.eta', 'desembaraco.canal', 'status'],
   card: ['cliente.nome', 'produto.fornecedor', 'transporte.modal', 'transporte.rota', 'transporte.eta', 'produto.totalMercadoria', 'desembaraco.canal'],
 };
@@ -2001,8 +1944,14 @@ function prefsProcessos(){
   const p = ((usuarioAtual && usuarioAtual.preferencias) || {}).processos || {};
   const valido = (arr, mapa) => Array.isArray(arr) ? arr.filter(id=>mapa[id]) : null;
   return { modo: p.modo==='card' ? 'card' : 'lista', lista: valido(p.lista, PROC_CAMPO) || PROC_TEMPLATE_PADRAO.lista,
-           card: valido(p.card, PROC_CAMPO) || PROC_TEMPLATE_PADRAO.card, filtros: valido(p.filtros, PROC_FILTRO) || PROC_TEMPLATE_PADRAO.filtros };
+           card: valido(p.card, PROC_CAMPO) || PROC_TEMPLATE_PADRAO.card,
+           filtros: valido(converterFiltrosAntigos(p.filtros, PROC_FILTROS_ANTIGOS), mapaFiltrosTpl('proc')) || PROC_TEMPLATE_PADRAO.filtros };
 }
+// Filtros escolhidos antes desta versão (ids antigos) → ids do catálogo atual
+const PROC_FILTROS_ANTIGOS = { abertura:'cliente.dataAbertura', cliente:'cliente.nome', responsavel:'cliente.responsavel', vendedor:'cliente.vendedor',
+  fornecedor:'produto.fornecedor', modal:'transporte.modal', origem:'transporte.origem', destino:'transporte.destino', etd:'transporte.etd',
+  eta:'transporte.eta', canal:'desembaraco.canal', declaracao:'desembaraco.numeroDeclaracao', incoterm:'produto.incoterm' };
+function converterFiltrosAntigos(arr, mapa){ return Array.isArray(arr) ? [...new Set(arr.map(id=>mapa[id]||id))] : arr; }
 async function salvarPrefsProcessos(alteracao, mensagem){
   return salvarPreferencias('processos', alteracao, prefsProcessos(), mensagem);
 }
@@ -2010,7 +1959,7 @@ async function salvarPrefsProcessos(alteracao, mensagem){
 function valorCampoProcesso(campo, p){
   const v = campo.valor(p);
   if(!v) return '<span class="vazio">—</span>';
-  if(campo.badge){ const s = PROC_STATUS[p.status] || PROC_STATUS.aberto; return `<span class="badge ${s.cls}">${esc(v)}</span>`; }
+  if(campo.badge){ const s = PROC_STATUS[statusProc(p)] || PROC_STATUS.aberto; return `<span class="badge ${s.cls}">${esc(v)}</span>`; }
   if(campo.canal) return `<span class="canal canal-${esc(p.desembaraco.canal)}">${esc(v)}</span>`;
   return esc(v);
 }
@@ -2022,58 +1971,304 @@ function acoesProcessoHtml(p){
   </div>`;
 }
 
+
+/* ----------- Filtros configuráveis (Processos e Cotações Salvas) ----------- */
+// Mesmo padrão do Card e da Lista: o Template → Configurar Filtros oferece TODOS os campos, por janela.
+// Cada filtro: { id, label, janela, tipo:'texto'|'opcao'|'periodo'|'faixa', valores(item)->[brutos], opcoes?(itens)->[[valor,rótulo]] }
+// Os valores só valem ao clicar em Filtrar (ou Enter) e ficam fixados até Limpar (guardados neste navegador).
+const FILTROS_TPL = {
+  proc: { chave:'filtrosProc:fixado', catalogo:()=>catalogoFiltrosProc(), itens:()=>state.processosIndex||[], prefs:()=>prefsProcessos() },
+  cot:  { chave:'filtrosCot:fixado',  catalogo:()=>catalogoFiltrosCot(),  itens:()=>itensCotacoes(), prefs:()=>prefsCotacoes() },
+};
+function filtrosAplicados(escopo){
+  if(!state.filtrosAplicados) state.filtrosAplicados = {};
+  return state.filtrosAplicados[escopo] || (state.filtrosAplicados[escopo] = {});
+}
+function mapaFiltrosTpl(escopo){ return Object.fromEntries(FILTROS_TPL[escopo].catalogo().map(f=>[f.id, f])); }
+function filtroTplAtivo(valores, f){
+  return (f.tipo==='periodo' || f.tipo==='faixa') ? !!(valores[f.id+':de'] || valores[f.id+':ate']) : !!valores[f.id];
+}
+function valoresBrutos(f, item){ try{ return juntar(f.valores(item)); }catch(e){ return []; } }
+// Aplica os filtros visíveis (os ocultos não valem). "ignorar": ids que não se aplicam (ex.: status no quadro).
+function aplicarFiltrosTpl(escopo, itens, ignorar){
+  const mapa = mapaFiltrosTpl(escopo), valores = filtrosAplicados(escopo);
+  const ativos = FILTROS_TPL[escopo].prefs().filtros.map(id=>mapa[id]).filter(f=>f && !(ignorar||[]).includes(f.id) && filtroTplAtivo(valores, f));
+  if(!ativos.length) return itens;
+  return itens.filter(item=>ativos.every(f=>{
+    const vals = valoresBrutos(f, item);
+    if(f.tipo==='opcao') return vals.includes(valores[f.id]);
+    if(f.tipo==='periodo'){ const de = valores[f.id+':de'], ate = valores[f.id+':ate'];
+      return vals.some(d=>(!de || d.slice(0,10)>=de) && (!ate || d.slice(0,10)<=ate)); }
+    if(f.tipo==='faixa'){ const de = valores[f.id+':de'], ate = valores[f.id+':ate'];
+      return vals.some(x=>{ const n = Number(x); return isFinite(n) && (de==='' || de==null || n>=Number(de)) && (ate==='' || ate==null || n<=Number(ate)); }); }
+    const q = String(valores[f.id]).trim().toLowerCase();
+    return vals.some(x=>x.toLowerCase().includes(q));
+  }));
+}
+function algumFiltroTplAtivo(escopo, ignorar){
+  const mapa = mapaFiltrosTpl(escopo), valores = filtrosAplicados(escopo);
+  return FILTROS_TPL[escopo].prefs().filtros.some(id=>mapa[id] && !(ignorar||[]).includes(id) && filtroTplAtivo(valores, mapa[id]));
+}
+function opcoesFiltroTpl(escopo, f){
+  if(f.opcoes) return f.opcoes();
+  return juntar(FILTROS_TPL[escopo].itens().flatMap(item=>valoresBrutos(f, item))).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(x=>[x,x]);
+}
+function filtroTplHtml(escopo, f){
+  const v = filtrosAplicados(escopo);
+  const attr = sufixo => `data-ftpl="${escopo}|${f.id}${sufixo||''}"`;
+  if(f.tipo==='periodo' || f.tipo==='faixa'){
+    const tp = f.tipo==='periodo' ? 'date' : 'number';
+    const extra = f.tipo==='faixa' ? 'step="any"' : '';
+    return `<div class="field filtro-periodo"><label>${esc(f.label)}</label><div class="periodo">
+      <input type="${tp}" ${extra} ${attr(':de')} value="${esc(v[f.id+':de']||'')}" ${f.tipo==='faixa'?'placeholder="de"':''}>
+      <span>até</span>
+      <input type="${tp}" ${extra} ${attr(':ate')} value="${esc(v[f.id+':ate']||'')}" ${f.tipo==='faixa'?'placeholder="até"':''}></div></div>`;
+  }
+  if(f.tipo==='opcao'){
+    return `<div class="field"><label>${esc(f.label)}</label><select ${attr()}>
+      <option value="">Todos</option>${opcoesFiltroTpl(escopo, f).map(([o,t])=>`<option value="${esc(o)}" ${v[f.id]===o?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
+  }
+  return `<div class="field"><label>${esc(f.label)}</label><input ${attr()} value="${esc(v[f.id]||'')}" placeholder="${esc(f.placeholder||'')}" autocomplete="off"></div>`;
+}
+// Barra de filtros no padrão de Cotações Salvas: campos + Filtrar + Limpar (+ botões extras à direita)
+function barraFiltrosTpl(escopo, ignorar, extrasHtml){
+  const mapa = mapaFiltrosTpl(escopo);
+  const filtros = FILTROS_TPL[escopo].prefs().filtros.map(id=>mapa[id]).filter(f=>f && !(ignorar||[]).includes(f.id));
+  if(!filtros.length && !extrasHtml) return '';
+  return `<div class="filter-bar">
+    ${filtros.map(f=>filtroTplHtml(escopo, f)).join('')}
+    ${filtros.length ? `<button class="btn btn-ghost btn-sm" data-action="ftpl-filtrar:${escopo}">${ICONS.filter} Filtrar</button>
+    <button class="btn btn-ghost btn-sm" data-action="ftpl-limpar:${escopo}">Limpar</button>` : ''}
+    ${extrasHtml ? `<div style="flex:1;"></div>${extrasHtml}` : ''}
+  </div>`;
+}
+function seloFiltroFixado(escopo, ignorar){
+  return algumFiltroTplAtivo(escopo, ignorar) ? ` <span class="badge badge-amber">${ICONS.filter} Filtro fixado — permanece até clicar em "Limpar"</span>` : '';
+}
+function acaoFiltrosTpl(cmd, escopo){
+  if(cmd==='ftpl-filtrar'){
+    const novos = {};
+    document.querySelectorAll(`[data-ftpl^="${escopo}|"]`).forEach(el=>{
+      const chave = el.getAttribute('data-ftpl').split('|')[1];
+      const v = String(el.value||'').trim();
+      if(v) novos[chave] = v;
+    });
+    state.filtrosAplicados[escopo] = novos;
+    storeSet(FILTROS_TPL[escopo].chave, novos);
+    toast(Object.keys(novos).length ? 'Filtro fixado — vai continuar aplicado até você clicar em "Limpar".' : 'Nenhum filtro preenchido.', Object.keys(novos).length ? 'ok' : undefined);
+    renderApp(); return true;
+  }
+  if(cmd==='ftpl-limpar'){
+    state.filtrosAplicados[escopo] = {};
+    storeDelete(FILTROS_TPL[escopo].chave);
+    renderApp(); return true;
+  }
+  return false;
+}
+// Ao esconder filtros no Template, o que estava aplicado neles deixa de valer.
+function limparFiltrosOcultosTpl(escopo, visiveis){
+  const v = filtrosAplicados(escopo), set = new Set(visiveis);
+  let mudou = false;
+  for(const chave of Object.keys(v)) if(!set.has(chave.split(':')[0])){ delete v[chave]; mudou = true; }
+  if(mudou) storeSet(FILTROS_TPL[escopo].chave, v);
+}
+// Configurar Filtros: mesmos grupos (janelas) do Card e da Lista
+function gruposFiltrosTplHtml(escopo, janelas, sel, acaoGrupo, atributo){
+  const catalogo = FILTROS_TPL[escopo].catalogo();
+  return janelas.map(janela=>{
+    const campos = catalogo.filter(f=>f.janela===janela);
+    if(!campos.length) return '';
+    const marcados = campos.filter(f=>sel.has(f.id)).length;
+    return `<div class="tpl-grupo">
+      <div class="tpl-grupo-topo"><b>${esc(janela)}</b><span class="membro-sub">${marcados} de ${campos.length}</span>
+        <button class="link-btn" data-action="${acaoGrupo}:${janela}:${marcados===campos.length?'0':'1'}">${marcados===campos.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+      ${campos.map(f=>`<label class="tpl-campo"><input type="checkbox" ${atributo}="${esc(f.id)}" ${sel.has(f.id)?'checked':''}> ${esc(f.label)} <span class="tpl-tipo">${({ texto:'texto', opcao:'lista', periodo:'período', faixa:'faixa' })[f.tipo]}</span></label>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ---------- Catálogo de filtros: Processos (todos os campos das janelas) ----------
+let _catFiltrosProc = null;
+function catalogoFiltrosProc(){
+  if(_catFiltrosProc) return _catFiltrosProc;
+  const n = v => { const x = numProcSimples(v); return (v===''||v==null||!isFinite(x)) ? [] : [String(x)]; };
+  const t = p => totaisProcesso(normalizarProcesso(p));
+  const data = v => v ? [String(v).slice(0,10)] : [];
+  const fixo = obj => ()=>Object.entries(obj);
+  const especial = {
+    'status': { tipo:'opcao', valores:p=>[statusProc(p)], opcoes:()=>{ const usados = new Set((state.processosIndex||[]).map(statusProc));
+      return Object.entries(PROC_STATUS).filter(([k,v])=>!v.legado || usados.has(k)).map(([k,v])=>[k, v.label]); } },
+    'criadoEm': { tipo:'periodo', valores:p=>data(p.criadoEm) }, 'atualizadoEm': { tipo:'periodo', valores:p=>data(p.atualizadoEm) },
+    'criadoPor': { tipo:'opcao' }, 'atualizadoPor': { tipo:'opcao' },
+    'cliente.dataAbertura': { tipo:'periodo', valores:p=>data(dataAberturaProcesso(p)) },
+    'cliente.nome': { tipo:'opcao' }, 'cliente.responsavel': { tipo:'opcao', opcoes:()=>opcoesPessoaFiltro('responsaveis', 'cliente.responsavel') },
+    'cliente.vendedor': { tipo:'opcao', opcoes:()=>opcoesPessoaFiltro('vendedores', 'cliente.vendedor') },
+    'cliente.modalidade': { tipo:'opcao', valores:p=>[(p.cliente||{}).modalidade], opcoes:fixo({ conta_propria:'Conta própria', conta_ordem:'Por conta e ordem', encomenda:'Por encomenda' }) },
+    'produto.fornecedor': { tipo:'opcao' }, 'produto.paisOrigem': { tipo:'opcao' },
+    'produto.incoterm': { tipo:'opcao', valores:p=>[(p.produto||{}).incoterm], opcoes:()=>PROC_INCOTERMS.map(i=>[i,i]) },
+    'produto.moeda': { tipo:'opcao', valores:p=>[(p.produto||{}).moeda], opcoes:()=>PROC_MOEDAS.map(i=>[i,i]) },
+    'produto.itensProdutos': { tipo:'opcao', valores:p=>((p.produto||{}).itens||[]).map(i=>i.produto) },
+    'produto.itensNcm': { tipo:'texto', valores:p=>((p.produto||{}).itens||[]).map(i=>i.ncm) },
+    'produto.itensQtd': { tipo:'faixa', valores:p=>[String(((p.produto||{}).itens||[]).filter(i=>i.produto||i.quantidade).length)] },
+    'produto.totalMercadoria': { tipo:'faixa', valores:p=>[String(t(p).fob)] }, 'produto.pesoLiquido': { tipo:'faixa', valores:p=>[String(t(p).pesoLiq)] },
+    'transporte.modal': { tipo:'opcao', valores:p=>[(p.transporte||{}).modal], opcoes:fixo(PROC_MODAIS) },
+    'transporte.tipoCarga': { tipo:'opcao', valores:p=>[(p.transporte||{}).tipoCarga], opcoes:fixo({ FCL:'FCL (container cheio)', LCL:'LCL (carga consolidada)', BREAK:'Carga solta / break bulk' }) },
+    'transporte.origem': { tipo:'opcao' }, 'transporte.destino': { tipo:'opcao' }, 'transporte.agenteCarga': { tipo:'opcao' }, 'transporte.armador': { tipo:'opcao' },
+    'transporte.etd': { tipo:'periodo', valores:p=>data((p.transporte||{}).etd) }, 'transporte.eta': { tipo:'periodo', valores:p=>data((p.transporte||{}).eta) },
+    'transporte.chegada': { tipo:'periodo', valores:p=>data((p.transporte||{}).chegada) },
+    'transporte.freeTime': { tipo:'faixa', valores:p=>n((p.transporte||{}).freeTime) }, 'transporte.volumes': { tipo:'faixa', valores:p=>n((p.transporte||{}).volumes) },
+    'transporte.pesoBruto': { tipo:'faixa', valores:p=>n((p.transporte||{}).pesoBruto) }, 'transporte.cubagem': { tipo:'faixa', valores:p=>n((p.transporte||{}).cubagem) },
+    'financeiro.taxaCambio': { tipo:'faixa', valores:p=>n((p.financeiro||{}).taxaCambio) },
+    'financeiro.frete': { tipo:'faixa', valores:p=>n((p.financeiro||{}).frete) }, 'financeiro.seguro': { tipo:'faixa', valores:p=>n((p.financeiro||{}).seguro) },
+    'financeiro.cif': { tipo:'faixa', valores:p=>[String(t(p).cif)] }, 'financeiro.cifBRL': { tipo:'faixa', valores:p=>t(p).cambio ? [String(t(p).cifBRL)] : [] },
+    'financeiro.banco': { tipo:'opcao' },
+    'financeiro.proximoVencimento': { tipo:'periodo', valores:p=>((p.financeiro||{}).parcelas||[]).filter(x=>!x.pago && x.vencimento).map(x=>x.vencimento).sort().slice(0,1) },
+    'desembaraco.despachante': { tipo:'opcao' }, 'desembaraco.recinto': { tipo:'opcao' }, 'desembaraco.urf': { tipo:'opcao' },
+    'desembaraco.tipoDeclaracao': { tipo:'opcao', valores:p=>[(p.desembaraco||{}).tipoDeclaracao], opcoes:()=>[['DUIMP','DUIMP'],['DI','DI'],['DSI','DSI']] },
+    'desembaraco.dataRegistro': { tipo:'periodo', valores:p=>data((p.desembaraco||{}).dataRegistro) },
+    'desembaraco.canal': { tipo:'opcao', valores:p=>[(p.desembaraco||{}).canal], opcoes:()=>Object.entries(PROC_CANAIS).filter(([k])=>k) },
+    'desembaraco.dataDesembaraco': { tipo:'periodo', valores:p=>data((p.desembaraco||{}).dataDesembaraco) },
+    'desembaraco.totalTributos': { tipo:'faixa', valores:p=>[String(t(p).tributos)] },
+  };
+  PROC_TRIBUTOS.forEach(([k])=>{ especial['desembaraco.tributos.'+k] = { tipo:'faixa', valores:p=>n(((p.desembaraco||{}).tributos||{})[k]) }; });
+  const busca = { id:'busca', label:'Busca em qualquer campo', janela:'Geral', tipo:'texto', placeholder:'Buscar…',
+    valores:p=>PROC_CAMPOS.map(c=>{ try{ return String(c.valor(p)||''); }catch(e){ return ''; } }) };
+  _catFiltrosProc = [busca, ...PROC_CAMPOS.map(c=>{
+    const e = especial[c.id] || {};
+    const tipo = e.tipo || 'texto';
+    // padrão: opção/texto usam o valor bruto do caminho (ou o texto exibido, nos campos calculados)
+    const valores = e.valores || (p=>{ const v = c.id.includes('.') || ['id','criadoPor','atualizadoPor'].includes(c.id) ? getPath(p, c.id) : undefined;
+      return v!==undefined && v!==null && typeof v!=='object' ? [String(v)] : [String(c.valor(p)||'')]; });
+    return { id:c.id, label:c.label, janela:c.janela, tipo, valores, opcoes:e.opcoes };
+  })];
+  return _catFiltrosProc;
+}
+function opcoesPessoaFiltro(tipo, caminho){
+  const daLista = listaPessoas(tipo).map(p=>p.nome);
+  const usados = (state.processosIndex||[]).map(p=>getPath(p, caminho)).filter(Boolean);
+  return juntar([...daLista, ...usados]).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(nm=>[nm, daLista.includes(nm) ? nm : nm + ' (fora da lista)']);
+}
+
+// ---------- Catálogo de filtros: Cotações Salvas (todos os campos) ----------
+function itensCotacoes(){
+  return [...state.cotacoesIndex.map(cot=>({ tipo:'Simplificada', cot })), ...state.cotacoesFormalIndex.map(cot=>({ tipo:'Formal', cot }))];
+}
+let _catFiltrosCot = null;
+function catalogoFiltrosCot(){
+  if(_catFiltrosCot) return _catFiltrosCot;
+  const d = it => it.cot.dados || {};
+  const data = v => v ? [String(v).slice(0,10)] : [];
+  const num = v => (v===''||v==null||!isFinite(Number(v))) ? [] : [String(Number(v))];
+  const ehS = it => it.tipo==='Simplificada';
+  const especial = {
+    tipo: { tipo:'opcao', valores:it=>[it.tipo], opcoes:()=>[['Simplificada','Simplificada'],['Formal','Formal']] },
+    status: { tipo:'opcao', valores:it=>[d(it).statusCotacao||'em_andamento'], opcoes:()=>Object.entries(COT_STATUS_LABEL) },
+    criadoEm: { tipo:'periodo', valores:it=>data(it.cot.criadoEm) }, atualizadoEm: { tipo:'periodo', valores:it=>data(it.cot.atualizadoEm) },
+    dataCotacao: { tipo:'periodo', valores:it=>data(d(it).dataCotacao) }, validade: { tipo:'periodo', valores:it=>data(d(it).validadeCotacao) },
+    cliente: { tipo:'opcao', valores:it=>[d(it).cliente] },
+    responsavel: { tipo:'opcao', valores:it=>[d(it).responsavel], opcoes:()=>nomesFiltroPessoa('responsavel') },
+    vendedor: { tipo:'opcao', valores:it=>[d(it).vendedor], opcoes:()=>nomesFiltroPessoa('vendedor') },
+    paisOrigem: { tipo:'opcao', valores:it=>[d(it).paisOrigem] }, paisDestino: { tipo:'opcao', valores:it=>[d(it).paisDestino] },
+    cidadeOrigem: { tipo:'opcao', valores:it=>[ehS(it) ? d(it).cidadeOrigem : d(it).freteOrigem] },
+    cidadeDestino: { tipo:'opcao', valores:it=>[ehS(it) ? d(it).cidadeDestino : d(it).freteDestino] },
+    portoOrigem: { tipo:'opcao', valores:it=>[d(it).portoOrigem] }, portoDestino: { tipo:'opcao', valores:it=>[d(it).portoDestino] },
+    incoterm: { tipo:'opcao', valores:it=>[d(it).incoterm], opcoes:()=>PROC_INCOTERMS.map(i=>[i,i]) },
+    etd: { tipo:'periodo', valores:it=>data(d(it).etd || d(it).freteEtd) }, eta: { tipo:'periodo', valores:it=>data(d(it).eta || d(it).freteEta) },
+    transitTime: { tipo:'faixa', valores:it=>num(d(it).freteTransitTime) }, pesoBruto: { tipo:'faixa', valores:it=>num(d(it).pesoBrutoTotal) }, cbm: { tipo:'faixa', valores:it=>num(d(it).cbm) },
+    itens: { tipo:'faixa', valores:it=>[String((it.cot.resumo||{}).itens||0)] },
+    produtos: { tipo:'opcao', valores:it=>(d(it).produtos||[]).map(p=>p.produto) },
+    fornecedores: { tipo:'opcao', valores:it=>(d(it).produtos||[]).map(p=>p.fornecedor) },
+    ncms: { tipo:'texto', valores:it=>(d(it).produtos||[]).map(p=>p.ncm) },
+    custoA: { tipo:'faixa', valores:it=>num(ehS(it) ? (it.cot.resumo||{}).custoSimples : (it.cot.resumo||{}).custoComCredito) },
+    custoB: { tipo:'faixa', valores:it=>num(ehS(it) ? (it.cot.resumo||{}).custoLucroReal : (it.cot.resumo||{}).custoSemCredito) },
+    valorAduaneiro: { tipo:'faixa', valores:it=>num(ehS(it) ? (it.cot.resumo||{}).valorAduaneiroBRL : (it.cot.resumo||{}).valorAduaneiro) },
+    limite: { tipo:'opcao', valores:it=>ehS(it) ? [(it.cot.resumo||{}).limiteExcedido ? 'excedido' : 'dentro'] : [], opcoes:()=>[['dentro','Dentro do limite'],['excedido','Excedido']] },
+    motivoNegado: { tipo:'opcao', valores:it=>[d(it).statusMotivoNegado], opcoes:()=>Object.entries(COT_MOTIVO_LABEL) },
+  };
+  const textoExibido = c => it=>{ try{ return [String(c.valor(it.tipo, it.cot)||'')]; }catch(e){ return []; } };
+  _catFiltrosCot = [
+    { id:'numero', label:'Número', janela:'Geral', tipo:'texto', placeholder:'COT-0001 ou COTF-0001', valores:it=>[it.cot.id] },
+    { id:'busca', label:'Busca em qualquer campo', janela:'Geral', tipo:'texto', placeholder:'Buscar…',
+      valores:it=>[it.cot.id, ...COT_CAMPOS.map(c=>{ try{ return String(c.valor(it.tipo, it.cot)||''); }catch(e){ return ''; } }), ...((d(it).produtos)||[]).flatMap(p=>[p.produto, p.fornecedor, p.ncm])] },
+    ...COT_CAMPOS.map(c=>{ const e = especial[c.id] || {}; return { id:c.id, label:c.label, janela:c.janela, tipo:e.tipo||'texto', valores:e.valores||textoExibido(c), opcoes:e.opcoes }; }),
+  ];
+  return _catFiltrosCot;
+}
+
+// ---------- Processos: status e quadro por status (arrastar o card muda o status) ----------
+function statusProc(p){ const s = (p && p.status) || 'aberto'; return PROC_STATUS_LEGADO[s] || s; }
+function procStatusOpcoes(atual){
+  const l = Object.entries(PROC_STATUS).filter(([k,v])=>!v.legado || k===atual).map(([k,v])=>[k, v.label]);
+  return l;
+}
+async function moverProcessoStatus(id, novo){
+  if(!pode('processos','editar')){ toast('Você não tem permissão para editar processos.'); renderApp(); return; }
+  const p = (state.processosIndex||[]).find(x=>x.id===id);
+  if(!p || statusProc(p)===novo || !PROC_STATUS[novo]) return;
+  p.status = novo; p.atualizadoEm = new Date().toISOString(); p.atualizadoPor = usuarioAtual.nome || usuarioAtual.email;
+  if(state.currentProcessoId===id && state.procDraft) state.procDraft.status = novo;
+  if(await persistProcessosIndex()) toast(`${id}: status alterado para "${PROC_STATUS[novo].label}".`, 'ok');
+  renderApp();
+}
+function renderProcKanban(lista, prefs){
+  const campos = prefs.card.filter(id=>id!=='id' && id!=='status').map(id=>PROC_CAMPO[id]);
+  const usados = new Set(lista.map(statusProc));
+  const colunas = Object.entries(PROC_STATUS).filter(([k,v])=>!v.legado || usados.has(k));
+  return `<div class="kanban-scroll"><div class="kanban-board proc-board" style="grid-template-columns:repeat(${colunas.length}, 250px);">
+    ${colunas.map(([k,s])=>{
+      const doStatus = lista.filter(p=>statusProc(p)===k);
+      return `<div class="kanban-column">
+        <div class="kanban-column-header"><span class="badge ${s.cls}">${s.label}</span><span class="kanban-count">${doStatus.length}</span></div>
+        <div class="kanban-column-body" data-status="${k}" data-quadro="proc">
+          ${doStatus.length ? doStatus.map(p=>`
+          <div class="kanban-card" draggable="true" data-proc-id="${esc(p.id)}" data-action="proc-abrir:${esc(p.id)}" title="Clique para abrir · arraste para mudar o status">
+            <div class="kanban-card-top"><span class="stamp">${esc(p.id)}</span>
+              <span class="kanban-card-acoes">${acoesProcessoHtml(p)}</span></div>
+            <div class="kanban-card-campos">${campos.map(c=>`<div class="kc-linha" title="${esc(c.label)}"><span class="kc-rot">${esc(c.label)}</span><span class="kc-val">${valorCampoProcesso(c, p)}</span></div>`).join('')}</div>
+          </div>`).join('') : `<div class="kanban-empty">Nenhum processo</div>`}
+        </div>
+      </div>`;
+    }).join('')}
+  </div></div>
+  <p class="hint" style="color:var(--ink-soft); font-size:12px; margin-top:12px;">Arraste um card para outra coluna para mudar o status do processo. Clique num card para abri-lo.</p>`;
+}
+
 function renderProcessos(){
   const prefs = prefsProcessos();
-  const lista = processosFiltrados();
-  const filtrosTela = prefs.filtros.map(id=>PROC_FILTRO[id]);
-  const algumAtivo = filtrosTela.some(filtroProcAtivo);
-  const total = (state.processosIndex||[]).length;
   const modo = prefs.modo;
+  const ignorar = modo==='card' ? ['status'] : []; // no quadro, as colunas já são o status
+  const todos = [...(state.processosIndex||[])].sort((a,b)=>(b.seq||0)-(a.seq||0));
+  const lista = aplicarFiltrosTpl('proc', todos, ignorar);
+  const total = todos.length;
 
   let conteudo;
   if(!total) conteudo = `<div class="empty">${ICONS.folder}<h3>Nenhum processo cadastrado</h3><p>Clique em "Cadastrar Novo Processo" para começar.</p></div>`;
-  else if(!lista.length) conteudo = `<div class="empty"><h3>Nenhum processo encontrado</h3><p>Ajuste ou limpe os filtros.</p></div>`;
-  else if(modo==='card'){
-    const campos = prefs.card.filter(id=>id!=='id' && id!=='status').map(id=>PROC_CAMPO[id]);
-    conteudo = `<div class="proc-cards">${lista.map(p=>{
-      const s = PROC_STATUS[p.status] || PROC_STATUS.aberto;
-      return `<div class="proc-card">
-        <div class="pc-topo"><b class="pc-num">${esc(p.id)}</b><span class="badge ${s.cls}">${s.label}</span></div>
-        <dl class="pc-campos">${campos.map(c=>`<dt>${esc(c.label)}</dt><dd>${valorCampoProcesso(c, p)}</dd>`).join('')}</dl>
-        <div class="pc-acoes">${acoesProcessoHtml(p)}</div>
-      </div>`;
-    }).join('')}</div>`;
-  }else{
+  else if(modo==='card') conteudo = renderProcKanban(lista, prefs);
+  else if(!lista.length) conteudo = `<div class="empty"><h3>Nenhum processo encontrado</h3><p>Ajuste os filtros ou clique em "Limpar".</p></div>`;
+  else{
     const campos = prefs.lista.filter(id=>id!=='id').map(id=>PROC_CAMPO[id]);
     conteudo = `<div class="table-wrap"><table>
-      <thead><tr><th>Nº</th>${campos.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead>
+      <thead><tr><th>Nº</th>${campos.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th>Ações</th></tr></thead>
       <tbody>${lista.map(p=>`<tr>
-        <td><b class="num-mono" style="text-align:left;">${esc(p.id)}</b></td>
+        <td><span class="stamp">${esc(p.id)}</span></td>
         ${campos.map(c=>`<td>${valorCampoProcesso(c, p)}</td>`).join('')}
-        <td style="text-align:right; white-space:nowrap;">${acoesProcessoHtml(p)}</td>
+        <td>${acoesProcessoHtml(p)}</td>
       </tr>`).join('')}</tbody></table></div>`;
   }
 
   return `
   <div class="page-title">Processos</div>
-  <div class="page-sub">Processos de importação da empresa: cliente, produtos, transporte, financeiro e desembaraço em um só lugar.</div>
+  <div class="page-sub">Processos de importação da empresa: cliente, produtos, transporte, financeiro e desembaraço em um só lugar.${seloFiltroFixado('proc', ignorar)}</div>
   <hr class="hairline">
-  <div class="proc-barra">
-    <button class="btn btn-primary" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</button>
-    <div class="btn-row proc-barra-dir">
-      <div class="modo-toggle" role="group" aria-label="Formato de visualização">
-        <button class="${modo==='lista'?'active':''}" data-action="proc-modo:lista">Lista</button>
-        <button class="${modo==='card'?'active':''}" data-action="proc-modo:card">Cards</button>
-      </div>
-      <button class="btn btn-ghost ${state.procTemplateAberto?'ativo':''}" data-action="proc-template">${ICONS.gear} Template</button>
+  <div class="cot-barra">
+    <div class="view-toggle">
+      <button class="view-toggle-btn ${modo==='lista'?'active':''}" data-action="proc-modo:lista">${ICONS.file} Lista</button>
+      <button class="view-toggle-btn ${modo==='card'?'active':''}" data-action="proc-modo:card">${ICONS.product} Cards</button>
     </div>
+    <button class="btn btn-ghost btn-sm ${state.procTemplateAberto?'ativo':''}" data-action="proc-template">${ICONS.gear} Template</button>
   </div>
   ${state.procTemplateAberto ? renderProcTemplate() : ''}
-  ${total && filtrosTela.length ? `<div class="filter-bar proc-filtros">
-    ${filtrosTela.map(filtroProcHtml).join('')}
-    ${algumAtivo ? `<button class="btn btn-ghost btn-sm" data-action="proc-limpar-filtros">Limpar filtros</button>
-      <span class="membro-sub">${lista.length} de ${total} processo${total===1?'':'s'}</span>` : ''}
-  </div>` : ''}
+  ${barraFiltrosTpl('proc', ignorar, `<button class="btn btn-primary btn-sm" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</button>`)}
   ${conteudo}`;
 }
 
@@ -2084,12 +2279,7 @@ function renderProcTemplate(){
   const sel = new Set(state.procTemplateSel[aba]);
   let grupos;
   if(aba==='filtros'){
-    const todos = sel.size===PROC_FILTROS.length;
-    grupos = `<div class="tpl-grupo" style="grid-column:1/-1;">
-      <div class="tpl-grupo-topo"><b>Filtros da tela</b><span class="membro-sub">${sel.size} de ${PROC_FILTROS.length}</span>
-        <button class="link-btn" data-action="proc-tpl-todos:${todos?'0':'1'}">${todos ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
-      <div class="tpl-colunas">${PROC_FILTROS.map(f=>`<label class="tpl-campo"><input type="checkbox" data-tpl-campo="${f.id}" ${sel.has(f.id)?'checked':''}> ${esc(f.label)}</label>`).join('')}</div>
-    </div>`;
+    grupos = gruposFiltrosTplHtml('proc', PROC_JANELAS_TEMPLATE, sel, 'proc-tpl-grupo', 'data-tpl-campo');
   }else{
     grupos = PROC_JANELAS_TEMPLATE.map(janela=>{
       const campos = PROC_CAMPOS.filter(c=>c.janela===janela && !(c.id==='id') && !(aba==='card' && c.id==='status'));
@@ -2105,7 +2295,7 @@ function renderProcTemplate(){
   const textos = {
     card: 'Escolha as informações que aparecem em cada card. O nº do processo e o status aparecem sempre no topo do card.',
     lista: 'Escolha as colunas da lista. O nº do processo aparece sempre na primeira coluna.',
-    filtros: 'Escolha os filtros que ficam na tela de processos. Filtros ocultos deixam de ser aplicados.',
+    filtros: 'Escolha os filtros da tela: todos os campos do processo estão disponíveis, por janela (texto, lista de opções, período ou faixa de valores). Os filtros valem ao clicar em Filtrar; filtros ocultos deixam de ser aplicados.',
   };
   const contagem = aba==='filtros' ? (sel.size===1 ? 'filtro selecionado' : 'filtros selecionados') : (sel.size===1 ? 'informação selecionada' : 'informações selecionadas');
   return `<div class="card proc-template">
@@ -2138,19 +2328,18 @@ function acaoTemplateProcesso(cmd, a1, a2){
     case 'proc-tpl-aba': state.procTemplateAba = a1; renderApp(); return true;
     case 'proc-tpl-grupo': {
       const aba = state.procTemplateAba || 'card';
-      const ids = PROC_CAMPOS.filter(c=>c.janela===a1 && c.id!=='id' && !(aba==='card' && c.id==='status')).map(c=>c.id);
+      const ids = aba==='filtros' ? catalogoFiltrosProc().filter(f=>f.janela===a1).map(f=>f.id)
+        : PROC_CAMPOS.filter(c=>c.janela===a1 && c.id!=='id' && !(aba==='card' && c.id==='status')).map(c=>c.id);
       const atual = new Set(state.procTemplateSel[aba]);
       ids.forEach(id=> a2==='1' ? atual.add(id) : atual.delete(id));
-      state.procTemplateSel[aba] = PROC_CAMPOS.map(c=>c.id).filter(id=>atual.has(id));
+      state.procTemplateSel[aba] = (aba==='filtros' ? catalogoFiltrosProc().map(f=>f.id) : PROC_CAMPOS.map(c=>c.id)).filter(id=>atual.has(id));
       renderApp(); return true;
     }
     case 'proc-tpl-padrao': {
       const aba = state.procTemplateAba || 'card';
       state.procTemplateSel[aba] = [...PROC_TEMPLATE_PADRAO[aba]]; renderApp(); return true;
     }
-    case 'proc-tpl-todos':
-      state.procTemplateSel.filtros = a1==='1' ? PROC_FILTROS.map(f=>f.id) : []; renderApp(); return true;
-    case 'proc-limpar-filtros': state.procFiltros = {}; renderApp(); return true;
+
     case 'proc-tpl-salvar': {
       const aba = state.procTemplateAba || 'card';
       const escolhidos = state.procTemplateSel[aba];
@@ -2159,8 +2348,7 @@ function acaoTemplateProcesso(cmd, a1, a2){
       if(aba!=='filtros') alteracao.modo = aba;
       else{
         // Filtro que saiu da tela deixa de ser aplicado.
-        const visiveis = new Set(escolhidos);
-        for(const chave of Object.keys(state.procFiltros||{})) if(!visiveis.has(chave.split(':')[0])) delete state.procFiltros[chave];
+        limparFiltrosOcultosTpl('proc', escolhidos);
       }
       salvarPrefsProcessos(alteracao, ({ card:'Template do card salvo.', lista:'Template da lista salvo.', filtros:'Filtros da tela salvos.' })[aba])
         .then(()=>{ state.procTemplateAberto = false; state.procTemplateSel = null; renderApp(); });
@@ -2174,7 +2362,7 @@ function onTemplateCampo(el){
   const aba = state.procTemplateAba || 'card';
   const atual = new Set(state.procTemplateSel[aba]);
   el.checked ? atual.add(id) : atual.delete(id);
-  const ordem = aba==='filtros' ? PROC_FILTROS.map(f=>f.id) : PROC_CAMPOS.map(c=>c.id);
+  const ordem = aba==='filtros' ? catalogoFiltrosProc().map(f=>f.id) : PROC_CAMPOS.map(c=>c.id);
   state.procTemplateSel[aba] = ordem.filter(x=>atual.has(x)); // mantém a ordem das janelas
   renderApp();
   return true;
@@ -2269,7 +2457,7 @@ function renderProcessoForm(){
   <div class="proc-topo">
     <div class="proc-topo-campos">
       ${procCampo('cliente.dataAbertura', 'Data de abertura *', { type:'date' })}
-      ${procCampo('status', 'Status do processo', { options: Object.entries(PROC_STATUS).map(([k,v])=>[k,v.label]) })}
+      ${procCampo('status', 'Status do processo', { options: procStatusOpcoes(state.procDraft && state.procDraft.status) })}
     </div>
     <div class="btn-row">
       <button class="btn btn-ghost" data-action="proc-cancelar">${ICONS.back} Voltar à lista</button>
@@ -2634,6 +2822,8 @@ const COT_CAMPOS = (()=>{
     ['Rota e embarque', 'rotaPaises', 'País origem → destino', (tipo, c)=>rota(c.dados.paisOrigem, c.dados.paisDestino)],
     ['Rota e embarque', 'rotaCidades', 'Cidade origem → destino', (tipo, c)=>ehSimp(tipo) ? rota(c.dados.cidadeOrigem, c.dados.cidadeDestino) : rota(c.dados.freteOrigem, c.dados.freteDestino)],
     ['Rota e embarque', 'rotaPortos', 'Porto/aeroporto origem → destino', (tipo, c)=>rota(c.dados.portoOrigem, c.dados.portoDestino)],
+    ['Rota e embarque', 'cidadeOrigem', 'Cidade de origem', (tipo, c)=>ehSimp(tipo) ? c.dados.cidadeOrigem : c.dados.freteOrigem],
+    ['Rota e embarque', 'cidadeDestino', 'Cidade de destino', (tipo, c)=>ehSimp(tipo) ? c.dados.cidadeDestino : c.dados.freteDestino],
     ['Rota e embarque', 'paisOrigem', 'País de origem', (tipo, c)=>c.dados.paisOrigem],
     ['Rota e embarque', 'paisDestino', 'País de destino', (tipo, c)=>c.dados.paisDestino],
     ['Rota e embarque', 'portoOrigem', 'Porto/aeroporto de origem', (tipo, c)=>c.dados.portoOrigem],
@@ -2672,41 +2862,23 @@ const COT_TITULO_CURTO = {
 COT_CAMPOS.forEach(c=>{ c.curto = COT_TITULO_CURTO[c.id] || c.label; });
 const COT_CAMPO = Object.fromEntries(COT_CAMPOS.map(c=>[c.id, c]));
 
-// Filtros da tela (Configurar Filtros). "el" é o id do campo na tela; "trim" tira espaços do texto.
-const COT_FILTROS = [
-  { id:'tipo', label:'Tipo', el:'ft-tipo', vazio:'todos' },
-  { id:'numero', label:'Número', el:'ft-numero', trim:true },
-  { id:'texto', label:'Cliente / Fornecedor / Produto', el:'ft-texto', trim:true },
-  { id:'de', label:'De (data)', el:'ft-de' },
-  { id:'ate', label:'Até (data)', el:'ft-ate' },
-  { id:'vendedor', label:'Vendedor', el:'ft-vendedor', trim:true },
-  { id:'responsavel', label:'Responsável', el:'ft-responsavel', trim:true },
-  { id:'paisOrigem', label:'País de Origem', el:'ft-pais-origem', trim:true },
-  { id:'paisDestino', label:'País de Destino', el:'ft-pais-destino', trim:true },
-  { id:'cidadeOrigem', label:'Cidade de Origem', el:'ft-cidade-origem', trim:true },
-  { id:'cidadeDestino', label:'Cidade de Destino', el:'ft-cidade-destino', trim:true },
-  { id:'portoOrigem', label:'Porto/Aeroporto de Origem', el:'ft-porto-origem', trim:true },
-  { id:'portoDestino', label:'Porto/Aeroporto de Destino', el:'ft-porto-destino', trim:true },
-  { id:'ncm', label:'NCM', el:'ft-ncm', trim:true },
-  { id:'incoterm', label:'Incoterm', el:'ft-incoterm' },
-  { id:'statusCotacao', label:'Status (na lista)', el:'ft-status' },
-  { id:'statusMotivoNegado', label:'Motivo da Negação', el:'ft-motivo' },
-];
 const COT_TEMPLATE_PADRAO = {
   lista: ['tipo', 'status', 'cliente', 'criadoEm', 'validade', 'itens', 'custoA', 'custoB'],
   card: ['cliente', 'vendedor', 'incoterm', 'rotaPaises', 'rotaCidades', 'rotaPortos'],
-  filtros: COT_FILTROS.map(f=>f.id),
+  filtros: ['tipo', 'numero', 'busca', 'criadoEm', 'vendedor', 'responsavel', 'paisOrigem', 'paisDestino', 'cidadeOrigem', 'cidadeDestino', 'portoOrigem', 'portoDestino', 'ncms', 'incoterm', 'status', 'motivoNegado'],
 };
 
+// Filtros escolhidos antes desta versão (ids antigos) → ids do catálogo atual
+const COT_FILTROS_ANTIGOS = { texto:'busca', de:'criadoEm', ate:'criadoEm', ncm:'ncms', statusCotacao:'status', statusMotivoNegado:'motivoNegado' };
 function prefsCotacoes(){
   const p = ((usuarioAtual && usuarioAtual.preferencias) || {}).cotacoes || {};
   const valido = (arr, mapa) => Array.isArray(arr) ? arr.filter(id=>mapa[id]) : null;
-  const filtrosMapa = Object.fromEntries(COT_FILTROS.map(f=>[f.id, f]));
+
   return {
     modo: p.modo==='cards' ? 'cards' : 'lista',
     lista: valido(p.lista, COT_CAMPO) || COT_TEMPLATE_PADRAO.lista,
     card: valido(p.card, COT_CAMPO) || COT_TEMPLATE_PADRAO.card,
-    filtros: valido(p.filtros, filtrosMapa) || COT_TEMPLATE_PADRAO.filtros,
+    filtros: valido(converterFiltrosAntigos(p.filtros, COT_FILTROS_ANTIGOS), mapaFiltrosTpl('cot')) || COT_TEMPLATE_PADRAO.filtros,
   };
 }
 async function salvarPreferencias(area, alteracao, atuais, mensagem){
@@ -2751,36 +2923,6 @@ function nomesFiltroPessoa(campo){
   const usados = [...state.cotacoesIndex, ...state.cotacoesFormalIndex].map(c=>(c.dados||{})[campo]).filter(Boolean);
   return [...new Set([...daLista, ...usados])].sort((a,b)=>a.localeCompare(b, 'pt-BR')).map(n=>[n, daLista.includes(n) ? n : n + ' (fora da lista)']);
 }
-function filtroCotacaoHtml(f){
-  const v = state.filtrosTodas[f.id] ?? '';
-  const sel = (opcoes) => `<select id="${f.el}">${opcoes.map(([k,t])=>`<option value="${k}" ${String(v||f.vazio||'')===k?'selected':''}>${t}</option>`).join('')}</select>`;
-  let campo;
-  switch(f.id){
-    case 'tipo': campo = sel([['todos','Todos'],['simplificada','Simplificada'],['formal','Formal']]); break;
-    case 'incoterm': campo = sel([['','Todos'], ...['FOB','CIF','CFR','EXW','FCA','CPT','CIP'].map(i=>[i,i])]); break;
-    case 'statusCotacao': campo = sel([['','Todos'], ...Object.entries(COT_STATUS_LABEL)]); break;
-    case 'statusMotivoNegado': campo = sel([['','Todos'], ...Object.entries(COT_MOTIVO_LABEL)]); break;
-    case 'vendedor': case 'responsavel': campo = sel([['','Todos'], ...nomesFiltroPessoa(f.id)]); break;
-    case 'de': case 'ate': campo = `<input id="${f.el}" type="date" value="${esc(v)}">`; break;
-    default: {
-      const ph = { numero:'COT-0001 ou COTF-0001', texto:'Buscar...', vendedor:'Nome do vendedor', responsavel:'Nome do responsável', paisOrigem:'Ex: China',
-        paisDestino:'Ex: Brasil', cidadeOrigem:'Ex: Shanghai', cidadeDestino:'Ex: Santos', portoOrigem:'Ex: Porto de Shanghai', portoDestino:'Ex: Porto de Santos', ncm:'0000.00.00' }[f.id] || '';
-      campo = `<input id="${f.el}" placeholder="${esc(ph)}" value="${esc(v)}">`;
-    }
-  }
-  return `<div class="field"><label>${esc(f.id==='statusCotacao' ? 'Status' : f.id==='de' ? 'De' : f.id==='ate' ? 'Até' : f.label)}</label>${campo}</div>`;
-}
-// Lê os filtros visíveis; os ocultos ficam vazios (não filtram escondido).
-function lerFiltrosCotacoes(){
-  const visiveis = new Set(prefsCotacoes().filtros);
-  for(const f of COT_FILTROS){
-    const el = document.getElementById(f.el);
-    let v = (visiveis.has(f.id) && el) ? el.value : '';
-    if(f.trim) v = v.trim();
-    state.filtrosTodas[f.id] = v || f.vazio || '';
-  }
-}
-
 // Janela Template de Cotações Salvas
 function renderCotTemplate(){
   const aba = state.cotTemplateAba || 'card';
@@ -2788,11 +2930,7 @@ function renderCotTemplate(){
   const sel = new Set(state.cotTemplateSel[aba]);
   let grupos;
   if(aba==='filtros'){
-    grupos = `<div class="tpl-grupo" style="grid-column:1/-1;">
-      <div class="tpl-grupo-topo"><b>Filtros da tela</b><span class="membro-sub">${sel.size} de ${COT_FILTROS.length}</span>
-        <button class="link-btn" data-action="cot-tpl-todos:${sel.size===COT_FILTROS.length?'0':'1'}">${sel.size===COT_FILTROS.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
-      <div class="tpl-colunas">${COT_FILTROS.map(f=>`<label class="tpl-campo"><input type="checkbox" data-cot-tpl="${f.id}" ${sel.has(f.id)?'checked':''}> ${esc(f.label)}</label>`).join('')}</div>
-    </div>`;
+    grupos = gruposFiltrosTplHtml('cot', COT_JANELAS_TEMPLATE, sel, 'cot-tpl-grupo', 'data-cot-tpl');
   }else{
     grupos = COT_JANELAS_TEMPLATE.map(janela=>{
       const campos = COT_CAMPOS.filter(c=>c.janela===janela && !(aba==='card' && (c.id==='tipo' || c.id==='status')));
@@ -2808,7 +2946,7 @@ function renderCotTemplate(){
   const textos = {
     card: 'Escolha as informações que aparecem em cada card. O nº, o tipo e os botões (duplicar, baixar PDF e excluir) aparecem sempre no topo; o status é a coluna do quadro.',
     lista: 'Escolha as colunas da lista. O nº aparece sempre na primeira coluna e as ações na última.',
-    filtros: 'Escolha os filtros que ficam na tela de Cotações Salvas. Filtros ocultos deixam de ser aplicados.',
+    filtros: 'Escolha os filtros da tela: todos os campos da cotação estão disponíveis, por janela (texto, lista de opções, período ou faixa de valores). Filtros ocultos deixam de ser aplicados.',
   };
   const nomes = { card:'card', lista:'lista', filtros:'filtros' };
   return `<div class="card proc-template">
@@ -2834,10 +2972,11 @@ function renderCotTemplate(){
 }
 
 function idsDoGrupoCotacao(janela, aba){
+  if(aba==='filtros') return catalogoFiltrosCot().filter(f=>f.janela===janela).map(f=>f.id);
   return COT_CAMPOS.filter(c=>c.janela===janela && !(aba==='card' && (c.id==='tipo' || c.id==='status'))).map(c=>c.id);
 }
 function ordenarSelecaoCot(aba, conjunto){
-  const ordem = aba==='filtros' ? COT_FILTROS.map(f=>f.id) : COT_CAMPOS.map(c=>c.id);
+  const ordem = aba==='filtros' ? catalogoFiltrosCot().map(f=>f.id) : COT_CAMPOS.map(c=>c.id);
   return ordem.filter(id=>conjunto.has(id));
 }
 function acaoTemplateCotacoes(cmd, a1, a2){
@@ -2850,8 +2989,6 @@ function acaoTemplateCotacoes(cmd, a1, a2){
       idsDoGrupoCotacao(a1, aba).forEach(id=> a2==='1' ? atual.add(id) : atual.delete(id));
       state.cotTemplateSel[aba] = ordenarSelecaoCot(aba, atual); renderApp(); return true;
     }
-    case 'cot-tpl-todos':
-      state.cotTemplateSel.filtros = a1==='1' ? COT_FILTROS.map(f=>f.id) : []; renderApp(); return true;
     case 'cot-tpl-padrao': state.cotTemplateSel[aba] = [...COT_TEMPLATE_PADRAO[aba]]; renderApp(); return true;
     case 'cot-tpl-salvar': {
       const escolhidos = state.cotTemplateSel[aba];
@@ -2860,11 +2997,7 @@ function acaoTemplateCotacoes(cmd, a1, a2){
       if(aba==='card') alteracao.modo = 'cards';
       if(aba==='lista') alteracao.modo = 'lista';
       if(aba==='filtros'){
-        // Filtro que saiu da tela deixa de ser aplicado.
-        const visiveis = new Set(escolhidos);
-        let mudou = false;
-        COT_FILTROS.forEach(f=>{ if(!visiveis.has(f.id) && (state.filtrosTodas[f.id]||'') !== (f.vazio||'')){ state.filtrosTodas[f.id] = f.vazio || ''; mudou = true; } });
-        if(mudou) persistFiltrosTodas();
+        limparFiltrosOcultosTpl('cot', escolhidos);
       }
       const msg = { card:'Template do card salvo.', lista:'Template da lista salvo.', filtros:'Filtros da tela salvos.' }[aba];
       salvarPrefsCotacoes(alteracao, msg).then(()=>{
@@ -3680,7 +3813,7 @@ const state = {
   dados: dadosPadrao(),
   currentCotacaoId: null,
   cotacoesIndex: [],         // [{id,numero,criadoEm,atualizadoEm, resumo:{...}}]
-  processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procFiltros: {}, procTemplateAberto: false, procTemplateAba: 'card', procTemplateSel: null,
+  processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procTemplateAberto: false, procTemplateAba: 'card', procTemplateSel: null,
   cotTemplateAberto: false, cotTemplateAba: 'card', cotTemplateSel: null,
   cadTemplateAberto: null, cadTemplateAba: 'card', cadTemplateSel: null, cadFiltrosTpl: {},
   clientes: [], fornecedores: [], produtos: [],
@@ -3807,7 +3940,8 @@ const saveDraftFormal = debounce(async ()=>{ await storeSet('dadosFormal:draft',
 const saveDraftSimulacao = debounce(async ()=>{ await storeSet('simulacao:draft', state.simulacao); }, 500);
 
 async function loadInitialData(){
-  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado', 'processo:draft']);
+  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado', 'processo:draft', 'filtrosProc:fixado', 'filtrosCot:fixado']);
+  state.filtrosAplicados = { proc: v['filtrosProc:fixado'] || {}, cot: v['filtrosCot:fixado'] || {} };
   if(v['processos:index']) state.processosIndex = v['processos:index'];
   if(v['processo:draft'] && v['processo:draft'].draft){
     state.procDraft = normalizarProcesso(v['processo:draft'].draft);
@@ -3830,10 +3964,7 @@ async function loadInitialData(){
   if(idxF) state.cotacoesFormalIndex = idxF;
   if(draftS) state.simulacao = normalizeSimulacao(draftS);
   if(idxS) state.simulacoesIndex = idxS;
-  if(filtrosSalvos) state.filtrosTodas = Object.assign({}, state.filtrosTodas, filtrosSalvos);
 }
-async function persistFiltrosTodas(){ await storeSet('filtrosTodas:fixado', state.filtrosTodas); }
-async function limparFiltrosTodasPersistidos(){ await storeDelete('filtrosTodas:fixado'); }
 async function persistCotacoesIndex(){ await storeSet('cotacoes:index', state.cotacoesIndex); }
 async function persistCotacoesFormalIndex(){ await storeSet('cotacoesFormal:index', state.cotacoesFormalIndex); }
 async function persistSimulacoesIndex(){ await storeSet('simulacoes:index', state.simulacoesIndex); }
@@ -5108,41 +5239,8 @@ function renderCotacoesFormal(){
 
 /* --------------------------- Cotações Salvas (Unificada) --------------------- */
 function cotacoesTodasFiltradas(ignorarStatus){
-  const f = state.filtrosTodas;
-  const simplificadas = state.cotacoesIndex.map(cot=>({ tipo:'Simplificada', cot }));
-  const formais = state.cotacoesFormalIndex.map(cot=>({ tipo:'Formal', cot }));
-  let combinadas = simplificadas.concat(formais);
-  if(f.tipo && f.tipo!=='todos') combinadas = combinadas.filter(x=>x.tipo===(f.tipo==='simplificada'?'Simplificada':'Formal'));
-  return combinadas.filter(({tipo, cot})=>{
-    const d = cot.dados;
-    if(f.numero && !cot.id.toLowerCase().includes(f.numero.toLowerCase())) return false;
-    if(f.texto){
-      const t = f.texto.toLowerCase();
-      const clienteMatch = (d.cliente||'').toLowerCase().includes(t);
-      const produtoMatch = (d.produtos||[]).some(p=> (p.fornecedor||'').toLowerCase().includes(t) || (p.produto||'').toLowerCase().includes(t));
-      if(!clienteMatch && !produtoMatch) return false;
-    }
-    if(f.de && cot.criadoEm < f.de) return false;
-    if(f.ate && cot.criadoEm > (f.ate+'T23:59:59')) return false;
-    const cidadeOrigem = tipo==='Simplificada' ? d.cidadeOrigem : d.freteOrigem;
-    const cidadeDestino = tipo==='Simplificada' ? d.cidadeDestino : d.freteDestino;
-    if(f.vendedor && (d.vendedor||'').trim().toLowerCase()!==f.vendedor.trim().toLowerCase()) return false;
-    if(f.responsavel && (d.responsavel||'').trim().toLowerCase()!==f.responsavel.trim().toLowerCase()) return false;
-    if(f.paisOrigem && !(d.paisOrigem||'').toLowerCase().includes(f.paisOrigem.toLowerCase())) return false;
-    if(f.paisDestino && !(d.paisDestino||'').toLowerCase().includes(f.paisDestino.toLowerCase())) return false;
-    if(f.portoOrigem && !(d.portoOrigem||'').toLowerCase().includes(f.portoOrigem.toLowerCase())) return false;
-    if(f.portoDestino && !(d.portoDestino||'').toLowerCase().includes(f.portoDestino.toLowerCase())) return false;
-    if(f.cidadeOrigem && !(cidadeOrigem||'').toLowerCase().includes(f.cidadeOrigem.toLowerCase())) return false;
-    if(f.cidadeDestino && !(cidadeDestino||'').toLowerCase().includes(f.cidadeDestino.toLowerCase())) return false;
-    if(f.incoterm && (d.incoterm||'').toLowerCase()!==f.incoterm.toLowerCase()) return false;
-    if(!ignorarStatus && f.statusCotacao && (d.statusCotacao||'em_andamento')!==f.statusCotacao) return false;
-    if(f.statusMotivoNegado && (d.statusMotivoNegado||'')!==f.statusMotivoNegado) return false;
-    if(f.ncm){
-      const ncmMatch = (d.produtos||[]).some(p=> (p.ncm||'').toLowerCase().includes(f.ncm.toLowerCase()));
-      if(!ncmMatch) return false;
-    }
-    return true;
-  }).sort((a,b)=> new Date(b.cot.criadoEm) - new Date(a.cot.criadoEm));
+  const itens = itensCotacoes().sort((a,b)=> new Date(b.cot.criadoEm) - new Date(a.cot.criadoEm));
+  return aplicarFiltrosTpl('cot', itens, ignorarStatus ? ['status'] : []);
 }
 async function moverCotacaoStatus(id, tipo, novoStatus){
   if(!pode('cotacoes','editar')){ toast('Você não tem permissão para editar cotações.'); renderApp(); return; }
@@ -5159,10 +5257,7 @@ async function moverCotacaoStatus(id, tipo, novoStatus){
   toast(`${id}: status alterado para "${statusLabels[novoStatus]||novoStatus}".`, 'ok');
   renderApp();
 }
-function filtroTodasAtivo(){
-  const f = state.filtrosTodas;
-  return !!(f.numero||f.texto||f.de||f.ate||(f.tipo&&f.tipo!=='todos')||f.vendedor||f.responsavel||f.paisOrigem||f.paisDestino||f.portoOrigem||f.portoDestino||f.cidadeOrigem||f.cidadeDestino||f.ncm||f.incoterm||f.statusCotacao||f.statusMotivoNegado);
-}
+
 function renderCotacoesTodas(){
   const prefs = prefsCotacoes();
   const list = cotacoesTodasFiltradas();
@@ -5183,17 +5278,9 @@ function renderCotacoesTodas(){
     <button class="btn btn-ghost btn-sm ${state.cotTemplateAberto?'ativo':''}" data-action="cot-template">${ICONS.gear} Template</button>
   </div>`;
 
-  const filtrosVisiveis = new Set(prefs.filtros);
-  const filtros = COT_FILTROS.filter(f=>filtrosVisiveis.has(f.id) && !(f.id==='statusCotacao' && state.cotacoesViewMode!=='lista'));
-  const filterBar = `
-  <div class="filter-bar">
-    ${filtros.map(filtroCotacaoHtml).join('')}
-    ${filtros.length ? `<button class="btn btn-ghost btn-sm" data-action="aplicar-filtros-todas">${ICONS.filter} Filtrar</button>
-    <button class="btn btn-ghost btn-sm" data-action="limpar-filtros-todas">Limpar</button>` : ''}
-    <div style="flex:1;"></div>
-    <button class="btn btn-primary btn-sm" data-action="go:dados">${ICONS.plus} Nova Simplificada</button>
-    <button class="btn btn-primary btn-sm" data-action="go:dadosFormal">${ICONS.plus} Nova Formal</button>
-  </div>`;
+  const ignorarFiltros = state.cotacoesViewMode==='cards' ? ['status'] : []; // no quadro, as colunas já são o status
+  const filterBar = barraFiltrosTpl('cot', ignorarFiltros, `<button class="btn btn-primary btn-sm" data-action="go:dados">${ICONS.plus} Nova Simplificada</button>
+    <button class="btn btn-primary btn-sm" data-action="go:dadosFormal">${ICONS.plus} Nova Formal</button>`);
 
   const temCusto = prefs.lista.includes('custoA') || prefs.lista.includes('custoB');
   const corpo = state.cotacoesViewMode==='cards' ? renderCotacoesKanban() : (list.length ? `
@@ -5211,7 +5298,7 @@ function renderCotacoesTodas(){
   return `
   <div class="page-title">Cotações Salvas</div>
   <div class="page-sub">Cotações de Importação Simplificada e Formal, num único lugar. Cada uma recebe um número sequencial e fica disponível para reabrir, editar ou exportar.
-    ${filtroTodasAtivo() ? ` <span class="badge badge-amber">${ICONS.filter} Filtro fixado — permanece até clicar em "Limpar"</span>` : ''}
+    ${seloFiltroFixado('cot', state.cotacoesViewMode==='cards' ? ['status'] : [])}
   </div>
   <hr class="hairline">
   ${viewToggle}
@@ -8038,6 +8125,7 @@ function onAppClick(e){
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1))) return;
   if(cmd.startsWith('cot-') && acaoTemplateCotacoes(cmd, a1, a2)) return;
+  if(cmd.startsWith('ftpl-') && acaoFiltrosTpl(cmd, a1)) return;
   if(cmd.startsWith('cadtpl-') && acaoTemplateCadastro(cmd, a1, a2)) return;
   switch(cmd){
     case 'go': navigate(a1); break;
@@ -8126,20 +8214,6 @@ function onAppClick(e){
     }
     case 'limpar-filtros-formal': state.filtrosFormal = {numero:'',texto:'',de:'',ate:''}; renderApp(); break;
     case 'set-cotacoes-view': state.cotacoesViewMode = a1; salvarPrefsCotacoes({ modo: a1 }); renderApp(); break;
-    case 'aplicar-filtros-todas': {
-      lerFiltrosCotacoes();
-      persistFiltrosTodas();
-      toast('Filtro fixado — vai continuar aplicado até você clicar em "Limpar".', 'ok');
-      renderApp();
-      break;
-    }
-    case 'limpar-filtros-todas':
-      state.filtrosTodas = { numero:'', texto:'', de:'', ate:'', tipo:'todos',
-        vendedor:'', responsavel:'', paisOrigem:'', paisDestino:'', portoOrigem:'', portoDestino:'', cidadeOrigem:'', cidadeDestino:'', ncm:'', incoterm:'',
-        statusCotacao:'', statusMotivoNegado:'' };
-      limparFiltrosTodasPersistidos();
-      renderApp();
-      break;
     case 'cad-open-form':
       if(CAD_CONFIG[a1].rich){ cadOpenFormRico(a1, null); }
       else { state.cadFormOpen = true; state.cadEdit = {tipo:null,id:null}; renderApp(); }
@@ -8202,7 +8276,6 @@ function onAppInput(e){
   const el = e.target;
   if(onConfigInput(el)) return;
   if(el.hasAttribute('data-proc')){ if(el.type!=='checkbox' && el.tagName!=='SELECT') onProcessoInput(el, 'input'); return; }
-  if(el.hasAttribute('data-proc-filtro')){ onFiltroProcesso(el, 'input'); return; }
   if(el.hasAttribute('data-cad-filtro')){ onFiltroCadastro(el, 'input'); return; }
   const bind = el.getAttribute('data-bind');
   if(!bind) return;
@@ -8250,7 +8323,6 @@ function onAppChange(e){
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
   if(el.hasAttribute('data-cadtpl-campo')){ onCadTemplateCampo(el); return; }
   if(el.hasAttribute('data-cad-filtro')){ onFiltroCadastro(el, 'change'); return; }
-  if(el.hasAttribute('data-proc-filtro')){ onFiltroProcesso(el, 'change'); return; }
   if(el.id==='icms-input' || el.id==='icms-input-formal') return; // handled by input
   if(el.id==='doc-file-input'){ handleFilesSelected(el.files); return; }
   if(el.id==='anexo-file-input'){ handleAnexoFilesSelected(el.files); return; }
@@ -8304,10 +8376,15 @@ async function init(){
       hideAutocomplete();
     }
   });
+  app.addEventListener('keydown', (e)=>{
+    const campo = e.key==='Enter' && e.target.closest && e.target.closest('[data-ftpl]');
+    if(campo){ e.preventDefault(); acaoFiltrosTpl('ftpl-filtrar', campo.getAttribute('data-ftpl').split('|')[0]); }
+  });
   app.addEventListener('dragstart', (e)=>{
     const card = e.target.closest && e.target.closest('.kanban-card');
     if(card){
-      const payload = JSON.stringify({ id: card.getAttribute('data-cot-id'), tipo: card.getAttribute('data-cot-tipo') });
+      const payload = card.hasAttribute('data-proc-id') ? JSON.stringify({ proc: card.getAttribute('data-proc-id') })
+        : JSON.stringify({ id: card.getAttribute('data-cot-id'), tipo: card.getAttribute('data-cot-tipo') });
       e.dataTransfer.setData('text/plain', payload);
       e.dataTransfer.effectAllowed = 'move';
       card.classList.add('dragging');
@@ -8349,7 +8426,8 @@ async function init(){
       const novoStatus = col.getAttribute('data-status');
       let payload = null;
       try{ payload = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){}
-      if(payload && payload.id) moverCotacaoStatus(payload.id, payload.tipo, novoStatus);
+      if(payload && payload.proc && col.getAttribute('data-quadro')==='proc') moverProcessoStatus(payload.proc, novoStatus);
+      else if(payload && payload.id && col.getAttribute('data-quadro')!=='proc') moverCotacaoStatus(payload.id, payload.tipo, novoStatus);
     }
   });
   document.addEventListener('click', (e)=>{
