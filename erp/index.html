@@ -603,6 +603,19 @@ td.num-mono, th.num-mono{text-align:right;}
 .kanban-card-campos{display:grid; grid-template-columns:auto 1fr; gap:3px 8px; margin:0; font-size:11.5px; line-height:1.4;}
 .kanban-card-campos dt{color:var(--ink-soft);}
 .kanban-card-campos dd{margin:0; color:var(--ink); font-weight:600; word-break:break-word;}
+
+/* ---------- Processos: data de abertura e filtros ---------- */
+.proc-topo-campos{display:flex; gap:14px; flex-wrap:wrap;}
+.proc-topo-campos .field{min-width:200px;}
+.proc-filtros{margin-bottom:16px;}
+.filtro-periodo .periodo{display:flex; align-items:center; gap:6px;}
+.filtro-periodo .periodo span{font-size:12px; color:var(--ink-soft);}
+.filtro-periodo .periodo input{min-width:0; width:150px;}
+@media (max-width:760px){
+  .proc-topo-campos{width:100%;}
+  .proc-topo-campos .field{min-width:0; flex:1 1 140px;}
+  .filtro-periodo .periodo input{width:auto; flex:1;}
+}
 </style>
 </head>
 <body>
@@ -1739,6 +1752,8 @@ const PROC_INCOTERMS = ['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DAP','D
 const PROC_TRIBUTOS = [['ii','II'],['ipi','IPI'],['pis','PIS'],['cofins','COFINS'],['icms','ICMS'],['siscomex','Taxa Siscomex'],['afrmm','AFRMM'],['armazenagem','Armazenagem']];
 
 const hojeISO = () => new Date().toISOString().slice(0,10);
+// Processos salvos antes do campo existir usam a data de criação.
+const dataAberturaProcesso = p => ((p && p.cliente) || {}).dataAbertura || String((p && p.criadoEm) || '').slice(0,10);
 function novoItemProcesso(){ return { id:uid(), produto:'', ncm:'', descricao:'', quantidade:'', unidade:'', valorUnit:'', pesoLiquido:'' }; }
 function novaParcelaProcesso(){ return { id:uid(), descricao:'', vencimento:'', valor:'', moeda:'USD', pago:false }; }
 function novoProcesso(){
@@ -1758,6 +1773,7 @@ function novoProcesso(){
 // Completa campos que faltem (processos salvos antes de algum campo novo existir).
 function normalizarProcesso(p){
   const base = novoProcesso(), r = { ...base, ...(p||{}) };
+  if(p && !(p.cliente||{}).dataAbertura) base.cliente.dataAbertura = p.criadoEm ? String(p.criadoEm).slice(0,10) : '';
   for(const k of ['cliente','produto','transporte','financeiro','desembaraco']) r[k] = { ...base[k], ...((p||{})[k]||{}) };
   r.desembaraco.tributos = { ...base.desembaraco.tributos, ...(((p||{}).desembaraco||{}).tributos||{}) };
   if(!Array.isArray(r.produto.itens)) r.produto.itens = [];
@@ -1809,7 +1825,7 @@ const PROC_CAMPOS = (()=>{
     ['Cliente', 'cliente.nome', 'Cliente'], ['Cliente', 'cliente.cnpjCpf', 'CNPJ/CPF'], ['Cliente', 'cliente.contato', 'Contato'],
     ['Cliente', 'cliente.email', 'E-mail'], ['Cliente', 'cliente.telefone', 'Telefone'], ['Cliente', 'cliente.referenciaCliente', 'Referência do cliente'],
     ['Cliente', 'cliente.modalidade', 'Modalidade de importação', p=>({ conta_propria:'Conta própria', conta_ordem:'Por conta e ordem', encomenda:'Por encomenda' })[p.cliente&&p.cliente.modalidade]||''],
-    ['Cliente', 'cliente.dataAbertura', 'Data de abertura', p=>data(p.cliente&&p.cliente.dataAbertura)],
+    ['Geral', 'cliente.dataAbertura', 'Data de abertura', p=>data(dataAberturaProcesso(p))],
     ['Cliente', 'cliente.responsavel', 'Responsável'], ['Cliente', 'cliente.vendedor', 'Vendedor'], ['Cliente', 'cliente.observacoes', 'Observações do cliente'],
 
     ['Produto', 'produto.fornecedor', 'Fornecedor / exportador'], ['Produto', 'produto.paisOrigem', 'País de origem'],
@@ -1861,15 +1877,95 @@ const PROC_CAMPOS = (()=>{
   return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor: valor || (p=>{ const v = getPath(p, id); return v==null ? '' : String(v); }), ...(extra||{}) }));
 })();
 const PROC_CAMPO = Object.fromEntries(PROC_CAMPOS.map(c=>[c.id, c]));
+// Filtros da lista de processos (Template → Configurar Filtros escolhe quais ficam na tela).
+//   texto: contém o texto · opcao: igual ao valor escolhido · periodo: data entre "de" e "até"
+const PROC_FILTROS = [
+  { id:'busca', label:'Busca em qualquer campo', tipo:'texto', placeholder:'Buscar em qualquer campo…',
+    teste:(p, v)=>PROC_CAMPOS.some(c=>{ try{ return String(c.valor(p)||'').toLowerCase().includes(v); }catch(e){ return false; } }) },
+  { id:'status', label:'Status', tipo:'opcao', opcoes:()=>Object.entries(PROC_STATUS).map(([k,v])=>[k,v.label]), valor:p=>p.status||'aberto' },
+  { id:'abertura', label:'Data de abertura', tipo:'periodo', valor:p=>dataAberturaProcesso(p) },
+  { id:'cliente', label:'Cliente', tipo:'texto', placeholder:'Nome do cliente', valor:p=>(p.cliente||{}).nome },
+  { id:'responsavel', label:'Responsável', tipo:'opcao', dinamico:true, valor:p=>(p.cliente||{}).responsavel },
+  { id:'vendedor', label:'Vendedor', tipo:'opcao', dinamico:true, valor:p=>(p.cliente||{}).vendedor },
+  { id:'fornecedor', label:'Fornecedor / exportador', tipo:'texto', placeholder:'Nome do fornecedor', valor:p=>(p.produto||{}).fornecedor },
+  { id:'modal', label:'Modal', tipo:'opcao', opcoes:()=>Object.entries(PROC_MODAIS), valor:p=>(p.transporte||{}).modal },
+  { id:'origem', label:'Origem', tipo:'texto', placeholder:'Porto, aeroporto ou cidade', valor:p=>(p.transporte||{}).origem },
+  { id:'destino', label:'Destino', tipo:'texto', placeholder:'Porto, aeroporto ou cidade', valor:p=>(p.transporte||{}).destino },
+  { id:'etd', label:'ETD (saída)', tipo:'periodo', valor:p=>(p.transporte||{}).etd },
+  { id:'eta', label:'ETA (chegada)', tipo:'periodo', valor:p=>(p.transporte||{}).eta },
+  { id:'canal', label:'Canal de parametrização', tipo:'opcao', opcoes:()=>Object.entries(PROC_CANAIS).filter(([k])=>k), valor:p=>(p.desembaraco||{}).canal },
+  { id:'declaracao', label:'Nº da declaração (DI/DUIMP)', tipo:'texto', placeholder:'Número', valor:p=>(p.desembaraco||{}).numeroDeclaracao },
+  { id:'incoterm', label:'Incoterm', tipo:'opcao', opcoes:()=>PROC_INCOTERMS.map(i=>[i,i]), valor:p=>(p.produto||{}).incoterm },
+];
+const PROC_FILTRO = Object.fromEntries(PROC_FILTROS.map(f=>[f.id, f]));
+
+function filtroProcAtivo(f){
+  const v = state.procFiltros || {};
+  return f.tipo==='periodo' ? !!(v[f.id+':de'] || v[f.id+':ate']) : !!v[f.id];
+}
+function processosFiltrados(){
+  const visiveis = prefsProcessos().filtros.map(id=>PROC_FILTRO[id]);
+  const v = state.procFiltros || {};
+  return [...(state.processosIndex||[])].sort((a,b)=>(b.seq||0)-(a.seq||0)).filter(p=>visiveis.every(f=>{
+    if(!filtroProcAtivo(f)) return true;
+    if(f.tipo==='periodo'){
+      const d = f.valor(p) || '';
+      if(!d) return false;
+      if(v[f.id+':de'] && d < v[f.id+':de']) return false;
+      if(v[f.id+':ate'] && d > v[f.id+':ate']) return false;
+      return true;
+    }
+    const alvo = v[f.id];
+    if(f.teste) return f.teste(p, String(alvo).toLowerCase());
+    if(f.tipo==='opcao') return String(f.valor(p)||'')===alvo;
+    return String(f.valor(p)||'').toLowerCase().includes(String(alvo).toLowerCase());
+  }));
+}
+function opcoesFiltroProc(f){
+  if(!f.dinamico) return f.opcoes();
+  // Responsável / vendedor: nomes das listas da Personalização e os que já aparecem nos processos
+  const tipo = f.id==='responsavel' ? 'responsaveis' : 'vendedores';
+  const nomes = new Set([...listaPessoas(tipo).map(x=>x.nome), ...(state.processosIndex||[]).map(p=>f.valor(p)).filter(Boolean)]);
+  return [...nomes].sort((a,b)=>a.localeCompare(b, 'pt-BR')).map(n=>[n, n]);
+}
+function filtroProcHtml(f){
+  const v = state.procFiltros || {};
+  if(f.tipo==='periodo'){
+    return `<div class="field filtro-periodo"><label>${esc(f.label)}</label><div class="periodo">
+      <input type="date" data-proc-filtro="${f.id}:de" value="${esc(v[f.id+':de']||'')}" title="${esc(f.label)} — de">
+      <span>até</span>
+      <input type="date" data-proc-filtro="${f.id}:ate" value="${esc(v[f.id+':ate']||'')}" title="${esc(f.label)} — até"></div></div>`;
+  }
+  if(f.tipo==='opcao'){
+    return `<div class="field"><label>${esc(f.label)}</label><select data-proc-filtro="${f.id}">
+      <option value="">Todos</option>${opcoesFiltroProc(f).map(([k,t])=>`<option value="${esc(k)}" ${v[f.id]===k?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
+  }
+  return `<div class="field" ${f.id==='busca'?'style="min-width:240px;"':''}><label>${esc(f.label)}</label>
+    <input data-proc-filtro="${f.id}" value="${esc(v[f.id]||'')}" placeholder="${esc(f.placeholder||'')}" autocomplete="off"></div>`;
+}
+// Texto filtra enquanto digita (mantendo o cursor); listas e datas filtram ao escolher.
+function onFiltroProcesso(el, evento){
+  const chave = el.getAttribute('data-proc-filtro'); if(!chave) return false;
+  const texto = el.tagName==='INPUT' && el.type!=='date';
+  if(texto ? evento!=='input' : evento!=='change') return true;
+  if(!state.procFiltros) state.procFiltros = {};
+  state.procFiltros[chave] = el.value;
+  const pos = el.selectionStart;
+  renderApp();
+  if(texto){ const novo = document.querySelector(`[data-proc-filtro="${chave}"]`); if(novo){ novo.focus(); try{ novo.setSelectionRange(pos, pos); }catch(e){} } }
+  return true;
+}
 const PROC_TEMPLATE_PADRAO = {
-  lista: ['cliente.nome', 'transporte.modal', 'transporte.rota', 'transporte.eta', 'desembaraco.canal', 'status'],
+  filtros: ['busca', 'status', 'abertura'],
+  lista: ['cliente.dataAbertura', 'cliente.nome', 'transporte.modal', 'transporte.rota', 'transporte.eta', 'desembaraco.canal', 'status'],
   card: ['cliente.nome', 'produto.fornecedor', 'transporte.modal', 'transporte.rota', 'transporte.eta', 'produto.totalMercadoria', 'desembaraco.canal'],
 };
 
 function prefsProcessos(){
   const p = ((usuarioAtual && usuarioAtual.preferencias) || {}).processos || {};
-  const valido = arr => Array.isArray(arr) ? arr.filter(id=>PROC_CAMPO[id]) : null;
-  return { modo: p.modo==='card' ? 'card' : 'lista', lista: valido(p.lista) || PROC_TEMPLATE_PADRAO.lista, card: valido(p.card) || PROC_TEMPLATE_PADRAO.card };
+  const valido = (arr, mapa) => Array.isArray(arr) ? arr.filter(id=>mapa[id]) : null;
+  return { modo: p.modo==='card' ? 'card' : 'lista', lista: valido(p.lista, PROC_CAMPO) || PROC_TEMPLATE_PADRAO.lista,
+           card: valido(p.card, PROC_CAMPO) || PROC_TEMPLATE_PADRAO.card, filtros: valido(p.filtros, PROC_FILTRO) || PROC_TEMPLATE_PADRAO.filtros };
 }
 async function salvarPrefsProcessos(alteracao, mensagem){
   return salvarPreferencias('processos', alteracao, prefsProcessos(), mensagem);
@@ -1889,19 +1985,15 @@ function acoesProcessoHtml(p){
 
 function renderProcessos(){
   const prefs = prefsProcessos();
-  const q = (state.procFiltro||'').trim().toLowerCase();
-  const st = state.procFiltroStatus || '';
-  const lista = [...(state.processosIndex||[])].sort((a,b)=>(b.seq||0)-(a.seq||0)).filter(p=>{
-    if(st && p.status!==st) return false;
-    if(!q) return true;
-    return PROC_CAMPOS.some(c=>{ try{ return String(c.valor(p)||'').toLowerCase().includes(q); }catch(e){ return false; } });
-  });
+  const lista = processosFiltrados();
+  const filtrosTela = prefs.filtros.map(id=>PROC_FILTRO[id]);
+  const algumAtivo = filtrosTela.some(filtroProcAtivo);
   const total = (state.processosIndex||[]).length;
   const modo = prefs.modo;
 
   let conteudo;
   if(!total) conteudo = `<div class="empty">${ICONS.folder}<h3>Nenhum processo cadastrado</h3><p>Clique em "Cadastrar Novo Processo" para começar.</p></div>`;
-  else if(!lista.length) conteudo = `<div class="empty"><h3>Nenhum processo encontrado</h3><p>Ajuste a busca ou o filtro de status.</p></div>`;
+  else if(!lista.length) conteudo = `<div class="empty"><h3>Nenhum processo encontrado</h3><p>Ajuste ou limpe os filtros.</p></div>`;
   else if(modo==='card'){
     const campos = prefs.card.filter(id=>id!=='id' && id!=='status').map(id=>PROC_CAMPO[id]);
     conteudo = `<div class="proc-cards">${lista.map(p=>{
@@ -1930,9 +2022,6 @@ function renderProcessos(){
   <div class="proc-barra">
     <button class="btn btn-primary" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</button>
     <div class="btn-row proc-barra-dir">
-      ${total ? `<div class="field" style="min-width:240px;"><input id="proc-busca" placeholder="Buscar em qualquer campo…" value="${esc(state.procFiltro||'')}"></div>
-      <div class="field"><select id="proc-status-filtro"><option value="">Todos os status</option>
-        ${Object.entries(PROC_STATUS).map(([k,v])=>`<option value="${k}" ${st===k?'selected':''}>${v.label}</option>`).join('')}</select></div>` : ''}
       <div class="modo-toggle" role="group" aria-label="Formato de visualização">
         <button class="${modo==='lista'?'active':''}" data-action="proc-modo:lista">Lista</button>
         <button class="${modo==='card'?'active':''}" data-action="proc-modo:card">Cards</button>
@@ -1941,42 +2030,62 @@ function renderProcessos(){
     </div>
   </div>
   ${state.procTemplateAberto ? renderProcTemplate() : ''}
+  ${total && filtrosTela.length ? `<div class="filter-bar proc-filtros">
+    ${filtrosTela.map(filtroProcHtml).join('')}
+    ${algumAtivo ? `<button class="btn btn-ghost btn-sm" data-action="proc-limpar-filtros">Limpar filtros</button>
+      <span class="membro-sub">${lista.length} de ${total} processo${total===1?'':'s'}</span>` : ''}
+  </div>` : ''}
   ${conteudo}`;
 }
 
-// Janela Template: Configurar Card / Configurar Lista
+// Janela Template: Configurar Card / Configurar Lista / Configurar Filtros
 function renderProcTemplate(){
   const aba = state.procTemplateAba || 'card';
-  if(!state.procTemplateSel){ const pr = prefsProcessos(); state.procTemplateSel = { card:[...pr.card], lista:[...pr.lista] }; }
+  if(!state.procTemplateSel){ const pr = prefsProcessos(); state.procTemplateSel = { card:[...pr.card], lista:[...pr.lista], filtros:[...pr.filtros] }; }
   const sel = new Set(state.procTemplateSel[aba]);
-  const grupos = PROC_JANELAS_TEMPLATE.map(janela=>{
-    const campos = PROC_CAMPOS.filter(c=>c.janela===janela && !(c.id==='id') && !(aba==='card' && c.id==='status'));
-    const marcados = campos.filter(c=>sel.has(c.id)).length;
-    return `<div class="tpl-grupo">
-      <div class="tpl-grupo-topo"><b>${janela==='Geral' ? 'Geral' : 'Janela ' + janela}</b>
-        <span class="membro-sub">${marcados} de ${campos.length}</span>
-        <button class="link-btn" data-action="proc-tpl-grupo:${janela}:${marcados===campos.length?'0':'1'}">${marcados===campos.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
-      ${campos.map(c=>`<label class="tpl-campo"><input type="checkbox" data-tpl-campo="${esc(c.id)}" ${sel.has(c.id)?'checked':''}> ${esc(c.label)}</label>`).join('')}
+  let grupos;
+  if(aba==='filtros'){
+    const todos = sel.size===PROC_FILTROS.length;
+    grupos = `<div class="tpl-grupo" style="grid-column:1/-1;">
+      <div class="tpl-grupo-topo"><b>Filtros da tela</b><span class="membro-sub">${sel.size} de ${PROC_FILTROS.length}</span>
+        <button class="link-btn" data-action="proc-tpl-todos:${todos?'0':'1'}">${todos ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+      <div class="tpl-colunas">${PROC_FILTROS.map(f=>`<label class="tpl-campo"><input type="checkbox" data-tpl-campo="${f.id}" ${sel.has(f.id)?'checked':''}> ${esc(f.label)}</label>`).join('')}</div>
     </div>`;
-  }).join('');
+  }else{
+    grupos = PROC_JANELAS_TEMPLATE.map(janela=>{
+      const campos = PROC_CAMPOS.filter(c=>c.janela===janela && !(c.id==='id') && !(aba==='card' && c.id==='status'));
+      const marcados = campos.filter(c=>sel.has(c.id)).length;
+      return `<div class="tpl-grupo">
+        <div class="tpl-grupo-topo"><b>${janela==='Geral' ? 'Geral' : 'Janela ' + janela}</b>
+          <span class="membro-sub">${marcados} de ${campos.length}</span>
+          <button class="link-btn" data-action="proc-tpl-grupo:${janela}:${marcados===campos.length?'0':'1'}">${marcados===campos.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+        ${campos.map(c=>`<label class="tpl-campo"><input type="checkbox" data-tpl-campo="${esc(c.id)}" ${sel.has(c.id)?'checked':''}> ${esc(c.label)}</label>`).join('')}
+      </div>`;
+    }).join('');
+  }
+  const textos = {
+    card: 'Escolha as informações que aparecem em cada card. O nº do processo e o status aparecem sempre no topo do card.',
+    lista: 'Escolha as colunas da lista. O nº do processo aparece sempre na primeira coluna.',
+    filtros: 'Escolha os filtros que ficam na tela de processos. Filtros ocultos deixam de ser aplicados.',
+  };
+  const contagem = aba==='filtros' ? (sel.size===1 ? 'filtro selecionado' : 'filtros selecionados') : (sel.size===1 ? 'informação selecionada' : 'informações selecionadas');
   return `<div class="card proc-template">
     <div class="proc-template-topo">
       <div class="section-title">${ICONS.gear} Template</div>
       <div class="pers-tabs" style="margin:0;">
         <button class="pers-tab ${aba==='card'?'active':''}" data-action="proc-tpl-aba:card">Configurar Card</button>
         <button class="pers-tab ${aba==='lista'?'active':''}" data-action="proc-tpl-aba:lista">Configurar Lista</button>
+        <button class="pers-tab ${aba==='filtros'?'active':''}" data-action="proc-tpl-aba:filtros">Configurar Filtros</button>
       </div>
     </div>
-    <p class="page-sub" style="margin:10px 0 16px;">${aba==='card'
-      ? 'Escolha as informações que aparecem em cada card. O nº do processo e o status aparecem sempre no topo do card.'
-      : 'Escolha as colunas da lista. O nº do processo aparece sempre na primeira coluna.'} Esta escolha vale só para você.</p>
+    <p class="page-sub" style="margin:10px 0 16px;">${textos[aba]} Esta escolha vale só para você.</p>
     <div class="tpl-grupos">${grupos}</div>
     <div class="btn-row" style="margin-top:18px; justify-content:space-between;">
-      <span class="membro-sub">${sel.size} ${sel.size===1?'informação selecionada':'informações selecionadas'}</span>
+      <span class="membro-sub">${sel.size} ${contagem}</span>
       <div class="btn-row">
         <button class="btn btn-ghost" data-action="proc-tpl-padrao">Restaurar padrão</button>
         <button class="btn btn-ghost" data-action="proc-template">Cancelar</button>
-        <button class="btn btn-primary" data-action="proc-tpl-salvar">${ICONS.check} Salvar ${aba==='card'?'card':'lista'}</button>
+        <button class="btn btn-primary" data-action="proc-tpl-salvar">${ICONS.check} Salvar ${({ card:'card', lista:'lista', filtros:'filtros' })[aba]}</button>
       </div>
     </div>
   </div>`;
@@ -2000,11 +2109,21 @@ function acaoTemplateProcesso(cmd, a1, a2){
       const aba = state.procTemplateAba || 'card';
       state.procTemplateSel[aba] = [...PROC_TEMPLATE_PADRAO[aba]]; renderApp(); return true;
     }
+    case 'proc-tpl-todos':
+      state.procTemplateSel.filtros = a1==='1' ? PROC_FILTROS.map(f=>f.id) : []; renderApp(); return true;
+    case 'proc-limpar-filtros': state.procFiltros = {}; renderApp(); return true;
     case 'proc-tpl-salvar': {
       const aba = state.procTemplateAba || 'card';
       const escolhidos = state.procTemplateSel[aba];
-      if(!escolhidos.length) return toast('Selecione pelo menos uma informação.'), true;
-      salvarPrefsProcessos({ [aba]: [...escolhidos], modo: aba }, aba==='card' ? 'Template do card salvo.' : 'Template da lista salvo.')
+      if(aba!=='filtros' && !escolhidos.length) return toast('Selecione pelo menos uma informação.'), true;
+      const alteracao = { [aba]: [...escolhidos] };
+      if(aba!=='filtros') alteracao.modo = aba;
+      else{
+        // Filtro que saiu da tela deixa de ser aplicado.
+        const visiveis = new Set(escolhidos);
+        for(const chave of Object.keys(state.procFiltros||{})) if(!visiveis.has(chave.split(':')[0])) delete state.procFiltros[chave];
+      }
+      salvarPrefsProcessos(alteracao, ({ card:'Template do card salvo.', lista:'Template da lista salvo.', filtros:'Filtros da tela salvos.' })[aba])
         .then(()=>{ state.procTemplateAberto = false; state.procTemplateSel = null; renderApp(); });
       return true;
     }
@@ -2016,7 +2135,8 @@ function onTemplateCampo(el){
   const aba = state.procTemplateAba || 'card';
   const atual = new Set(state.procTemplateSel[aba]);
   el.checked ? atual.add(id) : atual.delete(id);
-  state.procTemplateSel[aba] = PROC_CAMPOS.map(c=>c.id).filter(x=>atual.has(x)); // mantém a ordem das janelas
+  const ordem = aba==='filtros' ? PROC_FILTROS.map(f=>f.id) : PROC_CAMPOS.map(c=>c.id);
+  state.procTemplateSel[aba] = ordem.filter(x=>atual.has(x)); // mantém a ordem das janelas
   renderApp();
   return true;
 }
@@ -2056,7 +2176,10 @@ function renderProcessoForm(){
   <div class="page-title">${esc(titulo)}</div>
   <div class="page-sub">${state.currentProcessoId ? 'Altere as informações e clique em Salvar processo.' : 'Preencha as janelas abaixo. O número do processo (PRC-0001…) é gerado ao salvar.'}${leitura ? ' <b>Somente leitura: você não tem permissão para alterar.</b>' : ''}</div>
   <div class="proc-topo">
-    ${procCampo('status', 'Status do processo', { options: Object.entries(PROC_STATUS).map(([k,v])=>[k,v.label]) })}
+    <div class="proc-topo-campos">
+      ${procCampo('cliente.dataAbertura', 'Data de abertura *', { type:'date' })}
+      ${procCampo('status', 'Status do processo', { options: Object.entries(PROC_STATUS).map(([k,v])=>[k,v.label]) })}
+    </div>
     <div class="btn-row">
       <button class="btn btn-ghost" data-action="proc-cancelar">${ICONS.back} Voltar à lista</button>
       <button class="btn btn-primary" data-action="proc-salvar">${ICONS.check} Salvar processo</button>
@@ -2087,7 +2210,6 @@ function procAbaCliente(){
       ${procCampo('cliente.telefone', 'Telefone', { type:'tel' })}
       ${procCampo('cliente.referenciaCliente', 'Referência do cliente', { placeholder:'Pedido / PO do cliente' })}
       ${procCampo('cliente.modalidade', 'Modalidade de importação', { options:[['conta_propria','Conta própria'],['conta_ordem','Por conta e ordem'],['encomenda','Por encomenda']] })}
-      ${procCampo('cliente.dataAbertura', 'Data de abertura', { type:'date' })}
       ${procCampo('cliente.responsavel', 'Responsável', listaPessoas('responsaveis').length ? { options: opcoesPessoa('responsaveis', c.responsavel) } : {})}
       ${procCampo('cliente.vendedor', 'Vendedor', listaPessoas('vendedores').length ? { options: opcoesPessoa('vendedores', c.vendedor) } : {})}
       ${procCampo('cliente.observacoes', 'Observações', { textarea:true, span:3 })}
@@ -2291,6 +2413,7 @@ function novoNumeroProcesso(){ return (state.processosIndex||[]).reduce((m,p)=>M
 
 async function salvarProcesso(){
   const p = state.procDraft;
+  if(!p.cliente.dataAbertura){ renderApp(); return toast('Informe a data de abertura do processo.'); }
   if(!p.cliente.nome.trim()){ state.procTab = 'cliente'; renderApp(); return toast('Informe o cliente do processo.'); }
   const agora = new Date().toISOString();
   const copia = JSON.parse(JSON.stringify(p));
@@ -3078,7 +3201,7 @@ const state = {
   dados: dadosPadrao(),
   currentCotacaoId: null,
   cotacoesIndex: [],         // [{id,numero,criadoEm,atualizadoEm, resumo:{...}}]
-  processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procFiltro: '', procFiltroStatus: '', procTemplateAberto: false, procTemplateAba: 'card', procTemplateSel: null,
+  processosIndex: [], currentProcessoId: null, procDraft: null, procTab: 'cliente', procFiltros: {}, procTemplateAberto: false, procTemplateAba: 'card', procTemplateSel: null,
   cotTemplateAberto: false, cotTemplateAba: 'card', cotTemplateSel: null,
   clientes: [], fornecedores: [], produtos: [],
   filtros: { numero:'', texto:'', de:'', ate:'' },
@@ -7735,7 +7858,7 @@ function onAppInput(e){
   const el = e.target;
   if(onConfigInput(el)) return;
   if(el.hasAttribute('data-proc')){ if(el.type!=='checkbox' && el.tagName!=='SELECT') onProcessoInput(el, 'input'); return; }
-  if(el.id==='proc-busca'){ state.procFiltro = el.value; const pos = el.selectionStart; renderApp(); const b = document.getElementById('proc-busca'); if(b){ b.focus(); b.setSelectionRange(pos, pos); } return; }
+  if(el.hasAttribute('data-proc-filtro')){ onFiltroProcesso(el, 'input'); return; }
   const bind = el.getAttribute('data-bind');
   if(!bind) return;
   const inCadForm = !!el.closest('#cad-rich-form');
@@ -7780,7 +7903,7 @@ function onAppChange(e){
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
-  if(el.id==='proc-status-filtro'){ state.procFiltroStatus = el.value; renderApp(); return; }
+  if(el.hasAttribute('data-proc-filtro')){ onFiltroProcesso(el, 'change'); return; }
   if(el.id==='icms-input' || el.id==='icms-input-formal') return; // handled by input
   if(el.id==='doc-file-input'){ handleFilesSelected(el.files); return; }
   if(el.id==='anexo-file-input'){ handleAnexoFilesSelected(el.files); return; }
