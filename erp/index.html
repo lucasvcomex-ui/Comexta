@@ -442,7 +442,7 @@ td.num-mono, th.num-mono{text-align:right;}
 .view-toggle-btn{display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:7px; border:none; background:transparent; font-size:13px; font-weight:600; color:var(--ink-soft); cursor:pointer;}
 .view-toggle-btn svg{width:15px; height:15px;}
 .view-toggle-btn.active{background:var(--surface); color:var(--navy); box-shadow:var(--shadow);}
-.kanban-board{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; align-items:start;}
+.kanban-board{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; align-items:start;}
 .kanban-column{background:var(--paper); border:1px solid var(--line-soft); border-radius:12px; padding:10px; min-height:120px;}
 .kanban-column-header{display:flex; align-items:center; justify-content:space-between; padding:4px 4px 10px;}
 .kanban-count{font-size:12px; font-weight:700; color:var(--ink-soft);}
@@ -456,8 +456,8 @@ td.num-mono, th.num-mono{text-align:right;}
 .kanban-card-row{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft); margin-bottom:3px; line-height:1.4;}
 .kanban-card-row svg{width:13px; height:13px; flex-shrink:0; color:var(--amber-deep);}
 .kanban-empty{font-size:12px; color:var(--ink-soft); text-align:center; padding:20px 8px; font-style:italic;}
-@media (max-width:900px){ .kanban-board{grid-template-columns:1fr 1fr;} }
-@media (max-width:600px){ .kanban-board{grid-template-columns:1fr;} }
+@media (max-width:900px){ .kanban-board{grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media (max-width:600px){ .kanban-board{grid-template-columns:minmax(0,1fr);} }
 .filter-bar .field{min-width:170px;}
 
 /* ---------- Tabs (module subnav rendered inside sidenav already) ---------- */
@@ -589,6 +589,7 @@ td.num-mono, th.num-mono{text-align:right;}
 .pc-campos dt{color:var(--ink-soft);}
 .pc-campos dd{margin:0; font-weight:600; word-break:break-word;}
 .pc-acoes{display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:auto; border-top:1px solid var(--line-soft); padding-top:10px;}
+.pc-acoes .ci-actions{display:flex; gap:6px;}
 .vazio{color:var(--ink-soft); font-weight:400;}
 
 /* ---------- Cotações Salvas: Template e cards ---------- */
@@ -600,9 +601,15 @@ td.num-mono, th.num-mono{text-align:right;}
 .kanban-card-acoes .ci-actions{gap:2px;}
 .kanban-card-acoes .icon-btn{width:26px; height:26px;}
 .kanban-card-acoes .icon-btn svg{width:13px; height:13px;}
-.kanban-card-campos{display:grid; grid-template-columns:auto 1fr; gap:3px 8px; margin:0; font-size:11.5px; line-height:1.4;}
-.kanban-card-campos dt{color:var(--ink-soft);}
-.kanban-card-campos dd{margin:0; color:var(--ink); font-weight:600; word-break:break-word;}
+.kanban-card-campos{display:grid; grid-template-columns:minmax(0, 38%) minmax(0, 1fr); column-gap:8px; row-gap:5px;
+  border-top:1px solid var(--line-soft); padding-top:8px; font-size:11.5px; line-height:1.4; text-align:left;}
+.kc-linha{display:contents;}
+.kc-rot{color:var(--ink-soft); overflow-wrap:anywhere;}
+.kc-val{color:var(--ink); font-weight:600; overflow-wrap:anywhere; min-width:0;}
+.kc-val .badge{font-size:10px; padding:2px 8px; vertical-align:1px;}
+/* As colunas não alargam com textos longos; o topo do card quebra linha em vez de estourar */
+.kanban-card{min-width:0;}
+.kanban-card-top{flex-wrap:wrap; row-gap:6px;}
 
 /* ---------- Processos: data de abertura e filtros ---------- */
 .proc-topo-campos{display:flex; gap:14px; flex-wrap:wrap;}
@@ -626,6 +633,11 @@ td.num-mono, th.num-mono{text-align:right;}
 .cad-card-topo{justify-content:flex-start; gap:12px; align-items:center;}
 .cad-card-nome{display:block; color:var(--navy-deep); font-size:14.5px; margin-bottom:4px; word-break:break-word;}
 .cad-card-topo .badge{margin-right:4px;}
+/* Barra superior: com 5 menus, quebra em duas linhas até 1100px (menus embaixo) */
+@media (max-width:1100px){
+  .topbar{flex-wrap:wrap; row-gap:10px;}
+  .topnav{order:3; width:100%; flex-wrap:wrap;}
+}
 </style>
 </head>
 <body>
@@ -968,7 +980,7 @@ const PERMISSAO_DA_ACAO = {
 
   'toggle-nav:proc':['processos','ver'], 'toggle-module:proc':['processos','ver'], 'go:processos':['processos','ver'],
   'go:processoForm':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
-  'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'],
+  'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 };
 const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos' };
@@ -2003,8 +2015,11 @@ function valorCampoProcesso(campo, p){
   return esc(v);
 }
 function acoesProcessoHtml(p){
-  return `<button class="icon-btn" title="Abrir" data-action="proc-abrir:${esc(p.id)}">${ICONS.open||ICONS.edit}</button>
-    ${deleteBtnHtml('proc', p.id, 'proc-excluir:'+p.id)}`;
+  return `<div class="ci-actions">
+    <button class="icon-btn" title="Abrir para edição" data-action="proc-abrir:${esc(p.id)}">${ICONS.open}</button>
+    <button class="icon-btn" title="Duplicar processo" data-action="proc-duplicar:${esc(p.id)}">${ICONS.copy}</button>
+    ${deleteBtnHtml('proc', p.id, 'proc-excluir:'+p.id)}
+  </div>`;
 }
 
 function renderProcessos(){
@@ -2025,7 +2040,7 @@ function renderProcessos(){
       return `<div class="proc-card">
         <div class="pc-topo"><b class="pc-num">${esc(p.id)}</b><span class="badge ${s.cls}">${s.label}</span></div>
         <dl class="pc-campos">${campos.map(c=>`<dt>${esc(c.label)}</dt><dd>${valorCampoProcesso(c, p)}</dd>`).join('')}</dl>
-        <div class="pc-acoes"><button class="btn btn-ghost btn-sm" data-action="proc-abrir:${esc(p.id)}">Abrir</button>${deleteBtnHtml('proc', p.id, 'proc-excluir:'+p.id)}</div>
+        <div class="pc-acoes">${acoesProcessoHtml(p)}</div>
       </div>`;
     }).join('')}</div>`;
   }else{
@@ -2534,6 +2549,24 @@ function abrirProcesso(id){
   saveDraftProcesso();
   navigate('processoForm');
 }
+async function duplicarProcesso(id){
+  const origem = (state.processosIndex||[]).find(x=>x.id===id);
+  if(!origem) return;
+  const p = normalizarProcesso(JSON.parse(JSON.stringify(origem)));
+  const agora = new Date().toISOString(), seq = novoNumeroProcesso();
+  p.id = 'PRC-' + String(seq).padStart(4,'0'); p.seq = seq; p.status = 'aberto';
+  p.criadoEm = agora; p.atualizadoEm = agora; p.criadoPor = usuarioAtual.nome || usuarioAtual.email; delete p.atualizadoPor;
+  p.cliente.dataAbertura = hojeISO();
+  Object.assign(p.transporte, { booking:'', conhecimentoMaster:'', conhecimentoHouse:'', navioVoo:'', etd:'', eta:'', chegada:'' });
+  Object.assign(p.desembaraco, { numeroDeclaracao:'', dataRegistro:'', canal:'', dataDesembaraco:'', numeroLi:'' });
+  p.financeiro.contratoCambio = '';
+  p.financeiro.parcelas = (p.financeiro.parcelas||[]).map(x=>({ ...x, id:uid(), vencimento:'', pago:false }));
+  state.processosIndex.push(p);
+  if(!(await persistProcessosIndex())) return;
+  const salvo = state.processosIndex.find(x=>x.criadoEm===agora && x.seq>=seq) || p;
+  toast(`${id} duplicado como ${salvo.id}.`, 'ok');
+  renderApp();
+}
 async function excluirProcesso(id){
   if(state.pendingDelete !== 'proc:'+id){ state.pendingDelete = 'proc:'+id; renderApp(); return; }
   state.pendingDelete = null;
@@ -2552,6 +2585,7 @@ function acaoProcesso(cmd, a1){
       saveDraftProcesso(); navigate('processoForm'); return true;
     case 'proc-abrir': abrirProcesso(a1); return true;
     case 'proc-excluir': excluirProcesso(a1); return true;
+    case 'proc-duplicar': duplicarProcesso(a1); return true;
     case 'proc-aba': state.procTab = a1; saveDraftProcesso(); renderApp(); window.scrollTo({ top:0, behavior:'instant' }); return true;
     case 'proc-cancelar': navigate('processos'); return true;
     case 'proc-salvar': salvarProcesso(); return true;
@@ -2628,6 +2662,14 @@ const COT_CAMPOS = (()=>{
   ];
   return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor, ...(extra||{}) }));
 })();
+const COT_TITULO_CURTO = {
+  criadoEm:'Criada em', atualizadoEm:'Atualizada', dataCotacao:'Data', cliente:'Cliente', clienteCnpjCpf:'CNPJ/CPF',
+  rotaPaises:'Países', rotaCidades:'Cidades', rotaPortos:'Portos', paisOrigem:'País origem', paisDestino:'País destino',
+  portoOrigem:'Porto origem', portoDestino:'Porto destino', transitTime:'Transit time', navio:'Navio', pesoBruto:'Peso bruto',
+  cbm:'Cubagem', custoA:'Custo A', custoB:'Custo B', valorAduaneiro:'Valor aduan.', limite:'Limite simpl.',
+  motivoNegado:'Motivo', statusObservacao:'Obs. status', observacoes:'Observações', ncms:'NCMs',
+};
+COT_CAMPOS.forEach(c=>{ c.curto = COT_TITULO_CURTO[c.id] || c.label; });
 const COT_CAMPO = Object.fromEntries(COT_CAMPOS.map(c=>[c.id, c]));
 
 // Filtros da tela (Configurar Filtros). "el" é o id do campo na tela; "trim" tira espaços do texto.
@@ -5207,7 +5249,7 @@ function renderCotacoesKanban(){
               <span class="badge ${tipo==='Simplificada'?'badge-navy':'badge-amber'}" style="font-size:10px;">${tipo}</span>
               <span class="kanban-card-acoes">${acoesCotacaoHtml(tipo, cot, true)}</span>
             </div>
-            <dl class="kanban-card-campos">${prefsCotacoes().card.map(id=>COT_CAMPO[id]).map(campo=>`<dt>${esc(campo.label)}</dt><dd>${valorCampoCotacao(campo, tipo, cot)}</dd>`).join('')}</dl>
+            <div class="kanban-card-campos">${prefsCotacoes().card.map(id=>COT_CAMPO[id]).map(campo=>`<div class="kc-linha" title="${esc(campo.label)}"><span class="kc-rot">${esc(campo.curto)}</span><span class="kc-val">${valorCampoCotacao(campo, tipo, cot)}</span></div>`).join('')}</div>
           </div>`;
         }).join('') : `<div class="kanban-empty">Nenhuma cotação</div>`}
       </div>
