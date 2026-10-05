@@ -6,7 +6,7 @@
 <title>Comexta · Importação Simplificada</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Play:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
@@ -654,6 +654,103 @@ td.num-mono, th.num-mono{text-align:right;}
 .tpl-tipo{font-size:10.5px; color:var(--ink-soft); background:var(--paper-2); border-radius:999px; padding:1px 7px; margin-left:auto; white-space:nowrap;}
 .tpl-campo{justify-content:flex-start;}
 .exportar-grupo{display:inline-flex; gap:6px; flex-wrap:wrap;}
+
+/* =============================================================================
+   TEMA "LARKON": menu lateral fixo com seções, topo claro, cards brancos, fonte Play
+   ============================================================================= */
+:root{
+  --font-body:'Play', ui-sans-serif, system-ui, sans-serif;
+  --font-display:'Play', ui-sans-serif, system-ui, sans-serif;
+  --paper:#F5F6FA; --paper-2:#EEF0F5; --ink:#2E3A4B; --ink-soft:#7A869A;
+  --line:#E6E9F0; --line-soft:#EEF0F5; --radius:10px; --radius-sm:8px;
+  --shadow:0 1px 2px rgba(30,41,59,.04), 0 2px 14px rgba(30,41,59,.05);
+  --shadow-lg:0 6px 22px rgba(30,41,59,.10);
+  --side-w:260px; --side-w-min:72px;
+}
+body{background:var(--paper); font-size:14.5px;}
+#app{display:block; min-height:100vh;}
+.layout{display:flex; min-height:100vh;}
+.content{flex:1; min-width:0; display:flex; flex-direction:column;}
+.sidebar{width:var(--side-w); flex-shrink:0; background:#fff; border-right:1px solid var(--line);
+  position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden; padding:0 12px 24px; z-index:50;
+  transition:width .2s var(--ease), transform .25s var(--ease);}
+.side-brand{display:flex; align-items:center; gap:10px; height:68px; padding:0 8px; cursor:pointer; flex-shrink:0; user-select:none;}
+.side-mark{width:34px; height:34px; border-radius:9px; background:var(--navy); color:#fff; display:flex; align-items:center;
+  justify-content:center; font-weight:700; font-size:18px; flex-shrink:0;}
+.side-brand-txt{display:flex; flex-direction:column; line-height:1.1; min-width:0;}
+.side-brand-txt b{font-size:18px; color:var(--navy-deep); letter-spacing:.2px;}
+.side-brand-txt small{font-size:11px; color:var(--ink-soft); letter-spacing:.08em; text-transform:uppercase;}
+.side-section{font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#9AA5B8; padding:18px 12px 8px; white-space:nowrap;}
+.sidebar .side-link, .sidebar .side-head{display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:8px; font-size:14.5px;
+  color:#4B586B; cursor:pointer; border:0; background:none; font-weight:400; white-space:nowrap; transition:background .15s var(--ease), color .15s var(--ease);}
+.sidebar .side-link svg, .sidebar .side-head > svg:first-child{width:18px; height:18px; flex-shrink:0; opacity:.9;}
+.sidebar .side-link:hover, .sidebar .side-head:hover{background:var(--paper); color:var(--navy);}
+.sidebar .side-link.active{background:var(--navy-100); color:var(--navy); font-weight:700; box-shadow:none; border:0;}
+.side-head .chev{margin-left:auto; width:14px; height:14px; transition:transform .2s ease; opacity:.6;}
+.side-group.open > .side-head .chev{transform:rotate(90deg);}
+.side-group.has-active > .side-head{color:var(--navy); font-weight:700;}
+.side-sub{display:none; margin:2px 0 6px 21px; padding-left:10px; border-left:1px dashed #D5DAE5;}
+.side-group.open > .side-sub{display:block;}
+.side-sub .side-link{padding:8px 12px; font-size:14px;}
+.side-backdrop{display:none;}
+/* menu recolhido (somente ícones) */
+.layout.side-collapsed .sidebar{width:var(--side-w-min);}
+.layout.side-collapsed .side-brand-txt, .layout.side-collapsed .side-section, .layout.side-collapsed .side-link span,
+.layout.side-collapsed .side-head span, .layout.side-collapsed .side-head .chev, .layout.side-collapsed .side-sub{display:none !important;}
+.layout.side-collapsed .side-brand{justify-content:center; padding:0;}
+.layout.side-collapsed .sidebar .side-link, .layout.side-collapsed .sidebar .side-head{justify-content:center; padding:11px 0;}
+.layout.side-collapsed .side-section{padding:10px 0; height:1px; margin:10px 12px; background:var(--line); font-size:0;}
+
+/* topo claro */
+.topbar{background:#fff; color:var(--ink); padding:0 24px; height:68px; border-bottom:1px solid var(--line); box-shadow:none;
+  backdrop-filter:none; gap:14px; position:sticky; top:0; z-index:40;}
+.side-toggle{width:38px; height:38px; border-radius:8px; border:0; background:var(--paper); color:var(--ink); display:inline-flex;
+  align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;}
+.side-toggle:hover{background:var(--navy-100); color:var(--navy);}
+.side-toggle svg{width:20px; height:20px;}
+.topbar-title{font-size:18px; font-weight:700; color:var(--navy-deep); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.pill-btn{background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:8px;}
+.pill-btn:hover{background:var(--paper);}
+.user-btn{background:transparent; color:var(--ink); border:1px solid transparent; border-radius:10px; padding:4px 10px 4px 4px;}
+.user-btn:hover, .user-btn.active{background:var(--paper);}
+.user-btn-txt small{color:var(--ink-soft);}
+
+/* conteúdo, cards, tabelas e formulários */
+.shell{flex:1; display:flex; width:100%;}
+.main{padding:26px 28px 60px; max-width:1480px; margin:0 auto;}
+.main.wide{max-width:1480px;}
+.crumbs{font-size:13px; margin-bottom:14px;}
+.page-title{font-size:22px; font-weight:700; letter-spacing:0;}
+.card, .card-flat, .module-card, .stat-card, .kpi{border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow);}
+.card-flat{box-shadow:none;}
+.stat-card .lbl{font-size:13px; text-transform:none; letter-spacing:0; color:var(--ink-soft); font-weight:400;}
+.stat-card .val{font-size:28px; font-weight:700; color:var(--navy-deep); margin:6px 0 2px;}
+.home-hero h1{font-size:30px;}
+.section-title{font-size:15px; letter-spacing:.02em;}
+thead th{background:#F6F7FB; color:#4B586B; text-transform:none; letter-spacing:0; font-size:12.5px; font-weight:700; border-bottom:1px solid var(--line);}
+tbody tr:hover{background:#F9FAFD;}
+.table-wrap{border:1px solid var(--line); border-radius:10px; box-shadow:none;}
+.field label{text-transform:none; letter-spacing:0; font-size:13px; font-weight:700; color:#4B586B;}
+.field input, .field select, .field textarea{border-radius:8px; border-color:#DFE3EC;}
+.btn{border-radius:8px; font-weight:700;}
+.badge{font-weight:700;}
+.form-tabs{border-bottom:1px solid var(--line);}
+
+/* telas pequenas: o menu vira gaveta */
+@media (max-width:980px){
+  .sidebar{position:fixed; left:0; top:0; transform:translateX(-100%); width:min(82vw,290px); box-shadow:var(--shadow-lg);}
+  .layout.side-open .sidebar{transform:none;}
+  .layout.side-open .side-backdrop{display:block; position:fixed; inset:0; background:rgba(20,30,45,.35); z-index:45;}
+  .layout.side-collapsed .sidebar{width:min(82vw,290px);}
+  .layout.side-collapsed .side-brand-txt, .layout.side-collapsed .side-section, .layout.side-collapsed .side-link span,
+  .layout.side-collapsed .side-head span{display:block !important;}
+  .layout.side-collapsed .side-head .chev{display:block !important;}
+  .layout.side-collapsed .side-group.open > .side-sub{display:block !important;}
+  .main{padding:20px 16px 50px;}
+  .topbar{padding:0 14px; flex-wrap:nowrap; height:60px;}
+  .user-btn-txt{display:none;}
+}
+
 </style>
 </head>
 <body>
@@ -1045,6 +1142,8 @@ function aplicarPermissoesNaTela(){
     if(card) card.style.display = 'none';
     const btn = app.querySelector(`[data-action="toggle-nav:${grupo}"]`);
     if(btn && btn.closest('.nav-group')) btn.closest('.nav-group').style.display = 'none';
+    const gh = app.querySelector(`[data-action="toggle-side:${grupo}"]`);
+    if(gh && gh.closest('.side-group')) gh.closest('.side-group').style.display = 'none';
   }
   // Submenus que ficaram vazios (ex.: "Importação Simplificada" sem "Nova Cotação")
   for(const pai of app.querySelectorAll('.nav-drop-item-parent')){
@@ -4540,6 +4639,7 @@ const ROUTE_META = {
   'processos':      {group:'proc', label:'Processos'},
   'processoForm':   {group:'proc', label:'Cadastrar Novo Processo'},
 };
+try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
 const SIM_PROTECTED_ROUTES = ['simCarga','simCarregando','simPaletes','simEquipamentos','simEmbalagem','simResultado'];
 function navigate(route){
   hideAutocomplete();
@@ -4559,6 +4659,8 @@ function navigate(route){
   state.cadFormOpen = false; state.cadEdit = {tipo:null,id:null}; state.cadView = null;
   if(state.cadTemplateAberto && route!=='cad-'+state.cadTemplateAberto){ state.cadTemplateAberto = null; state.cadTemplateSel = null; }
   state.navDropdown = null;
+  state.sideMobile = false;
+  if(ROUTE_META[route].group){ state.sideOpen = state.sideOpen || {}; state.sideOpen[ROUTE_META[route].group] = true; }
   window.scrollTo({top:0, behavior:'instant'});
   renderApp();
 }
@@ -4582,53 +4684,15 @@ function crumbsHtml(){
     return sep+`<span class="seg" data-action="go:${it.route}">${esc(it.label)}</span>`;
   }).join('');
 }
+const ICON_MENU = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';
+const ICON_CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
 function topbarHtml(){
-  const meta = ROUTE_META[state.route];
+  const meta = ROUTE_META[state.route] || {};
+  const titulo = state.route==='home' ? 'Painel' : (meta.label || '');
   return `
   <div class="topbar">
-    <nav class="topnav">
-      <button class="nav-btn ${state.route==='home'?'active':''}" data-action="go:home">${ICONS.home} Início</button>
-      <div class="nav-group">
-        <button class="nav-btn ${meta.group==='imp'?'active':''}" data-action="toggle-nav:imp">${ICONS.ship} Importação ${ICONS.chevronDown}</button>
-        <div class="nav-dropdown ${state.navDropdown==='imp'?'open':''}">
-          <div class="nav-drop-item-parent">
-            <span class="npl">Importação Simplificada</span>
-            <svg class="chev-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
-            <div class="nav-flyout">
-              <div class="nav-drop-item" data-action="go:dados">${ICONS.data} Nova Cotação</div>
-            </div>
-          </div>
-          <div class="nav-drop-item-parent">
-            <span class="npl">Importação Formal</span>
-            <svg class="chev-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
-            <div class="nav-flyout">
-              <div class="nav-drop-item" data-action="go:dadosFormal">${ICONS.data} Nova Cotação</div>
-            </div>
-          </div>
-          <div class="nav-drop-item" data-action="go:cotacoesTodas">Cotações Salvas</div>
-        </div>
-      </div>
-      <div class="nav-group">
-        <button class="nav-btn ${meta.group==='sim'?'active':''}" data-action="toggle-nav:sim">${ICONS.cube} Simulador ${ICONS.chevronDown}</button>
-        <div class="nav-dropdown ${state.navDropdown==='sim'?'open':''}">
-          <div class="nav-drop-item" data-action="go:simInicio">${ICONS.home} Início</div>
-        </div>
-      </div>
-      <div class="nav-group">
-        <button class="nav-btn ${meta.group==='cad'?'active':''}" data-action="toggle-nav:cad">${ICONS.users} Cadastro ${ICONS.chevronDown}</button>
-        <div class="nav-dropdown ${state.navDropdown==='cad'?'open':''}">
-          <div class="nav-drop-item" data-action="go:cad-cliente">${ICONS.client} Clientes e Empresas</div>
-          <div class="nav-drop-item" data-action="go:cad-produto">${ICONS.product} Produto</div>
-        </div>
-      </div>
-      <div class="nav-group">
-        <button class="nav-btn ${meta.group==='proc'?'active':''}" data-action="toggle-nav:proc">${ICONS.folder} Processos ${ICONS.chevronDown}</button>
-        <div class="nav-dropdown ${state.navDropdown==='proc'?'open':''}">
-          <div class="nav-drop-item" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</div>
-          <div class="nav-drop-item" data-action="go:processos">${ICONS.folder} Processos cadastrados</div>
-        </div>
-      </div>
-    </nav>
+    <button class="side-toggle" data-action="toggle-sidebar" title="Abrir/fechar o menu">${ICON_MENU}</button>
+    <div class="topbar-title">${esc(titulo)}</div>
     <div class="topbar-spacer"></div>
     <button class="user-btn ${state.route==='config'?'active':''}" data-action="go:config" title="Configurações — ${esc(usuarioAtual ? usuarioAtual.email : '')}">
       ${avatarHtml(usuarioAtual, 30)}<span class="user-btn-txt"><b>${esc(usuarioAtual ? (usuarioAtual.nome || usuarioAtual.email) : '')}</b><small>${esc(nomeEmpresa())}</small></span>${ICONS.gear}
@@ -4636,47 +4700,45 @@ function topbarHtml(){
     <a class="pill-btn" href="/login/" onclick="event.preventDefault(); sair();" title="Sair (${esc(usuarioAtual ? usuarioAtual.email : '')})" style="text-decoration:none;">Sair</a>
   </div>`;
 }
+// Menu lateral fixo (estilo Larkon): seções com rótulo e grupos que abrem/fecham.
 function sideNavHtml(){
-  const meta = ROUTE_META[state.route];
-  if(!meta.group) return '';
-  if(meta.group==='imp'){
-    return `<div class="sidenav">
-      <div class="grp-label">Importação</div>
-      <div class="side-sublabel">Simplificada</div>
-      <div class="side-link ${state.route==='dados'?'active':''}" data-action="go:dados">${ICONS.data} Nova Cotação</div>
-      <div class="side-sublabel">Formal</div>
-      <div class="side-link ${state.route==='dadosFormal'?'active':''}" data-action="go:dadosFormal">${ICONS.data} Nova Cotação</div>
-      <div class="side-sublabel"></div>
-      <div class="side-link ${state.route==='cotacoesTodas'?'active':''}" data-action="go:cotacoesTodas">${ICONS.quote} Cotações Salvas</div>
-    </div>`;
-  }
-  if(meta.group==='sim'){
-    return `<div class="sidenav">
-      <div class="grp-label">Simulador</div>
-      <div class="side-link ${state.route==='simInicio'?'active':''}" data-action="go:simInicio">${ICONS.home} Início</div>
-      ${(state.simulacao.nome||'').trim() ? `
-      <div class="side-link ${state.route==='simCarga'?'active':''}" data-action="go:simCarga">${ICONS.cube} Dimensões da Carga</div>
-      <div class="side-link ${state.route==='simCarregando'?'active':''}" data-action="go:simCarregando">${ICONS.ship} Carregando</div>
-      <div class="side-link ${state.route==='simPaletes'?'active':''}" data-action="go:simPaletes">${ICONS.scale} Paletes</div>
-      <div class="side-link ${state.route==='simEquipamentos'?'active':''}" data-action="go:simEquipamentos">${ICONS.supplier} Equipamentos</div>
-      <div class="side-link ${state.route==='simEmbalagem'?'active':''}" data-action="go:simEmbalagem">${ICONS.file} Embalagem</div>
-      <div class="side-link ${state.route==='simResultado'?'active':''}" data-action="go:simResultado">${ICONS.calc} Resultado</div>
-      ` : ''}
-    </div>`;
-  }
-  if(meta.group==='proc'){
-    return `<div class="sidenav">
-      <div class="grp-label">Processos</div>
-      <div class="side-link ${state.route==='processos'?'active':''}" data-action="go:processos">${ICONS.folder} Processos</div>
-      <div class="side-link ${state.route==='processoForm' && !state.currentProcessoId?'active':''}" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</div>
-      ${state.currentProcessoId ? `<div class="side-link ${state.route==='processoForm'?'active':''}" data-action="go:processoForm">${ICONS.edit} ${esc(state.currentProcessoId)}</div>` : ''}
-    </div>`;
-  }
-  return `<div class="sidenav">
-    <div class="grp-label">Cadastro</div>
-    <div class="side-link ${state.route==='cad-cliente'?'active':''}" data-action="go:cad-cliente">${ICONS.client} Clientes e Empresas</div>
-    <div class="side-link ${state.route==='cad-produto'?'active':''}" data-action="go:cad-produto">${ICONS.product} Produto</div>
-  </div>`;
+  const meta = ROUTE_META[state.route] || {};
+  const lk = (action, icon, texto, ativo) => `<div class="side-link ${ativo?'active':''}" data-action="${action}" title="${esc(texto)}">${icon}<span>${texto}</span></div>`;
+  const grupo = (id, icon, titulo, itens) => {
+    const aberto = !!(state.sideOpen && state.sideOpen[id]) || meta.group===id;
+    return `<div class="side-group ${aberto?'open':''} ${meta.group===id?'has-active':''}">
+      <div class="side-head" data-action="toggle-side:${id}" title="${esc(titulo)}">${icon}<span>${titulo}</span>${ICON_CHEV}</div>
+      <div class="side-sub">${itens}</div></div>`;
+  };
+  const r = state.route;
+  const nomeSim = (state.simulacao.nome||'').trim();
+  const colapsado = state.sideCollapsed ? 'side-collapsed' : '', aberto = state.sideMobile ? 'side-open' : '';
+  return `<aside class="sidebar">
+    <div class="side-brand" data-action="go:home" title="Início"><span class="side-mark">C</span>
+      <span class="side-brand-txt"><b>Comexta</b><small>Importação</small></span></div>
+    <div class="side-section">Geral</div>
+    ${lk('go:home', ICONS.home, 'Início', r==='home')}
+    <div class="side-section">Operação</div>
+    ${grupo('imp', ICONS.ship, 'Importação',
+      lk('go:dados', ICONS.data, 'Nova Cotação Simplificada', r==='dados'||r==='numerario') +
+      lk('go:dadosFormal', ICONS.data, 'Nova Cotação Formal', r==='dadosFormal'||r==='numerarioFormal') +
+      lk('go:cotacoesTodas', ICONS.quote, 'Cotações Salvas', r==='cotacoesTodas'))}
+    ${grupo('proc', ICONS.folder, 'Processos',
+      lk('proc-novo', ICONS.plus, 'Cadastrar Novo Processo', r==='processoForm' && !state.currentProcessoId) +
+      lk('go:processos', ICONS.folder, 'Processos cadastrados', r==='processos') +
+      (state.currentProcessoId ? lk('go:processoForm', ICONS.edit, esc(state.currentProcessoId), r==='processoForm') : ''))}
+    ${grupo('sim', ICONS.cube, 'Simulador de Carga',
+      lk('go:simInicio', ICONS.home, 'Início', r==='simInicio') +
+      (nomeSim ? lk('go:simCarga', ICONS.cube, 'Dimensões da Carga', r==='simCarga') + lk('go:simCarregando', ICONS.ship, 'Carregando', r==='simCarregando') +
+        lk('go:simPaletes', ICONS.scale, 'Paletes', r==='simPaletes') + lk('go:simEquipamentos', ICONS.supplier, 'Equipamentos', r==='simEquipamentos') +
+        lk('go:simEmbalagem', ICONS.file, 'Embalagem', r==='simEmbalagem') + lk('go:simResultado', ICONS.calc, 'Resultado', r==='simResultado') : ''))}
+    <div class="side-section">Cadastros</div>
+    ${grupo('cad', ICONS.users, 'Cadastro',
+      lk('go:cad-cliente', ICONS.client, 'Clientes e Empresas', r==='cad-cliente') +
+      lk('go:cad-produto', ICONS.product, 'Produto', r==='cad-produto'))}
+    <div class="side-section">Sistema</div>
+    ${lk('go:config', ICONS.gear, 'Configurações', r==='config')}
+  </aside>`;
 }
 function viewFor(route){
   switch(route){
@@ -4715,7 +4777,9 @@ function renderApp(){
       <div style="position:absolute; bottom:10px; left:14px; font-size:11.5px; color:var(--ink-soft); background:rgba(255,255,255,0.75); padding:4px 10px; border-radius:999px;">Clique e arraste para girar · role a roda do mouse para dar zoom</div>
     </div>
   </div>` : '';
-  app.innerHTML = topbarHtml() + `<div class="shell">${sideNavHtml()}<div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div>` + lightbox + lightbox3d;
+  const classesLayout = `layout ${state.sideCollapsed ? 'side-collapsed' : ''} ${state.sideMobile ? 'side-open' : ''}`;
+  app.innerHTML = `<div class="${classesLayout}">${sideNavHtml()}<div class="side-backdrop" data-action="toggle-sidebar"></div>
+    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d;
   if(state.route==='dados') patchComputedDados();
   if(state.route==='dadosFormal') patchComputedDadosFormal();
   if(state.route==='simCarga') patchComputedSimCarga();
@@ -6357,7 +6421,7 @@ function criarTexturaFaceCaixa(nome, comp, larg, alt, peso, numero, total, corFu
   ];
   let fator = 1;
   linhas.forEach(l=>{
-    ctx.font = `${l.peso} ${l.tam}px Inter, sans-serif`;
+    ctx.font = `${l.peso} ${l.tam}px Play, sans-serif`;
     const largMedida = ctx.measureText(l.texto).width;
     if(largMedida > larguraUtil) fator = Math.min(fator, larguraUtil/largMedida);
   });
@@ -6366,7 +6430,7 @@ function criarTexturaFaceCaixa(nome, comp, larg, alt, peso, numero, total, corFu
   let ly = H*0.05;
   linhas.forEach(l=>{
     const tam = l.tam*fator;
-    ctx.font = `${l.peso} ${tam}px Inter, sans-serif`;
+    ctx.font = `${l.peso} ${tam}px Play, sans-serif`;
     ctx.fillText(l.texto, pad, ly);
     ly += tam*1.35;
   });
@@ -8667,6 +8731,21 @@ function onAppClick(e){
       state.navDropdown = state.navDropdown===a1 ? null : a1;
       renderApp();
       break;
+    case 'toggle-side': {
+      state.sideOpen = state.sideOpen || {};
+      if(state.sideCollapsed && window.innerWidth>980){ state.sideCollapsed = false; state.sideOpen[a1] = true; try{ localStorage.setItem('comexta:sideCollapsed','0'); }catch(e){} renderApp(); break; }
+      state.sideOpen[a1] = !state.sideOpen[a1];
+      const grp = document.querySelector(`[data-action="toggle-side:${a1}"]`);
+      if(grp && grp.closest('.side-group')) grp.closest('.side-group').classList.toggle('open', state.sideOpen[a1]); else renderApp();
+      break;
+    }
+    case 'toggle-sidebar': {
+      if(window.innerWidth<=980) state.sideMobile = !state.sideMobile;
+      else{ state.sideCollapsed = !state.sideCollapsed; try{ localStorage.setItem('comexta:sideCollapsed', state.sideCollapsed ? '1' : '0'); }catch(e){} }
+      const lay = document.querySelector('.layout');
+      if(lay){ lay.classList.toggle('side-collapsed', !!state.sideCollapsed); lay.classList.toggle('side-open', !!state.sideMobile); } else renderApp();
+      break;
+    }
     case 'add-produto': addProduto(); break;
     case 'remove-produto': removeProduto(Number(a1)); break;
     case 'save-calculo': salvarCalculo(); break;
