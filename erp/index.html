@@ -545,6 +545,8 @@ td.num-mono, th.num-mono{text-align:right;}
 .field textarea:focus{border-color:var(--navy); box-shadow:0 0 0 3px rgba(23,58,94,0.12);}
 .proc-itens td input{min-width:96px;}
 .proc-itens td input.num-mono{min-width:72px;}
+.proc-containers td select{min-width:110px;}
+.proc-containers td input.num-mono{min-width:96px;}
 .proc-resumo{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:18px;}
 @media (max-width:760px){ .proc-resumo{grid-template-columns:1fr;} }
 .proc-forn-topo{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
@@ -1812,12 +1814,14 @@ const PROC_STATUS_LEGADO = { transito:'transito_internacional', chegada:'porto_d
 const PROC_MODAIS = { maritimo:'Marítimo', aereo:'Aéreo', rodoviario:'Rodoviário', ferroviario:'Ferroviário', multimodal:'Multimodal' };
 const PROC_CANAIS = { '':'—', verde:'Verde', amarelo:'Amarelo', vermelho:'Vermelho', cinza:'Cinza' };
 const PROC_MOEDAS = ['USD','EUR','CNY','GBP','JPY','BRL'];
+const PROC_CONTAINER_TIPOS = ["20' DC","40' DC","40' HC","20' RF","40' RF","20' OT","40' OT","20' FR","40' FR"];
 const PROC_INCOTERMS = ['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DAP','DPU','DDP'];
 const PROC_TRIBUTOS = [['ii','II'],['ipi','IPI'],['pis','PIS'],['cofins','COFINS'],['icms','ICMS'],['siscomex','Taxa Siscomex'],['afrmm','AFRMM'],['armazenagem','Armazenagem']];
 
 const hojeISO = () => new Date().toISOString().slice(0,10);
 // Processos salvos antes do campo existir usam a data de criação.
 const dataAberturaProcesso = p => ((p && p.cliente) || {}).dataAbertura || String((p && p.criadoEm) || '').slice(0,10);
+function novoContainerProcesso(base){ return { id:uid(), tipo:"40' HC", numero:'', pesoBruto:'', pesoLiquido:'', cubagem:'', lacres:'', ...(base||{}) }; }
 function novoItemProcesso(){ return { id:uid(), produto:'', ncm:'', descricao:'', quantidade:'', unidade:'', valorUnit:'', pesoLiquido:'' }; }
 function novaParcelaProcesso(){ return { id:uid(), descricao:'', vencimento:'', valor:'', moeda:'USD', pago:false }; }
 // Cada fornecedor do processo tem seus dados e os itens que traz.
@@ -1830,9 +1834,9 @@ function novoProcesso(){
     cliente:{ nome:'', cnpjCpf:'', contato:'', email:'', telefone:'', referenciaCliente:'', modalidade:'conta_propria',
               responsavel:'', vendedor:'', dataAbertura:hojeISO(), observacoes:'' },
     produto:{ fornecedores:[novoFornecedorProcesso()] },
-    transporte:{ modal:'maritimo', tipoCarga:'FCL', containerTipo:"40' HC", containerQtd:'', agenteCarga:'', armador:'', navioVoo:'',
+    transporte:{ modal:'maritimo', tipoCarga:'FCL', containers:[novoContainerProcesso()], containerQtd:'', agenteCarga:'', armador:'', navioVoo:'',
                  booking:'', conhecimentoMaster:'', conhecimentoHouse:'', origem:'', destino:'', etd:'', eta:'', chegada:'',
-                 freeTime:'', volumes:'', pesoBruto:'', cubagem:'' },
+                 freeTime:'', volumes:'', pesoBruto:'', pesoLiquido:'', cubagem:'' },
     // cambios: R$ por unidade de cada moeda estrangeira usada (mercadoria de cada fornecedor, frete e seguro)
     financeiro:{ cambios:{}, frete:'', freteMoeda:'USD', seguro:'', seguroMoeda:'USD', condicaoPagamento:'', banco:'', contratoCambio:'', parcelas:[] },
     desembaraco:{ despachante:'', recinto:'', urf:'', tipoDeclaracao:'DUIMP', numeroDeclaracao:'', dataRegistro:'', canal:'', dataDesembaraco:'',
@@ -1867,7 +1871,35 @@ function normalizarProcesso(p){
   }
   delete r.financeiro.taxaCambio; delete r.financeiro.taxaCambioFrete; delete r.financeiro.taxaCambioSeguro;
   if(!Array.isArray(r.financeiro.parcelas)) r.financeiro.parcelas = [];
+  // Containers: processos antigos tinham só "tipo" e "quantidade" no topo. Viram uma linha por container;
+  // o peso bruto e a cubagem que existiam ficam no primeiro (o total continua o mesmo).
+  const trAnt = (p||{}).transporte || {};
+  if(!Array.isArray(trAnt.containers)){
+    const qtd = Math.max(1, parseInt(trAnt.containerQtd, 10) || 1);
+    r.transporte.containers = Array.from({ length:qtd }, (_, i)=>novoContainerProcesso({
+      tipo: trAnt.containerTipo || "40' HC",
+      ...(i===0 ? { pesoBruto: trAnt.pesoBruto || '', cubagem: trAnt.cubagem || '' } : {}) }));
+  }else r.transporte.containers = trAnt.containers.map(c=>novoContainerProcesso(c));
+  if(!r.transporte.containers.length) r.transporte.containers = [novoContainerProcesso()];
+  delete r.transporte.containerTipo;
+  sincronizarContainersProc(r);
   return r;
+}
+// Totais da lista de containers (quantidade, peso bruto, peso líquido e cubagem).
+function arred3(v){ return Math.round((v + Number.EPSILON) * 1000) / 1000; }
+function totaisContainersProc(t){
+  const cs = Array.isArray(t && t.containers) ? t.containers : [];
+  const soma = k => arred3(cs.reduce((a,c)=>a + numProcSimples(c[k]), 0));
+  return { qtd: cs.length, pesoBruto: soma('pesoBruto'), pesoLiquido: soma('pesoLiquido'), cubagem: soma('cubagem') };
+}
+// Em FCL os totais dos containers alimentam os campos gerais do transporte (usados em filtros e relatórios).
+function sincronizarContainersProc(p){
+  const t = p && p.transporte; if(!t || !(t.modal==='maritimo' && t.tipoCarga==='FCL')) return;
+  const x = totaisContainersProc(t);
+  t.containerQtd = String(x.qtd);
+  t.pesoBruto = x.pesoBruto ? String(x.pesoBruto) : '';
+  t.pesoLiquido = x.pesoLiquido ? String(x.pesoLiquido) : '';
+  t.cubagem = x.cubagem ? String(x.cubagem) : '';
 }
 
 const numProc = v => { const n = parseFloat(String(v??'').replace(/\./g,'').replace(',','.')); return isFinite(n) ? n : 0; };
@@ -1952,7 +1984,12 @@ const PROC_CAMPOS = (()=>{
     ['Transporte', 'transporte.rota', 'Origem → destino', p=>{ const tr = p.transporte||{}; return tr.origem||tr.destino ? `${tr.origem||'—'} → ${tr.destino||'—'}` : ''; }],
     ['Transporte', 'transporte.origem', 'Origem'], ['Transporte', 'transporte.destino', 'Destino'],
     ['Transporte', 'transporte.tipoCarga', 'Tipo de carga'],
-    ['Transporte', 'transporte.containers', 'Containers', p=>{ const tr = p.transporte||{}; return tr.containerQtd ? `${tr.containerQtd} × ${tr.containerTipo}` : ''; }],
+    ['Transporte', 'transporte.containers', 'Containers', p=>{ const tr = p.transporte||{};
+      if(!Array.isArray(tr.containers)) return tr.containerQtd ? `${tr.containerQtd} × ${tr.containerTipo||''}` : '';
+      const por = {}; tr.containers.forEach(c=>{ por[c.tipo] = (por[c.tipo]||0) + 1; });
+      return Object.entries(por).map(([k,v])=>`${v} × ${k}`).join(' · '); }],
+    ['Transporte', 'transporte.numerosContainers', 'Nº dos containers', p=>((p.transporte||{}).containers||[]).map(c=>c.numero).filter(Boolean).join(', ')],
+    ['Transporte', 'transporte.lacres', 'Lacres', p=>((p.transporte||{}).containers||[]).map(c=>c.lacres).filter(Boolean).join(' · ')],
     ['Transporte', 'transporte.agenteCarga', 'Agente de carga'], ['Transporte', 'transporte.armador', 'Armador / cia. aérea'],
     ['Transporte', 'transporte.navioVoo', 'Navio / voo'], ['Transporte', 'transporte.booking', 'Booking'],
     ['Transporte', 'transporte.conhecimentoMaster', 'Conhecimento master (MBL/MAWB)'], ['Transporte', 'transporte.conhecimentoHouse', 'Conhecimento house (HBL/HAWB)'],
@@ -1960,7 +1997,7 @@ const PROC_CAMPOS = (()=>{
     ['Transporte', 'transporte.eta', 'ETA', p=>data(p.transporte&&p.transporte.eta)],
     ['Transporte', 'transporte.chegada', 'Chegada efetiva', p=>data(p.transporte&&p.transporte.chegada)],
     ['Transporte', 'transporte.freeTime', 'Free time (dias)'], ['Transporte', 'transporte.volumes', 'Volumes'],
-    ['Transporte', 'transporte.pesoBruto', 'Peso bruto (kg)'], ['Transporte', 'transporte.cubagem', 'Cubagem (m³)'],
+    ['Transporte', 'transporte.pesoBruto', 'Peso bruto (kg)'], ['Transporte', 'transporte.pesoLiquido', 'Peso líquido (kg)'], ['Transporte', 'transporte.cubagem', 'Cubagem (m³)'],
 
     ['Financeiro', 'financeiro.taxaCambio', 'Taxas de câmbio', p=>Object.entries(procNorm(p).financeiro.cambios||{}).filter(([,v])=>numProcSimples(v)).map(([m,v])=>`${m} ${fmtNum(numProcSimples(v), 4)}`).join(' · ')],
     ['Financeiro', 'financeiro.frete', 'Frete internacional', p=>{ const f = p.financeiro||{}; return f.frete ? fmtMoeda(numProcSimples(f.frete), f.freteMoeda) : ''; }],
@@ -2182,7 +2219,7 @@ function catalogoFiltrosProc(){
     'transporte.etd': { tipo:'periodo', valores:p=>data((p.transporte||{}).etd) }, 'transporte.eta': { tipo:'periodo', valores:p=>data((p.transporte||{}).eta) },
     'transporte.chegada': { tipo:'periodo', valores:p=>data((p.transporte||{}).chegada) },
     'transporte.freeTime': { tipo:'faixa', valores:p=>n((p.transporte||{}).freeTime) }, 'transporte.volumes': { tipo:'faixa', valores:p=>n((p.transporte||{}).volumes) },
-    'transporte.pesoBruto': { tipo:'faixa', valores:p=>n((p.transporte||{}).pesoBruto) }, 'transporte.cubagem': { tipo:'faixa', valores:p=>n((p.transporte||{}).cubagem) },
+    'transporte.pesoBruto': { tipo:'faixa', valores:p=>n((p.transporte||{}).pesoBruto) }, 'transporte.pesoLiquido': { tipo:'faixa', valores:p=>n((p.transporte||{}).pesoLiquido) }, 'transporte.cubagem': { tipo:'faixa', valores:p=>n((p.transporte||{}).cubagem) },
     'financeiro.taxaCambio': { tipo:'faixa', valores:p=>Object.values(procNorm(p).financeiro.cambios||{}).flatMap(n) },
     'financeiro.frete': { tipo:'faixa', valores:p=>n((p.financeiro||{}).frete) }, 'financeiro.seguro': { tipo:'faixa', valores:p=>n((p.financeiro||{}).seguro) },
     'financeiro.cif': { tipo:'faixa', valores:p=>t(p).cif==null ? [] : [String(t(p).cif)] }, 'financeiro.cifBRL': { tipo:'faixa', valores:p=>t(p).cifBRL ? [String(t(p).cifBRL)] : [] },
@@ -2624,13 +2661,12 @@ function procAbaTransporte(){
   const t = state.procDraft.transporte;
   const maritimo = t.modal==='maritimo';
   const aereo = t.modal==='aereo';
+  const fcl = maritimo && t.tipoCarga==='FCL';
   return `<div class="card">
     <div class="section-title" style="margin-bottom:16px;"><span class="num">04</span> Transporte</div>
     <div class="field-row grid-4">
       ${procCampo('transporte.modal', 'Modal', { options: opcoes(PROC_MODAIS) })}
       ${maritimo ? procCampo('transporte.tipoCarga', 'Tipo de carga', { options:[['FCL','FCL (container cheio)'],['LCL','LCL (carga consolidada)'],['BREAK','Carga solta / break bulk']] }) : ''}
-      ${maritimo && t.tipoCarga==='FCL' ? procCampo('transporte.containerTipo', 'Tipo de container', { options: opcoesLista(["20' DC","40' DC","40' HC","20' RF","40' RF","20' OT","40' OT","20' FR","40' FR"]) }) : ''}
-      ${maritimo && t.tipoCarga==='FCL' ? procCampo('transporte.containerQtd', 'Qtd. de containers', { type:'number', step:'1' }) : ''}
       ${procCampoEmpresa('proc-agente', { span:2 })}
       ${procCampo('transporte.armador', maritimo ? 'Armador' : aereo ? 'Companhia aérea' : 'Transportadora')}
       ${procCampo('transporte.navioVoo', maritimo ? 'Navio / viagem' : aereo ? 'Voo' : 'Veículo / placa')}
@@ -2645,10 +2681,44 @@ function procAbaTransporte(){
       ${procCampo('transporte.chegada', 'Chegada efetiva', { type:'date' })}
       <div></div>
       ${procCampo('transporte.volumes', 'Volumes', { type:'number', step:'1' })}
-      ${procCampo('transporte.pesoBruto', 'Peso bruto (kg)', { type:'number', step:'any' })}
-      ${procCampo('transporte.cubagem', 'Cubagem (m³)', { type:'number', step:'any' })}
+      ${fcl ? '' : procCampo('transporte.pesoBruto', 'Peso bruto (kg)', { type:'number', step:'any' })}
+      ${fcl ? '' : procCampo('transporte.cubagem', 'Cubagem (m³)', { type:'number', step:'any' })}
     </div>
+    ${fcl ? procContainersHtml(t) : ''}
   </div>`;
+}
+// Janela Transporte (FCL): uma linha por container, com botão para adicionar e totais automáticos logo abaixo.
+function procContainersHtml(t){
+  const cs = t.containers, tot = totaisContainersProc(t);
+  const linhas = cs.map((c, n)=>{
+    const pc = `transporte.containers.${n}`, confirmando = state.pendingDelete === 'cont:' + c.id;
+    return `<tr>
+      <td><select data-proc="${pc}.tipo">${PROC_CONTAINER_TIPOS.map(x=>`<option ${c.tipo===x?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
+      <td><input data-proc="${pc}.numero" value="${esc(c.numero)}" placeholder="Ex.: MSKU1234567" autocomplete="off" style="text-transform:uppercase;"></td>
+      <td><input data-proc="${pc}.pesoBruto" type="number" step="any" min="0" class="num-mono" value="${esc(c.pesoBruto)}" placeholder="kg"></td>
+      <td><input data-proc="${pc}.pesoLiquido" type="number" step="any" min="0" class="num-mono" value="${esc(c.pesoLiquido)}" placeholder="kg"></td>
+      <td><input data-proc="${pc}.cubagem" type="number" step="any" min="0" class="num-mono" value="${esc(c.cubagem)}" placeholder="m³"></td>
+      <td><input data-proc="${pc}.lacres" value="${esc(c.lacres)}" placeholder="Lacre 1, Lacre 2" autocomplete="off"></td>
+      <td>${cs.length>1 ? `<button class="row-remove ${confirmando ? 'btn-perigo' : ''}" title="${confirmando ? 'Clique de novo para confirmar' : 'Remover este container'}" data-action="proc-rm-container:${c.id}">${ICONS.trash}</button>` : ''}</td>
+    </tr>`; }).join('');
+  return `
+    <div class="proc-forn-itens proc-cont-topo" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Containers</span>
+      <button class="btn btn-ghost btn-sm" data-action="proc-add-container">${ICONS.plus} Adicionar Container</button>
+    </div>
+    <div class="table-wrap"><table class="proc-itens proc-containers">
+      <thead><tr><th>Tipo de Container</th><th>Container</th><th class="num-mono">Peso Bruto (kg)</th><th class="num-mono">Peso Líquido (kg)</th><th class="num-mono">Cubagem (m³)</th><th>Lacres</th><th></th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table></div>
+    <div class="field-row grid-4 proc-cont-totais" id="proc-cont-totais" style="margin-top:14px;">${procContainersTotaisHtml(tot)}</div>`;
+}
+function procContainersTotaisHtml(tot){
+  const f = v => v.toLocaleString('pt-BR', { maximumFractionDigits:3 });
+  return `
+    <div class="field"><label>Qtd. de containers</label><input readonly id="proc-cont-qtd" value="${tot.qtd}"></div>
+    <div class="field"><label>Peso bruto total (kg)</label><input readonly id="proc-cont-bruto" value="${f(tot.pesoBruto)}"></div>
+    <div class="field"><label>Peso líquido total (kg)</label><input readonly id="proc-cont-liquido" value="${f(tot.pesoLiquido)}"></div>
+    <div class="field"><label>Cubagem total (m³)</label><input readonly id="proc-cont-cubagem" value="${f(tot.cubagem)}"></div>`;
 }
 
 function procAbaFinanceiro(){
@@ -2923,6 +2993,8 @@ function atualizarTotaisProcesso(){
   const p = state.procDraft; if(!p) return;
   const tot = totaisProcesso(p);
   const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+  sincronizarContainersProc(p);
+  const cx = document.getElementById('proc-cont-totais'); if(cx) cx.innerHTML = procContainersTotaisHtml(totaisContainersProc(p.transporte));
   p.produto.fornecedores.forEach((fo, k)=>{
     const M = fo.moeda || 'USD', sub = totaisFornecedorProc(fo);
     fo.itens.forEach((it, n)=>{
@@ -2981,6 +3053,7 @@ function novoNumeroProcesso(){ return (state.processosIndex||[]).reduce((m,p)=>M
 
 async function salvarProcesso(){
   const p = state.procDraft;
+  sincronizarContainersProc(p);
   if(!p.cliente.dataAbertura){ renderApp(); return toast('Informe a data de abertura do processo.'); }
   const invalidos = Object.keys(PROC_EMPRESA_CAMPOS).filter(t=>!validarEmpresaProcesso(t, false));
   if(invalidos.length){
@@ -3081,6 +3154,20 @@ function acaoProcesso(cmd, a1, a2){
     }
     case 'proc-add-item': { const fo = p.produto.fornecedores.find(x=>x.id===a1) || p.produto.fornecedores[0]; fo.itens.push(novoItemProcesso()); saveDraftProcesso(); renderApp(); return true; }
     case 'proc-rm-item': { const fo = p.produto.fornecedores.find(x=>x.id===a1); if(fo) fo.itens = fo.itens.filter(x=>x.id!==a2); saveDraftProcesso(); renderApp(); return true; }
+    case 'proc-add-container': {
+      const cs = p.transporte.containers, ult = cs[cs.length-1];
+      cs.push(novoContainerProcesso({ tipo: ult ? ult.tipo : "40' HC" }));
+      sincronizarContainersProc(p); saveDraftProcesso(); renderApp();
+      const ls = document.querySelectorAll('.proc-containers tbody tr'); if(ls.length){ const inp = ls[ls.length-1].querySelector('input'); if(inp) inp.focus(); }
+      return true;
+    }
+    case 'proc-rm-container': {
+      const cs = p.transporte.containers, c = cs.find(x=>x.id===a1);
+      if(!c || cs.length<2) return true;
+      const temDados = c.numero || c.pesoBruto || c.pesoLiquido || c.cubagem || c.lacres;
+      if(temDados && !requestDelete('cont', a1)) return true;
+      p.transporte.containers = cs.filter(x=>x.id!==a1); sincronizarContainersProc(p); saveDraftProcesso(); renderApp(); return true;
+    }
     case 'proc-add-parcela': p.financeiro.parcelas.push({ ...novaParcelaProcesso(), moeda: moedaPrincipalProc(p) }); saveDraftProcesso(); renderApp(); return true;
     case 'proc-rm-parcela': p.financeiro.parcelas = p.financeiro.parcelas.filter(x=>x.id!==a1); saveDraftProcesso(); renderApp(); return true;
   }
