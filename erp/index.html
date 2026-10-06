@@ -751,6 +751,16 @@ tbody tr:hover{background:#F9FAFD;}
   .user-btn-txt{display:none;}
 }
 
+
+/* Painel de cor própria ao redor de filtros + lista (Processos, Cotações Salvas e Cadastros) */
+.lista-painel{background:#E6ECF5; border:1px solid #D2DBEA; border-radius:14px; padding:18px 18px 16px; margin-top:6px;}
+.lista-painel .table-wrap{background:#fff; border-color:#D2DBEA;}
+.lista-painel .card-flat, .lista-painel .empty{background:#fff; border-radius:10px;}
+.lista-painel .empty{border:1px dashed #C9D3E4;}
+.lista-painel .filter-bar:last-child, .lista-painel .table-wrap:last-child{margin-bottom:0;}
+.lista-painel .kanban-scroll, .lista-painel .kanban-board{margin-bottom:0;}
+.lista-painel .field input, .lista-painel .field select, .lista-painel .filter-bar input, .lista-painel .filter-bar select{background:#fff;}
+@media (max-width:980px){ .lista-painel{padding:12px;} }
 </style>
 </head>
 <body>
@@ -2464,6 +2474,7 @@ function renderProcessos(){
   <div class="page-title">Processos</div>
   <div class="page-sub">Processos de importação da empresa: cliente, produtos, transporte, financeiro e desembaraço em um só lugar.${seloFiltroFixado('proc', ignorar)}</div>
   <hr class="hairline">
+  <div class="lista-painel">
   <div class="cot-barra">
     <div class="view-toggle">
       <button class="view-toggle-btn ${modo==='lista'?'active':''}" data-action="proc-modo:lista">${ICONS.file} Lista</button>
@@ -2473,7 +2484,8 @@ function renderProcessos(){
   </div>
   ${state.procTemplateAberto ? renderProcTemplate() : ''}
   ${barraFiltrosTpl('proc', ignorar, `<button class="btn btn-primary btn-sm" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</button>`)}
-  ${conteudo}`;
+  ${conteudo}
+  </div>`;
 }
 
 // Janela Template: Configurar Card / Configurar Lista / Configurar Filtros
@@ -4818,6 +4830,7 @@ function renderDados(){
   <hr class="hairline">
 
   <div class="btn-row" style="margin-bottom:20px;">
+    <button class="btn btn-amber btn-sm" data-action="save-calculo">${ICONS.save} Salvar Cálculo</button>
     <button class="btn btn-sm ${confirmandoLimpeza ? 'btn-danger' : 'btn-ghost'}" data-action="limpar-dados">
       ${ICONS.trash} ${confirmandoLimpeza ? 'Clique novamente para confirmar' : 'Limpar Dados'}
     </button>
@@ -5002,6 +5015,7 @@ function renderDados(){
     <div id="limite-alert">${limiteAlertHtml(c)}</div>
 
     <div class="btn-row" style="margin-top:8px;">
+      <button class="btn btn-amber" data-action="save-calculo">${ICONS.save} Salvar Cálculo</button>
       <button class="btn btn-primary" data-action="go:numerario">Ir para Numerário ${ICONS.arrow}</button>
       <button class="btn btn-ghost" data-action="go:cotacoesTodas">${ICONS.quote} Ver Cotações Salvas</button>
     </div>
@@ -5119,6 +5133,7 @@ function renderDadosFormal(){
   <hr class="hairline">
 
   <div class="btn-row" style="margin-bottom:20px;">
+    <button class="btn btn-amber btn-sm" data-action="save-calculo-formal">${ICONS.save} Salvar Cálculo</button>
     <button class="btn btn-sm ${confirmandoLimpeza ? 'btn-danger' : 'btn-ghost'}" data-action="limpar-dados-formal">
       ${ICONS.trash} ${confirmandoLimpeza ? 'Clique novamente para confirmar' : 'Limpar Dados'}
     </button>
@@ -5310,6 +5325,7 @@ function renderDadosFormal(){
     </div>
 
     <div class="btn-row" style="margin-top:8px;">
+      <button class="btn btn-amber" data-action="save-calculo-formal">${ICONS.save} Salvar Cálculo</button>
       <button class="btn btn-primary" data-action="go:numerarioFormal">Ir para Numerário ${ICONS.arrow}</button>
       <button class="btn btn-ghost" data-action="go:cotacoesTodas">${ICONS.quote} Ver Cotações Salvas</button>
     </div>
@@ -5466,19 +5482,10 @@ function renderNumerario(){
 
   <div class="section-title" style="margin-bottom:12px;"><span class="num">01</span> Resumo das Despesas</div>
   <div class="table-wrap" style="margin-bottom:8px;">
-    <table><thead><tr><th>Despesa</th><th class="num-mono">Moeda Ext.</th><th class="num-mono">Moeda R$</th><th class="num-mono">Taxa</th></tr></thead>
-    <tbody>
-      <tr><td>Invoice</td><td class="num-mono">${fmtUSD(c.invoiceExt)}</td><td class="num-mono">${fmtBRL(c.sumTotalBRL)}</td><td class="num-mono">${fmtNum(num(d.cambioInvoice),4)}</td></tr>
-      <tr><td>Frete</td><td class="num-mono">${fmtUSD(c.freteExtD)}</td><td class="num-mono">${fmtBRL(c.freteBRL)}</td><td class="num-mono">${fmtNum(num(d.cambioFrete),4)}</td></tr>
-      <tr><td>Seguro</td><td class="num-mono">${fmtUSD(c.seguroExtD)}</td><td class="num-mono">${fmtBRL(c.seguroBRL)}</td><td class="num-mono">${fmtNum(num(d.cambioFrete),4)}</td></tr>
-      <tr><td>Valor Aduaneiro</td><td class="num-mono">${fmtUSD(c.valorAduaneiroExt)}</td><td class="num-mono">${fmtBRL(r.totais.valorAduaneiroProduto)}</td><td class="num-mono">${fmtNum(num(d.cambioDesembaraco),4)}</td></tr>
-      <tr><td>Imposto de Importação</td><td class="num-mono">${fmtPct(d.ii)}</td><td class="num-mono">${fmtBRL(r.totais.rateioII)}</td><td></td></tr>
-      <tr><td>ICMS</td><td class="num-mono">${fmtPct(d.icms)}</td><td class="num-mono">${fmtBRL(r.totais.rateioIcms)}</td><td></td></tr>
-      <tr><td>Despesas Extras</td><td></td><td class="num-mono">${fmtBRL(c.despExtraTotal)}</td><td></td></tr>
-    </tbody></table>
+    ${resumoTabelaHtml(resumoDespesasSimplificada(d,c,r))}
   </div>
   <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 20px;">
-    Invoice usa o câmbio informado em "Invoice"; Frete e Seguro usam o câmbio informado em "Frete". O Valor Aduaneiro, I.I. e ICMS somam exatamente os pré-cálculos de cada linha, respeitando as taxas de câmbio preenchidas em Dados — e batem com o total do Rateio dos Custos por Produto abaixo. A taxa exibida na linha Valor Aduaneiro é a de Desembaraço, apenas como demonstrativo.
+    Cada produto usa o câmbio informado em "Invoice"; Frete e Seguro usam o câmbio informado em "Frete". O Valor Aduaneiro, I.I. e ICMS somam exatamente os pré-cálculos de cada linha, respeitando as taxas de câmbio preenchidas em Dados — e batem com o total do Rateio dos Custos por Produto abaixo. A taxa exibida na linha Valor Aduaneiro é a de Desembaraço, apenas como demonstrativo.
   </p>
 
   <div class="kpi-row" style="margin-bottom:24px;">
@@ -5594,23 +5601,9 @@ function renderNumerarioFormal(){
 
   <div class="section-title" style="margin-bottom:12px;"><span class="num">01</span> Resumo das Despesas</div>
   <div class="table-wrap" style="margin-bottom:20px;">
-    <table><thead><tr><th>Despesa</th><th class="num-mono">Moeda Ext.</th><th class="num-mono">Moeda R$</th><th class="num-mono">Taxa</th></tr></thead>
-    <tbody>
-      <tr><td>Invoice</td><td class="num-mono">${fmtUSD(c.sumTotalUSD)}</td><td class="num-mono">${fmtBRL(c.sumTotalBRL)}</td><td class="num-mono">—</td></tr>
-      ${c.freteLinhasCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>`<tr><td style="padding-left:24px;">Frete Marítimo — ${esc(l.descricao)||'(sem descrição)'}</td><td class="num-mono">${l.moeda!=='R$'?fmtMoedaExt(num(l.tarifa)*num(l.quantidade), l.moeda):''}</td><td class="num-mono">${fmtBRL(l.total)}</td><td class="num-mono">${l.moeda!=='R$'?fmtNum(num(d.freteCambio),4):''}</td></tr>`).join('')}
-      ${c.taxasOrigemCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>`<tr><td style="padding-left:24px;">Taxas de Origem — ${esc(l.descricao)||'(sem descrição)'}</td><td class="num-mono">${l.moeda!=='R$'?fmtMoedaExt(num(l.tarifa)*num(l.quantidade), l.moeda):''}</td><td class="num-mono">${fmtBRL(l.total)}</td><td class="num-mono">${l.moeda!=='R$'?fmtNum(num(d.freteCambio),4):''}</td></tr>`).join('')}
-      ${c.taxasDestinoCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>`<tr><td style="padding-left:24px;">Taxas de Destino — ${esc(l.descricao)||'(sem descrição)'}</td><td class="num-mono">${l.moeda!=='R$'?fmtMoedaExt(num(l.tarifa)*num(l.quantidade), l.moeda):''}</td><td class="num-mono">${fmtBRL(l.total)}</td><td class="num-mono">${l.moeda!=='R$'?fmtNum(num(d.freteCambio),4):''}</td></tr>`).join('')}
-      ${c.armazenagemLinhasCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>`<tr><td style="padding-left:24px;">Armazenagem — ${esc(l.descricao)||'(sem descrição)'}</td><td class="num-mono">${l.moeda!=='R$'?fmtMoedaExt(num(l.tarifa)*num(l.quantidade), l.moeda):''}</td><td class="num-mono">${fmtBRL(l.total)}</td><td class="num-mono">${l.moeda!=='R$'?fmtNum(num(d.armazenagemCambio),4):''}</td></tr>`).join('')}
-      ${c.outrasLinhasCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>`<tr><td style="padding-left:24px;">Outras Despesas — ${esc(l.descricao)||'(sem descrição)'}</td><td class="num-mono">${l.moeda!=='R$'?fmtMoedaExt(num(l.tarifa)*num(l.quantidade), l.moeda):''}</td><td class="num-mono">${fmtBRL(l.total)}</td><td class="num-mono">${l.moeda!=='R$'?fmtNum(num(d.outrasDespesasCambio),4):''}</td></tr>`).join('')}
-      <tr><td>Imposto de Importação</td><td></td><td class="num-mono">${fmtBRL(r.totais.ii)}</td><td></td></tr>
-      <tr><td>I.P.I.</td><td></td><td class="num-mono">${fmtBRL(r.totais.ipi)}</td><td></td></tr>
-      <tr><td>PIS</td><td></td><td class="num-mono">${fmtBRL(r.totais.pis)}</td><td></td></tr>
-      <tr><td>COFINS</td><td></td><td class="num-mono">${fmtBRL(r.totais.cofins)}</td><td></td></tr>
-      <tr><td>ICMS</td><td></td><td class="num-mono">${fmtBRL(r.totais.icms)}</td><td></td></tr>
-      <tr><td>AFRMM</td><td></td><td class="num-mono">${fmtBRL(num(d.afrmm))}</td><td></td></tr>
-    </tbody></table>
+    ${resumoTabelaHtml(resumoDespesasFormal(d,c,r))}
   </div>
-  <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 20px;">A coluna Taxa mostra o câmbio aplicado a cada despesa em moeda estrangeira (USD/EUR/RMB). Invoice usa câmbio próprio por produto (não há uma taxa única). As alíquotas de I.I., I.P.I., PIS, COFINS e ICMS são definidas por produto (NCM), na aba Dados → Desembaraço. Base do ICMS = Valor Aduaneiro + I.I. + I.P.I. + PIS + COFINS + AFRMM + Siscomex.</p>
+  <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 20px;">A coluna Taxa mostra o câmbio aplicado a cada despesa em moeda estrangeira (USD/EUR/RMB). Cada produto usa o câmbio próprio informado na aba Dados. As alíquotas de I.I., I.P.I., PIS, COFINS e ICMS são definidas por produto (NCM), na aba Dados → Desembaraço. Base do ICMS = Valor Aduaneiro + I.I. + I.P.I. + PIS + COFINS + AFRMM + Siscomex.</p>
 
   <div class="kpi-row" style="margin-bottom:24px;">
     <div class="kpi"><div class="k-lbl">Valor Aduaneiro</div><div class="k-val">${fmtBRL(r.totais.valorAduaneiro)}</div></div>
@@ -5894,10 +5887,12 @@ function renderCotacoesTodas(){
     ${seloFiltroFixado('cot', state.cotacoesViewMode==='cards' ? ['status'] : [])}
   </div>
   <hr class="hairline">
+  <div class="lista-painel">
   ${viewToggle}
   ${state.cotTemplateAberto ? renderCotTemplate() : ''}
   ${filterBar}
   ${corpo}
+  </div>
   `;
 }
 function renderCotacoesKanban(){
@@ -7224,9 +7219,11 @@ function renderCadastroRico(tipo){
   <div class="page-title">Cadastro — ${cfg.titulo}</div>
   <div class="page-sub">${subText}</div>
   <hr class="hairline">
+  <div class="lista-painel">
   ${barraCadastroTpl(tipo, totalCount, list.length)}
   ${formHtml}
   ${itemsHtml}
+  </div>
   `;
 }
 
@@ -7821,6 +7818,66 @@ async function gerarDashboardPDF(dados, meta){
     toast('Erro ao gerar o PDF: '+(err && err.message ? err.message : 'falha desconhecida.'));
   }
 }
+
+/* ----- Resumo das Despesas: as mesmas linhas alimentam a tela do Numerário e o PDF ----- */
+function fmtPct2(n){ return (num(n)*100).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) + '%'; }
+function linhaProdutoResumo(p, taxa){
+  return { label: `${p.fornecedor||'—'} — ${p.produto||'—'}`, ext: fmtUSD(p.totalUSD), brl: fmtBRL(p.totalBRL), taxa: fmtNum(num(taxa),4), indent:true };
+}
+function resumoDespesasSimplificada(d, c, r){
+  const prods = c.produtos.filter(p=>(p.qty>0) || p.fornecedor || p.produto);
+  const linhas = prods.length ? prods.map(p=>linhaProdutoResumo(p, d.cambioInvoice))
+    : [{ label:'Invoice', ext:fmtUSD(c.invoiceExt), brl:fmtBRL(c.sumTotalBRL), taxa:fmtNum(num(d.cambioInvoice),4) }];
+  return [ ...linhas,
+    { label:'Frete', ext:fmtUSD(c.freteExtD), brl:fmtBRL(c.freteBRL), taxa:fmtNum(num(d.cambioFrete),4) },
+    { label:'Seguro', ext:fmtUSD(c.seguroExtD), brl:fmtBRL(c.seguroBRL), taxa:fmtNum(num(d.cambioFrete),4) },
+    { label:'Valor Aduaneiro', ext:fmtUSD(c.valorAduaneiroExt), brl:fmtBRL(r.totais.valorAduaneiroProduto), taxa:fmtNum(num(d.cambioDesembaraco),4) },
+    { label:'Imposto de Importação', ext:fmtPct(d.ii), brl:fmtBRL(r.totais.rateioII), taxa:'' },
+    { label:'ICMS', ext:fmtPct(d.icms), brl:fmtBRL(r.totais.rateioIcms), taxa:'' },
+    { label:'Despesas Extras', ext:'', brl:fmtBRL(c.despExtraTotal), taxa:'' },
+  ];
+}
+function resumoDespesasFormal(d, c, r){
+  const ok = l => l.descricao || num(l.tarifa)>0;
+  const ext = l => l.moeda!=='R$' ? fmtMoedaExt(num(l.tarifa)*num(l.quantidade), l.moeda) : '';
+  const tx = (l, cambio) => l.moeda!=='R$' ? fmtNum(num(cambio),4) : '';
+  const det = (rotulo, linhas, cambio) => linhas.filter(ok).map(l=>({ label: rotulo+' — '+(l.descricao||'(sem descrição)'), ext:ext(l), brl:fmtBRL(l.total), taxa:tx(l,cambio), indent:true }));
+  const prods = c.produtos.filter(p=>(p.qty>0) || p.fornecedor || p.produto);
+  const linhas = prods.length ? prods.map(p=>linhaProdutoResumo(p, p.cambio))
+    : [{ label:'Invoice', ext:fmtUSD(c.sumTotalUSD), brl:fmtBRL(c.sumTotalBRL), taxa:'—' }];
+  return [ ...linhas,
+    ...det('Frete Marítimo', c.freteLinhasCalc, d.freteCambio),
+    ...det('Taxas de Origem', c.taxasOrigemCalc, d.freteCambio),
+    ...det('Taxas de Destino', c.taxasDestinoCalc, d.freteCambio),
+    ...det('Armazenagem', c.armazenagemLinhasCalc, d.armazenagemCambio),
+    ...det('Outras Despesas', c.outrasLinhasCalc, d.outrasDespesasCambio),
+    { label:'Imposto de Importação', ext:'', brl:fmtBRL(r.totais.ii), taxa:'' },
+    { label:'I.P.I.', ext:'', brl:fmtBRL(r.totais.ipi), taxa:'' },
+    { label:'PIS', ext:'', brl:fmtBRL(r.totais.pis), taxa:'' },
+    { label:'COFINS', ext:'', brl:fmtBRL(r.totais.cofins), taxa:'' },
+    { label:'ICMS', ext:'', brl:fmtBRL(r.totais.icms), taxa:'' },
+    { label:'AFRMM', ext:'', brl:fmtBRL(num(d.afrmm)), taxa:'' },
+  ];
+}
+function resumoTabelaHtml(rows){
+  return `<table><thead><tr><th>Despesa</th><th class="num-mono">Moeda Ext.</th><th class="num-mono">Moeda R$</th><th class="num-mono">Taxa</th></tr></thead>
+    <tbody>${rows.map(x=>`<tr><td${x.indent?' style="padding-left:24px;"':''}>${esc(x.label)}</td><td class="num-mono">${x.ext}</td><td class="num-mono">${x.brl}</td><td class="num-mono">${x.taxa}</td></tr>`).join('')}</tbody></table>`;
+}
+function resumoRowsPdf(rows){ return rows.map(x=>[(x.indent?'   ':'')+x.label, x.ext, x.brl, x.taxa]); }
+// Tabela "Informações do Produto" (impostos por produto) — entre o Resumo das Despesas e o Rateio de Custos.
+function pdfTabelaInformacoesProduto(doc, y, head, body){
+  const pageH = doc.internal.pageSize.getHeight();
+  if(y + 70 > pageH-24){ doc.addPage(); y = 40; }
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(75,90,104);
+  doc.text('Informações do Produto', 28, y);
+  doc.autoTable({
+    startY:y+8, margin:{left:28,right:28}, head:[head], body,
+    theme:'grid', styles:{fontSize:8, cellPadding:4, halign:'center', valign:'middle', lineColor:[40,50,62], lineWidth:0.5, textColor:[20,30,40]},
+    headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontStyle:'bold', lineColor:[40,50,62]},
+  });
+  doc.setFont('helvetica','normal');
+  return doc.lastAutoTable.finalY;
+}
 function fmtDateOnly(v){
   if(!v) return '—';
   const parts = String(v).split('-');
@@ -7880,22 +7937,24 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
   ]);
 
   y += 18;
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(75,90,104);
+  doc.text('Resumo das Despesas', 28, y); y += 8;
   doc.autoTable({
     startY:y, margin:{left:28,right:28},
     head:[['Despesa','Moeda Ext.','Moeda R$','Taxa']],
-    body:[
-      ['Invoice', fmtUSD(c.invoiceExt), fmtBRL(c.sumTotalBRL), fmtNum(num(dados.cambioInvoice),4)],
-      ['Frete', fmtUSD(c.freteExtD), fmtBRL(c.freteBRL), fmtNum(num(dados.cambioFrete),4)],
-      ['Seguro', fmtUSD(c.seguroExtD), fmtBRL(c.seguroBRL), fmtNum(num(dados.cambioFrete),4)],
-      ['Valor Aduaneiro', fmtUSD(c.valorAduaneiroExt), fmtBRL(r.totais.valorAduaneiroProduto), fmtNum(num(dados.cambioDesembaraco),4)],
-    ],
+    body: resumoRowsPdf(resumoDespesasSimplificada(dados, c, r)),
     theme:'grid', styles:{fontSize:8, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf()},
-    columnStyles:{2:{halign:'right'},3:{halign:'right'}},
-    tableWidth: 300,
+    columnStyles:{1:{halign:'right', cellWidth:100},2:{halign:'right', cellWidth:100},3:{halign:'right', cellWidth:70}},
   });
+  doc.setFont('helvetica','normal');
+  // Impostos por produto (modelo "Informações do Produto"), entre o Resumo das Despesas e o Rateio de Custos
+  const yImp = pdfTabelaInformacoesProduto(doc, doc.lastAutoTable.finalY + 22,
+    ['Fornecedor','Produto','I.I','ICMS'],
+    r.linhas.map(l=>[l.fornecedor||'—', l.produto||'—', fmtPct2(dados.ii), fmtPct2(dados.icms)]));
 
-  const y2 = doc.lastAutoTable.finalY + 22;
-  doc.setFontSize(10); doc.setTextColor(75,90,104);
+  let y2 = yImp + 22;
+  if(y2 > doc.internal.pageSize.getHeight()-90){ doc.addPage(); y2 = 48; }
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(75,90,104);
   doc.text('Rateio dos Custos por Produto', 28, y2-8);
   doc.autoTable({
     startY:y2, margin:{left:28,right:28},
@@ -7910,6 +7969,7 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
       fmtBRL(r.totais.rateioSeguro), fmtBRL(r.totais.valorAduaneiroProduto), fmtBRL(r.totais.rateioII), fmtBRL(r.totais.rateioBcIcms), fmtBRL(r.totais.rateioIcms),
       fmtBRL(r.totais.rateioDespExtra), fmtBRL(r.totais.custoTotalSimples), '', fmtBRL(r.totais.custoTotalLucroReal), '']],
     theme:'grid', styles:{fontSize:6.6, cellPadding:3}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:6.3},
+    columnStyles:{15:{fontStyle:'bold'}, 17:{fontStyle:'bold'}},   // Custo Unit. (Simples) e Custo Unit. (Lucro)
     footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
   });
 
@@ -8131,28 +8191,18 @@ async function gerarDashboardPDFFormal(dados, meta){
 
     doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
     doc.text('Resumo das Despesas', 28, y); y += 8;
-    const resumoBody = [
-      ['Invoice', fmtUSD(c.sumTotalUSD), fmtBRL(c.sumTotalBRL)],
-      ['Frete', '', fmtBRL(sum(c.freteLinhasCalc.map(l=>l.total)))],
-      ...c.taxasOrigemCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>['   Taxas de Origem — '+(l.descricao||'(sem descrição)'), '', fmtBRL(l.total)]),
-      ...c.taxasDestinoCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>['   Taxas de Destino — '+(l.descricao||'(sem descrição)'), '', fmtBRL(l.total)]),
-      ...c.armazenagemLinhasCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>['   Armazenagem — '+(l.descricao||'(sem descrição)'), '', fmtBRL(l.total)]),
-      ...c.outrasLinhasCalc.filter(l=>l.descricao||num(l.tarifa)>0).map(l=>['   Outras Despesas — '+(l.descricao||'(sem descrição)'), '', fmtBRL(l.total)]),
-      ['Imposto de Importação', '', fmtBRL(r.totais.ii)],
-      ['I.P.I.', '', fmtBRL(r.totais.ipi)],
-      ['PIS', '', fmtBRL(r.totais.pis)],
-      ['COFINS', '', fmtBRL(r.totais.cofins)],
-      ['ICMS', '', fmtBRL(r.totais.icms)],
-      ['AFRMM', '', fmtBRL(num(dados.afrmm))],
-    ];
     doc.autoTable({
       startY:y, margin:{left:28,right:28},
-      head:[['Despesa','Moeda Ext.','Moeda R$']],
-      body: resumoBody,
+      head:[['Despesa','Moeda Ext.','Moeda R$','Taxa']],
+      body: resumoRowsPdf(resumoDespesasFormal(dados, c, r)),
       theme:'grid', styles:{fontSize:7.5, cellPadding:3}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:7},
-      columnStyles:{1:{halign:'right', cellWidth:80}, 2:{halign:'right', cellWidth:90}},
+      columnStyles:{1:{halign:'right', cellWidth:100}, 2:{halign:'right', cellWidth:100}, 3:{halign:'right', cellWidth:70}},
     });
-    y = doc.lastAutoTable.finalY + 20;
+    doc.setFont('helvetica','normal');
+    // Impostos por produto (modelo "Informações do Produto"), entre o Resumo das Despesas e o Rateio de Custos
+    y = pdfTabelaInformacoesProduto(doc, doc.lastAutoTable.finalY + 22,
+      ['Fornecedor','Produto','NCM','I.I','I.P.I','PIS','COFINS','ICMS'],
+      r.linhas.map(l=>[l.fornecedor||'—', l.produto||'—', l.ncm||'—', fmtPct2(l.iiPct), fmtPct2(l.ipiPct), fmtPct2(l.pisPct), fmtPct2(l.cofinsPct), fmtPct2(l.icmsPct)])) + 20;
 
     doc.setFontSize(10); doc.setTextColor(75,90,104);
     doc.text('Resumo dos Custos', 28, y); y += 8;
@@ -8169,18 +8219,19 @@ async function gerarDashboardPDFFormal(dados, meta){
     doc.autoTable({
       startY:y, margin:{left:28,right:28},
       head:[['Fornecedor','Produto','NCM','Qtd','Total US$','Total R$','Rat. Frete','Rat. Acrésc.','V.A.','Armazenagem','Outras Despesas',
-        'I.I. %','I.I. R$','I.P.I. %','I.P.I. R$','PIS %','PIS R$','COFINS %','COFINS R$','ICMS %','ICMS R$','AFRMM','Custo c/créd.','Custo s/créd.']],
+        'I.I.','I.P.I.','PIS','COFINS','ICMS','AFRMM','Custo Total\nc/créd.','Custo Unit.\nc/créd.','Custo Total\ns/créd.','Custo Unit.\ns/créd.']],
       body: r.linhas.map(l=>[
         l.fornecedor||'—', l.produto||'—', l.ncm||'—', fmtNum(l.qty), fmtUSD(l.totalUSD), fmtBRL(l.totalBRL),
         fmtBRL(l.rateioFreteTabela), fmtBRL(l.rateioAcrescimo), fmtBRL(l.valorAduaneiro), fmtBRL(l.rateioArmazenagemTabela), fmtBRL(l.rateioOutrasTabela),
-        fmtPct(l.iiPct), fmtBRL(l.ii), fmtPct(l.ipiPct), fmtBRL(l.ipi), fmtPct(l.pisPct), fmtBRL(l.pis), fmtPct(l.cofinsPct), fmtBRL(l.cofins), fmtPct(l.icmsPct), fmtBRL(l.icms),
-        fmtBRL(l.rateioAfrmmTabela), fmtBRL(l.custoTotalComCredito), fmtBRL(l.custoTotalSemCredito),
+        fmtBRL(l.ii), fmtBRL(l.ipi), fmtBRL(l.pis), fmtBRL(l.cofins), fmtBRL(l.icms), fmtBRL(l.rateioAfrmmTabela),
+        fmtBRL(l.custoTotalComCredito), fmtBRL(l.custoUnitComCredito), fmtBRL(l.custoTotalSemCredito), fmtBRL(l.custoUnitSemCredito),
       ]),
       foot:[['TOTAL','','', fmtNum(r.totais.qty), fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL),
         fmtBRL(r.totais.rateioFreteTabela), fmtBRL(r.totais.rateioAcrescimo), fmtBRL(r.totais.valorAduaneiro), fmtBRL(r.totais.rateioArmazenagemTabela), fmtBRL(r.totais.rateioOutrasTabela),
-        '', fmtBRL(r.totais.ii), '', fmtBRL(r.totais.ipi), '', fmtBRL(r.totais.pis), '', fmtBRL(r.totais.cofins), '', fmtBRL(r.totais.icms),
-        fmtBRL(r.totais.rateioAfrmmTabela), fmtBRL(r.totais.custoTotalComCredito), fmtBRL(r.totais.custoTotalSemCredito)]],
-      theme:'grid', styles:{fontSize:5.8, cellPadding:2.5}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:5.6},
+        fmtBRL(r.totais.ii), fmtBRL(r.totais.ipi), fmtBRL(r.totais.pis), fmtBRL(r.totais.cofins), fmtBRL(r.totais.icms),
+        fmtBRL(r.totais.rateioAfrmmTabela), fmtBRL(r.totais.custoTotalComCredito), '', fmtBRL(r.totais.custoTotalSemCredito), '']],
+      theme:'grid', styles:{fontSize:6, cellPadding:2.5}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:5.8},
+      columnStyles:{18:{fontStyle:'bold'}, 20:{fontStyle:'bold'}},   // Custo Unit. c/créd. e s/créd.
       footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
     });
 
@@ -9130,7 +9181,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v1.0</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.3 · numerário e PDF · build 06/10/2026</span></div>
   `;
 }
 
