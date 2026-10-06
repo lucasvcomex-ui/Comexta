@@ -777,6 +777,22 @@ tbody tr:hover{background:#F9FAFD;}
 .mon-resultados b{font-family:var(--font-mono); font-size:15px; color:var(--navy-deep);}
 .mon-aviso{color:var(--red); margin:8px 0 0;}
 @media (max-width:760px){ .mon-resultados{grid-template-columns:1fr 1fr;} }
+
+.mon-rastreio{margin-top:16px; padding:14px 16px; background:#fff; border:1px solid var(--line); border-radius:10px;}
+.mon-rastreio-topo{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+.mon-rastreio-topo .mon-ft-titulo{flex:1; min-width:160px;}
+.mon-scac{display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; color:#4B586B;}
+.mon-scac input{width:78px; border:1px solid #DFE3EC; border-radius:8px; padding:7px 9px; font-size:13px; font-family:var(--font-mono); text-align:center;}
+.mon-rastreio-fatos{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:12px;}
+.mon-rastreio-fatos > div{background:var(--paper); border-radius:8px; padding:9px 12px; display:flex; flex-direction:column; gap:2px;}
+.mon-rastreio-fatos span{font-size:11.5px; color:var(--ink-soft);}
+.mon-rastreio-fatos b{font-size:13.5px; color:var(--navy-deep); font-weight:700;}
+.mon-rastreio-extra{display:flex; align-items:center; gap:12px; margin-top:10px; flex-wrap:wrap;}
+.mon-link{font-size:13px; font-weight:700; color:var(--navy); text-decoration:none;}
+.mon-link:hover{text-decoration:underline;}
+.mon-sugestao{margin-top:10px; padding:9px 12px; background:var(--amber-100); border-radius:8px; font-size:13px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.mon-eventos{margin-top:12px;} .mon-eventos summary{cursor:pointer; font-size:13px; font-weight:700; color:var(--navy);} .mon-eventos .table-wrap{margin-top:8px;}
+@media (max-width:760px){ .mon-rastreio-fatos{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
@@ -1126,6 +1142,7 @@ const PERMISSAO_DA_ACAO = {
   'go:monitoramento':['processos','ver'], 'go:monitoramentoCusto':['processos','ver'],
   'mon-add':['processos','criar'], 'mon-importar':['processos','criar'],
   'mon-atualizar':['processos','editar'], 'mon-atualizar-um':['processos','editar'], 'mon-excluir':['processos','editar'],
+  'mon-rastrear':['processos','editar'], 'mon-rastrear-todos':['processos','editar'], 'mon-aplicar-devolucao':['processos','editar'],
 };
 const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', mon:'processos' };
 
@@ -4672,7 +4689,7 @@ function monAddDias(ts, n){ const d = new Date(ts + n*86400000); return d.getUTC
 function novoContainerMonitorado(base){
   return { id:uid(), origem:'manual', processoId:'', containerId:'', container:'', tipo:"40' HC", etd:'', eta:'', chegada:'',
     paisOrigem:'', paisDestino:'Brasil', portoOrigem:'', portoDestino:'', freeTime:'', inicio:'', devolucao:'',
-    custoDiario:'', moeda:'USD', cambio:'', criadoEm:new Date().toISOString(), ...(base||{}) };
+    custoDiario:'', moeda:'USD', cambio:'', scac:'AUTO', rastreio:null, criadoEm:new Date().toISOString(), ...(base||{}) };
 }
 // Free time: o dia da chegada conta como dia 1. Passou do free time, cada dia excedente custa o valor diário.
 function monCalcular(m, hoje){
@@ -4778,6 +4795,13 @@ function acaoMonitoramento(cmd, a1){
       toast(n + ' container' + (n===1?'':'s') + ' atualizado' + (n===1?'':'s') + ' com os dados dos Processos.' + (sumiram ? ' ' + sumiram + ' não está mais no processo.' : ''), n ? 'ok' : undefined);
       return true;
     }
+    case 'mon-rastrear': rastrearContainer(a1); return true;
+    case 'mon-rastrear-todos': monRastrearTodos(); return true;
+    case 'mon-aplicar-devolucao': {
+      const m = state.monitoramento.find(x=>x.id===a1);
+      if(m && m.rastreio && m.rastreio.devolucaoSugerida){ m.devolucao = m.rastreio.devolucaoSugerida; m.atualizadoEm = new Date().toISOString(); persistMonitoramento(); renderApp(); toast('Data de devolução aplicada.', 'ok'); }
+      return true;
+    }
     case 'mon-excluir': {
       const m = state.monitoramento.find(x=>x.id===a1); if(!m) return true;
       if(!requestDelete('mon', a1)) return true;
@@ -4787,6 +4811,140 @@ function acaoMonitoramento(cmd, a1){
     }
   }
   return false;
+}
+
+/* --- rastreamento por API (Kpler / MarineTraffic Container Tracking v2) ---
+   A chave da API fica no servidor (função /api/rastreio, variável KPLER_API_KEY). Aqui só mandamos o número do
+   container e o token de login. ETD, ETA e chegada efetiva vêm da API; portos e países só preenchem se estiverem vazios. */
+const MON_CONTAINER_RE = /^[A-Z]{4}\d{7}$/;
+const monNumero = m => String(m.container||'').toUpperCase().replace(/[\s-]/g,'');
+const MON_SIT_VIAGEM = {
+  booked:'Reservado', not_arrived_at_port_of_loading:'Ainda não chegou ao porto de embarque', waiting_at_port_of_loading:'Aguardando no porto de embarque',
+  underway_to_a_transhipment_port:'A caminho de um transbordo', waiting_at_a_transhipment_port:'Aguardando em transbordo',
+  underway_to_port_of_discharge:'Em viagem ao porto de destino', waiting_at_port_of_discharge:'Aguardando no porto de destino',
+  left_the_port_of_discharge:'Saiu do porto de destino', completed:'Concluído', routing_data_inconclusive:'Rota inconclusiva',
+};
+const MON_ST_PEDIDO = {
+  processing_pending:'Processando na Kpler — consulte de novo em alguns minutos', shipment_created_successfully:'Rastreio ativo', success:'Rastreio ativo',
+  request_failed:'Rastreio não encontrado', tracking_ended:'Rastreio encerrado', nao_encontrado:'Ainda não rastreado',
+};
+const MON_EVENTOS = {
+  load:'Embarcado no navio', discharge:'Descarregado', gate_in:'Entrada no terminal/depósito', gate_out:'Saída do terminal', pick_up:'Retirado',
+  drop_off:'Devolvido', customs_released:'Liberado pela alfândega', customs_selected_for_inspection:'Selecionado para inspeção',
+  customs_selected_for_scan:'Selecionado para escaneamento', available_for_pick_up:'Disponível para retirada', available_for_drop_off:'Disponível para devolução',
+  received:'Recebido', removed:'Removido', resealed:'Relacrado', stuffing:'Estufagem', stripping:'Desova', inspected:'Inspecionado',
+  way_point_created:'Ponto de passagem', departure:'Partida', arrival:'Chegada',
+};
+const MON_PAISES = { 'Brazil':'Brasil', 'United States':'Estados Unidos', 'Germany':'Alemanha', 'Italy':'Itália', 'Spain':'Espanha', 'Netherlands':'Países Baixos',
+  'Singapore':'Singapura', 'South Korea':'Coreia do Sul', 'Japan':'Japão', 'India':'Índia', 'Vietnam':'Vietnã', 'Turkey':'Turquia', 'United Kingdom':'Reino Unido',
+  'France':'França', 'Thailand':'Tailândia', 'Malaysia':'Malásia', 'Indonesia':'Indonésia', 'Mexico':'México', 'Belgium':'Bélgica', 'Panama':'Panamá', 'Egypt':'Egito',
+  'Morocco':'Marrocos', 'Saudi Arabia':'Arábia Saudita', 'United Arab Emirates':'Emirados Árabes Unidos', 'Canada':'Canadá', 'Uruguay':'Uruguai', 'Peru':'Peru' };
+const monPaisPt = n => MON_PAISES[n] || n || '';
+
+async function monChamarApi(m){
+  const { data } = await sb.auth.getSession();
+  const token = data && data.session && data.session.access_token;
+  const r = await fetch('/api/rastreio', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + (token||'') },
+    body: JSON.stringify({ container: monNumero(m), scac: String(m.scac||'AUTO').toUpperCase().trim() || 'AUTO' }) });
+  let corpo = null; try{ corpo = await r.json(); }catch(e){}
+  return { status:r.status, corpo };
+}
+function monAplicarRastreio(m, j){
+  const mudou = [];
+  const set = (campo, valor, rotulo) => { if(valor && m[campo]!==valor){ m[campo] = valor; mudou.push(rotulo); } };
+  if(j.etd) set('etd', j.etd.data, 'ETD');
+  if(j.eta){ set('eta', j.eta.data, 'ETA'); if(j.eta.real) set('chegada', j.eta.data, 'chegada efetiva'); }
+  if(j.portoOrigem){ if(!m.portoOrigem) set('portoOrigem', j.portoOrigem.nome, 'porto de origem'); if(!m.paisOrigem) set('paisOrigem', monPaisPt(j.portoOrigem.pais), 'país de origem'); }
+  if(j.portoDestino){ if(!m.portoDestino) set('portoDestino', j.portoDestino.nome, 'porto de destino'); if(!m.paisDestino || m.paisDestino==='Brasil') set('paisDestino', monPaisPt(j.portoDestino.pais), 'país de destino'); }
+  m.rastreio = { atualizadoEm:new Date().toISOString(), status:j.status||'', falha:j.falha||'', trackingRequestId:j.trackingRequestId||'', shipmentId:j.shipmentId||'',
+    armador:j.armador||null, situacao:j.situacao||'', navio:j.navio||'', viagem:j.viagem||'', atrasoDias:(j.atrasoDias==null?null:j.atrasoDias),
+    etaInicialArmador:j.etaInicialArmador||'', link:j.link||'', eventos:(j.eventos||[]).slice(-12), devolucaoSugerida:j.devolucaoSugerida||'',
+    etdReal:!!(j.etd && j.etd.real), etaReal:!!(j.eta && j.eta.real), erro:'' };
+  m.atualizadoEm = new Date().toISOString();
+  return mudou;
+}
+// Retorna 'ok', 'erro' ou 'fatal' (chave/login/permissão: não adianta continuar em lote).
+async function rastrearContainer(id, opcoes){
+  opcoes = opcoes || {};
+  const m = state.monitoramento.find(x=>x.id===id); if(!m) return 'erro';
+  if(!MON_CONTAINER_RE.test(monNumero(m))){ toast('Informe um número de container válido (4 letras + 7 números, ex.: MSKU1234567) para rastrear.'); return 'erro'; }
+  state.monRastreando = state.monRastreando || {}; state.monRastreando[id] = true;
+  if(!opcoes.lote) renderApp();
+  let resultado = 'erro';
+  try{
+    const { status, corpo } = await monChamarApi(m);
+    if(status===401){ sessaoExpirada(); return 'fatal'; }
+    if(!corpo || !corpo.ok){
+      const msg = (corpo && corpo.mensagem) || 'Falha ao consultar o rastreamento.';
+      m.rastreio = { ...(m.rastreio||{}), erro:msg, atualizadoEm:new Date().toISOString() };
+      if(!opcoes.lote) toast(msg);
+      resultado = [503,403,502].includes(status) && corpo && ['sem_chave','sem_permissao','chave_recusada','config'].includes(corpo.erro) ? 'fatal' : 'erro';
+    }else{
+      const mudou = monAplicarRastreio(m, corpo);
+      resultado = 'ok';
+      if(!opcoes.lote){
+        if(corpo.status==='processing_pending') toast('Pedido de rastreio criado. A Kpler leva alguns minutos para trazer os dados — clique em Rastrear de novo depois.', 'ok');
+        else if(corpo.status==='request_failed' || corpo.status==='nao_encontrado') toast('A Kpler não encontrou este container' + (corpo.falha ? ' (' + corpo.falha + ')' : '') + '. Confira o número ou informe o código do armador (SCAC).');
+        else toast(mudou.length ? 'Rastreio atualizado: ' + mudou.join(', ') + '.' : 'Rastreio consultado: nenhuma mudança.', 'ok');
+      }
+    }
+  }catch(e){
+    console.error('rastreio', e);
+    m.rastreio = { ...(m.rastreio||{}), erro:'Sem conexão com o servidor de rastreamento.', atualizadoEm:new Date().toISOString() };
+    if(!opcoes.lote) toast('Sem conexão com o servidor de rastreamento.');
+  }finally{
+    delete state.monRastreando[id];
+    persistMonitoramento();
+    if(!opcoes.lote) renderApp();
+  }
+  return resultado;
+}
+async function monRastrearTodos(){
+  if(state.monLote) return;
+  const alvo = state.monitoramento.filter(m=>MON_CONTAINER_RE.test(monNumero(m)) && !m.devolucao);
+  if(!alvo.length){ toast('Nenhum container com número válido (e ainda não devolvido) para rastrear.'); return; }
+  state.monLote = { total:alvo.length, feitos:0 }; renderApp();
+  let ok = 0, erro = 0, parou = false;
+  for(const m of alvo){
+    const r = await rastrearContainer(m.id, { lote:true });
+    state.monLote.feitos++;
+    if(r==='ok') ok++; else erro++;
+    if(r==='fatal'){ parou = true; break; }
+    await new Promise(res=>setTimeout(res, 250));
+  }
+  const msgFatal = (alvo.map(m=>m.rastreio && m.rastreio.erro).filter(Boolean).pop()) || '';
+  state.monLote = null; renderApp();
+  toast(parou ? (msgFatal || 'Rastreamento interrompido.') : (ok + ' container' + (ok===1?'':'s') + ' consultado' + (ok===1?'':'s') + (erro ? ' · ' + erro + ' com erro (veja nos cartões)' : '') + '.'), ok && !parou ? 'ok' : undefined);
+}
+function monRastreioHtml(m){
+  const busy = !!(state.monRastreando && state.monRastreando[m.id]), r = m.rastreio;
+  const atraso = r && r.atrasoDias!=null ? (r.atrasoDias>0 ? `<span class="badge badge-danger">Atraso de ${r.atrasoDias} dia${r.atrasoDias===1?'':'s'}</span>` : '<span class="badge badge-ok">Sem atraso</span>') : '';
+  const statusTxt = r && r.status ? (MON_ST_PEDIDO[r.status] || r.status) : '';
+  const eventos = r && r.eventos && r.eventos.length ? [...r.eventos].reverse() : [];
+  return `
+    <div class="mon-rastreio">
+      <div class="mon-rastreio-topo">
+        <div class="mon-ft-titulo" style="margin:0;">Rastreamento por API</div>
+        <label class="mon-scac">Armador (SCAC)<input data-mon="${m.id}.scac" value="${esc(m.scac||'AUTO')}" placeholder="AUTO" maxlength="5" style="text-transform:uppercase;" autocomplete="off" title="AUTO deixa a Kpler descobrir o armador. Ou informe o código (ex.: MAEU, MSCU, HLCU)."></label>
+        <button class="btn btn-ghost btn-sm" data-action="mon-rastrear:${m.id}" ${busy?'disabled':''}>${busy ? 'Consultando…' : (r && r.status ? 'Atualizar rastreio' : 'Rastrear agora')}</button>
+      </div>
+      ${r && r.erro ? `<p class="hint mon-aviso" style="margin:8px 0 0;">${esc(r.erro)}</p>` : ''}
+      ${r && (r.status || r.situacao) ? `
+      <div class="mon-rastreio-fatos">
+        ${statusTxt ? `<div><span>Situação do rastreio</span><b>${esc(statusTxt)}${r.falha ? ' · ' + esc(r.falha) : ''}</b></div>` : ''}
+        ${r.situacao ? `<div><span>Situação da viagem</span><b>${esc(MON_SIT_VIAGEM[r.situacao] || r.situacao)}</b></div>` : ''}
+        ${r.navio ? `<div><span>Navio / viagem</span><b>${esc(r.navio)}${r.viagem ? ' · ' + esc(r.viagem) : ''}</b></div>` : ''}
+        ${r.armador && r.armador.nome ? `<div><span>Armador</span><b>${esc(r.armador.nome)}${r.armador.scac ? ' (' + esc(r.armador.scac) + ')' : ''}</b></div>` : ''}
+        <div><span>ETD / ETA</span><b>${m.etd ? fmtDateOnly(m.etd) : '—'}${r.etdReal ? ' (real)' : ''} → ${m.eta ? fmtDateOnly(m.eta) : '—'}${r.etaReal ? ' (real)' : ''}</b></div>
+        <div><span>Última consulta</span><b>${r.atualizadoEm ? fmtDate(r.atualizadoEm) : '—'}</b></div>
+      </div>
+      <div class="mon-rastreio-extra">${atraso}${r.link ? `<a class="mon-link" href="${esc(r.link)}" target="_blank" rel="noopener">Ver no MarineTraffic ↗</a>` : ''}</div>
+      ${r.devolucaoSugerida && !m.devolucao ? `<div class="mon-sugestao">Devolução do vazio detectada em <b>${fmtDateOnly(r.devolucaoSugerida)}</b>. <button class="btn btn-ghost btn-sm" data-action="mon-aplicar-devolucao:${m.id}">Usar como devolução</button></div>` : ''}
+      ${eventos.length ? `<details class="mon-eventos"><summary>Eventos do container (${eventos.length})</summary>
+        <div class="table-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th>Local</th><th>Navio</th><th></th></tr></thead><tbody>
+          ${eventos.map(e=>`<tr><td>${e.data ? fmtDateOnly(e.data) : '—'}</td><td>${esc(MON_EVENTOS[e.tipo] || e.tipo || '')}</td><td>${esc(e.local||'')}</td><td>${esc(e.navio||'')}</td><td><span class="badge ${e.classificador==='actual'?'badge-ok':'badge-navy'}">${e.classificador==='actual'?'Real':'Previsto'}</span></td></tr>`).join('')}
+        </tbody></table></div></details>` : ''}` : `<p class="hint" style="margin:8px 0 0;">Consulta o container na Kpler e atualiza ETD, ETA e chegada efetiva (que alimenta o free time).</p>`}
+    </div>`;
 }
 
 /* --- campos --- */
@@ -4895,6 +5053,7 @@ function monCardHtml(m, hoje){
       ${monCampo(m.id,'portoOrigem','Porto de origem',m.portoOrigem,{ph:'Ex.: Shanghai'})}
       ${monCampo(m.id,'portoDestino','Porto de destino',m.portoDestino,{ph:'Ex.: Santos'})}
     </div>
+    ${monRastreioHtml(m)}
     <div class="mon-ft">
       <div class="mon-ft-titulo">Free time e custo após o free time</div>
       <div class="field-row grid-4">
@@ -4947,6 +5106,7 @@ function renderMonitoramento(){
     <div class="cot-barra" style="margin-bottom:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
       <button class="btn btn-primary btn-sm" data-action="mon-add">${ICONS.plus} Adicionar Container</button>
       <button class="btn btn-ghost btn-sm" data-action="mon-importar" title="Puxa os containers com número cadastrados em Processos → Transporte">${ICONS.download} Puxar containers dos Processos${disponiveis ? ' ('+disponiveis+')' : ''}</button>
+      <button class="btn btn-ghost btn-sm" data-action="mon-rastrear-todos" ${state.monLote?'disabled':''} title="Consulta na API de rastreamento todos os containers com número válido que ainda não foram devolvidos">${state.monLote ? 'Rastreando ' + state.monLote.feitos + '/' + state.monLote.total + '…' : 'Rastrear todos pela API'}</button>
       ${ligados ? `<button class="btn btn-ghost btn-sm" data-action="mon-atualizar" title="Atualiza ETD, ETA, portos, free time... dos containers que vieram de Processos">${ICONS.edit} Atualizar com os Processos</button>` : ''}
     </div>
     <div class="filter-bar" style="margin-bottom:14px;">
@@ -5039,7 +5199,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
-state.monitoramento = []; state.monFiltro = { texto:'', sit:'' };
+state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.monRastreando = {}; state.monLote = null;
 state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
 const SIM_PROTECTED_ROUTES = ['simCarga','simCarregando','simPaletes','simEquipamentos','simEmbalagem','simResultado'];
 function navigate(route){
@@ -9580,7 +9740,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.5 · monitoramento de carga · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.6 · rastreio por API · build 06/10/2026</span></div>
   `;
 }
 
