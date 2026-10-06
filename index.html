@@ -4976,19 +4976,10 @@ function monSimCalcular(){
   const exc = Math.max(0, dias - ft), custoUn = exc * custoDia;
   return { ft, dias, custoDia, qtd, taxa, exc, custoUn, custoTotal: custoUn*qtd, brl: custoUn*qtd*taxa, semCambio: s.moeda!=='R$' && !(taxa>0) && custoUn>0 };
 }
-function monSimProjecaoHtml(r){
-  const linhas = [];
-  for(let d = r.ft; d <= r.ft + 10; d++){
-    const exc = Math.max(0, d - r.ft), custo = exc * r.custoDia * r.qtd;
-    linhas.push(`<tr${d===r.dias?' style="background:var(--amber-100);font-weight:700;"':''}><td>${d}</td><td class="num-mono">${exc}</td><td class="num-mono">${monMoedaTxt(custo, state.monSim.moeda)}</td><td class="num-mono">${r.taxa>0 ? fmtBRL(custo*r.taxa) : '—'}</td></tr>`);
-  }
-  return linhas.join('');
-}
 function atualizarSimFreeTime(){
   const r = monSimCalcular(), moeda = state.monSim.moeda, set = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
   set('monsim-exc', String(r.exc)); set('monsim-unit', monMoedaTxt(r.custoUn, moeda)); set('monsim-total', monMoedaTxt(r.custoTotal, moeda));
   set('monsim-brl', r.taxa>0 ? fmtBRL(r.brl) : (r.custoTotal>0 ? 'Informe o câmbio' : fmtBRL(0)));
-  const p = document.getElementById('monsim-proj'); if(p) p.innerHTML = monSimProjecaoHtml(r);
   const camb = document.getElementById('monsim-cambio'); if(camb) camb.style.display = moeda==='R$' ? 'none' : '';
 }
 function renderMonitoramentoCusto(){
@@ -5020,13 +5011,6 @@ function renderMonitoramentoCusto(){
       <div class="kpi"><div class="k-lbl">Custo total</div><div class="k-val" id="monsim-total">${esc(monMoedaTxt(r.custoTotal, s.moeda))}</div></div>
       <div class="kpi"><div class="k-lbl">Custo total em R$</div><div class="k-val" id="monsim-brl">${r.taxa>0 ? fmtBRL(r.brl) : (r.custoTotal>0 ? 'Informe o câmbio' : fmtBRL(0))}</div></div>
     </div>
-  </div>
-  <div class="card">
-    <div class="section-title" style="margin-bottom:12px;">Relação dos dias com o custo</div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Dias de uso</th><th class="num-mono">Dias excedentes</th><th class="num-mono">Custo (${esc(s.moeda)})</th><th class="num-mono">Custo (R$)</th></tr></thead>
-      <tbody id="monsim-proj">${monSimProjecaoHtml(r)}</tbody></table></div>
-    <p class="hint" style="margin:10px 0 0;">Do último dia de free time até 10 dias depois. Dentro do free time o custo é zero; cada dia a mais custa o valor diário informado, vezes a quantidade de containers.</p>
   </div>`;
 }
 const MON_CSS = true;
@@ -9596,7 +9580,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.4 · monitoramento de carga · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.5 · monitoramento de carga · build 06/10/2026</span></div>
   `;
 }
 
