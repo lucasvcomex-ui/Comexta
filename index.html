@@ -761,6 +761,22 @@ tbody tr:hover{background:#F9FAFD;}
 .lista-painel .kanban-scroll, .lista-painel .kanban-board{margin-bottom:0;}
 .lista-painel .field input, .lista-painel .field select, .lista-painel .filter-bar input, .lista-painel .filter-bar select{background:#fff;}
 @media (max-width:980px){ .lista-painel{padding:12px;} }
+
+/* Monitoramento de Carga */
+.mon-card{background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:18px 20px; margin-bottom:16px;}
+.mon-card-head{display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
+.mon-titulo{display:flex; align-items:center; gap:10px; flex:1; min-width:220px; flex-wrap:wrap;}
+.mon-nome{font-size:18px; font-weight:700; color:var(--navy-deep); letter-spacing:.3px;}
+.mon-tipo{font-size:12.5px; color:var(--ink-soft); background:var(--paper); border-radius:6px; padding:2px 8px;}
+.mon-acoes{display:flex; gap:6px;}
+.mon-ft{margin-top:16px; padding:16px; background:var(--paper); border:1px dashed #D5DAE5; border-radius:10px;}
+.mon-ft-titulo{font-size:13px; font-weight:700; color:var(--navy); margin-bottom:12px;}
+.mon-resultados{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:14px;}
+.mon-resultados > div{background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:2px;}
+.mon-resultados span{font-size:11.5px; color:var(--ink-soft);}
+.mon-resultados b{font-family:var(--font-mono); font-size:15px; color:var(--navy-deep);}
+.mon-aviso{color:var(--red); margin:8px 0 0;}
+@media (max-width:760px){ .mon-resultados{grid-template-columns:1fr 1fr;} }
 </style>
 </head>
 <body>
@@ -820,16 +836,16 @@ function toast(msg, kind){
 // Cada chave tem uma versão: se outra pessoa salvou antes, as alterações são mescladas item a item.
 const sb = window.comextaSupabase;
 const CHAVE_LOCAL = /:draft$|^filtros(Todas|Proc|Cot):/;
-const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','processos:index'];
+const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','processos:index','monitoramento:list'];
 const SECAO_DA_CHAVE = {
   'cotacoes:index':'cotacoes', 'cotacoesFormal:index':'cotacoes', 'simulacoes:index':'simulador',
   'clientes:list':'cadastros', 'fornecedores:list':'cadastros', 'produtos:list':'cadastros',
-  'processos:index':'processos',
+  'processos:index':'processos', 'monitoramento:list':'processos',
 };
 const ESTADO_DA_CHAVE = {
   'cotacoes:index':'cotacoesIndex', 'cotacoesFormal:index':'cotacoesFormalIndex', 'simulacoes:index':'simulacoesIndex',
   'clientes:list':'clientes', 'produtos:list':'produtos',
-  'processos:index':'processosIndex',
+  'processos:index':'processosIndex', 'monitoramento:list':'monitoramento',
 };
 // Itens numerados em sequência: se dois usuários criarem o mesmo número ao mesmo tempo, o segundo é renumerado.
 const NUMERACAO_DA_CHAVE = {
@@ -1106,8 +1122,12 @@ const PERMISSAO_DA_ACAO = {
   'go:processoForm':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
   'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-numerario-pdf':['processos','ver'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
+
+  'go:monitoramento':['processos','ver'], 'go:monitoramentoCusto':['processos','ver'],
+  'mon-add':['processos','criar'], 'mon-importar':['processos','criar'],
+  'mon-atualizar':['processos','editar'], 'mon-atualizar-um':['processos','editar'], 'mon-excluir':['processos','editar'],
 };
-const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos' };
+const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', mon:'processos' };
 
 function permissaoDaAcao(action){
   return PERMISSAO_DA_ACAO[action] || PERMISSAO_DA_ACAO[action.split(':')[0]] || null;
@@ -4586,6 +4606,7 @@ async function loadInitialData(){
   const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado', 'processo:draft', 'filtrosProc:fixado', 'filtrosCot:fixado']);
   state.filtrosAplicados = { proc: v['filtrosProc:fixado'] || {}, cot: v['filtrosCot:fixado'] || {} };
   if(v['processos:index']) state.processosIndex = v['processos:index'];
+  state.monitoramento = v['monitoramento:list'] || lerCopiaLocalMonitoramento() || [];
   if(v['processo:draft'] && v['processo:draft'].draft){
     state.procDraft = normalizarProcesso(v['processo:draft'].draft);
     state.currentProcessoId = v['processo:draft'].id || null;
@@ -4630,6 +4651,386 @@ async function persistCadastro(tipo){
 Object.defineProperty(state, 'fornecedores', { configurable:true, enumerable:true, set(){},
   get(){ return empresasDoTipo('fornecedor', 'fabricante'); } });
 
+/* ============================ Monitoramento de Carga ============================
+   Containers acompanhados (ETD, ETA, países, portos, free time e custo após o free time). Podem ser
+   adicionados à mão ou puxados dos Processos (Transporte → Containers). Fica na mesma área de permissão
+   dos Processos. Se o servidor ainda não aceitar a chave "monitoramento:list", uma cópia local garante
+   que nada se perca neste navegador. */
+const MON_SITUACOES = {
+  sem_dados:  { rotulo:'Informe free time e data', classe:'badge-navy' },
+  aguardando: { rotulo:'Aguardando chegada', classe:'badge-navy' },
+  no_prazo:   { rotulo:'No free time', classe:'badge-ok' },
+  vencendo:   { rotulo:'Free time vencendo', classe:'badge-amber' },
+  excedido:   { rotulo:'Free time excedido', classe:'badge-danger' },
+  devolvido_ok:       { rotulo:'Devolvido no prazo', classe:'badge-ok' },
+  devolvido_excedido: { rotulo:'Devolvido com excedente', classe:'badge-danger' },
+};
+const hojeLocalISO = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+function monData(v){ const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v||'')); return m ? Date.UTC(+m[1], +m[2]-1, +m[3]) : null; }
+function monDiasEntre(a, b){ return Math.round((b - a) / 86400000); }
+function monAddDias(ts, n){ const d = new Date(ts + n*86400000); return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0'); }
+function novoContainerMonitorado(base){
+  return { id:uid(), origem:'manual', processoId:'', containerId:'', container:'', tipo:"40' HC", etd:'', eta:'', chegada:'',
+    paisOrigem:'', paisDestino:'Brasil', portoOrigem:'', portoDestino:'', freeTime:'', inicio:'', devolucao:'',
+    custoDiario:'', moeda:'USD', cambio:'', criadoEm:new Date().toISOString(), ...(base||{}) };
+}
+// Free time: o dia da chegada conta como dia 1. Passou do free time, cada dia excedente custa o valor diário.
+function monCalcular(m, hoje){
+  hoje = hoje || hojeLocalISO();
+  const ft = Math.max(0, Math.floor(num(m.freeTime)));
+  const iniStr = m.inicio || m.chegada || m.eta;
+  const ini = monData(iniStr), hojeTs = monData(hoje), dev = monData(m.devolucao);
+  const custoDia = Math.max(0, num(m.custoDiario));
+  const r = { ft, iniStr, ini, devolvido: dev!=null, uso:0, excedentes:0, restantes:null, limite:'', custoDia, custo:0, custoBRL:0, semCambio:false, situacao:'sem_dados' };
+  r.limite = (ini!=null && ft>0) ? monAddDias(ini, ft-1) : '';
+  if(ini==null || !(ft>0)) return r;
+  const fim = dev!=null ? dev : hojeTs;
+  r.uso = Math.max(0, monDiasEntre(ini, fim) + 1);
+  r.excedentes = Math.max(0, r.uso - ft);
+  r.custo = r.excedentes * custoDia;
+  if(m.moeda==='R$') r.custoBRL = r.custo;
+  else if(num(m.cambio)>0) r.custoBRL = r.custo * num(m.cambio);
+  else r.semCambio = r.custo>0;
+  if(r.devolvido) r.situacao = r.excedentes>0 ? 'devolvido_excedido' : 'devolvido_ok';
+  else if(hojeTs < ini) r.situacao = 'aguardando';
+  else if(r.uso > ft) r.situacao = 'excedido';
+  else{ r.restantes = ft - r.uso; r.situacao = r.restantes<=2 ? 'vencendo' : 'no_prazo'; }
+  return r;
+}
+function monTextoSituacao(m, c){
+  const base = MON_SITUACOES[c.situacao].rotulo;
+  if(c.situacao==='no_prazo' || c.situacao==='vencendo') return base + ' · ' + (c.restantes===0 ? 'vence hoje' : c.restantes + ' dia' + (c.restantes===1?'':'s') + ' restante' + (c.restantes===1?'':'s'));
+  if(c.situacao==='excedido') return base + ' · ' + c.excedentes + ' dia' + (c.excedentes===1?'':'s');
+  return base;
+}
+function monMoedaTxt(valor, moeda){ return moeda==='R$' ? fmtBRL(valor) : fmtMoedaExt(valor, moeda); }
+function monCustoTxt(m, c){
+  if(!(c.custo>0)) return moedaZero(m.moeda);
+  return monMoedaTxt(c.custo, m.moeda) + (m.moeda!=='R$' && c.custoBRL>0 ? ' = ' + fmtBRL(c.custoBRL) : '');
+}
+function moedaZero(moeda){ return monMoedaTxt(0, moeda); }
+
+/* --- persistência (servidor + cópia local de segurança) --- */
+function lerCopiaLocalMonitoramento(){
+  try{ const raw = localStorage.getItem(chaveLocal('monitoramento:copia')); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+}
+let monAvisouLocal = false;
+async function persistMonitoramento(){
+  try{ localStorage.setItem(chaveLocal('monitoramento:copia'), JSON.stringify(state.monitoramento)); }catch(e){}
+  const ok = await storeSet('monitoramento:list', state.monitoramento);
+  if(!ok && !monAvisouLocal){ monAvisouLocal = true; toast('Monitoramento mantido neste navegador. Se o erro continuar, o servidor ainda precisa aceitar a chave "monitoramento:list".'); }
+  return ok;
+}
+const salvarMonitoramentoDebounced = debounce(()=>{ persistMonitoramento(); }, 700);
+
+/* --- containers vindos dos Processos --- */
+function paisesDoProcesso(p){
+  return [...new Set((((p||{}).produto||{}).fornecedores||[]).map(f=>String(f.paisOrigem||'').trim()).filter(Boolean))].join(', ');
+}
+function containersDosProcessos(){
+  const out = [];
+  (state.processosIndex||[]).forEach(raw=>{
+    let p; try{ p = normalizarProcesso(raw); }catch(e){ return; }
+    const t = p.transporte || {};
+    if(t.modal!=='maritimo') return;
+    (t.containers||[]).forEach(c=>{
+      const numero = String(c.numero||'').trim();
+      if(!numero) return;
+      out.push({ processoId:p.id, containerId:c.id, container:numero.toUpperCase(), tipo:c.tipo || "40' HC", etd:t.etd||'', eta:t.eta||'', chegada:t.chegada||'',
+        paisOrigem:paisesDoProcesso(p), portoOrigem:t.origem||'', portoDestino:t.destino||'', freeTime:t.freeTime||'' });
+    });
+  });
+  return out;
+}
+const monJaImportado = x => state.monitoramento.some(m=>m.processoId===x.processoId && m.containerId===x.containerId);
+function monAtualizarDoProcesso(m, dados){
+  ['container','tipo','etd','eta','chegada','paisOrigem','portoOrigem','portoDestino'].forEach(k=>{ m[k] = dados[k]; });
+  if(String(dados.freeTime||'').trim()!=='') m.freeTime = dados.freeTime;
+  m.atualizadoEm = new Date().toISOString();
+}
+
+/* --- ações --- */
+function acaoMonitoramento(cmd, a1){
+  switch(cmd){
+    case 'mon-add': {
+      const novo = novoContainerMonitorado();
+      state.monitoramento.unshift(novo);
+      persistMonitoramento(); renderApp();
+      const campo = document.querySelector(`[data-mon="${novo.id}.container"]`); if(campo){ campo.scrollIntoView({ block:'center' }); campo.focus(); }
+      return true;
+    }
+    case 'mon-importar': {
+      const novos = containersDosProcessos().filter(x=>!monJaImportado(x));
+      if(!novos.length){ toast('Nenhum container novo nos Processos (só entram containers com número preenchido).'); return true; }
+      novos.forEach(x=>state.monitoramento.push(novoContainerMonitorado({ ...x, origem:'processo' })));
+      persistMonitoramento(); renderApp();
+      toast(novos.length + ' container' + (novos.length===1?'':'s') + ' puxado' + (novos.length===1?'':'s') + ' dos Processos.', 'ok');
+      return true;
+    }
+    case 'mon-atualizar': case 'mon-atualizar-um': {
+      const fontes = containersDosProcessos();
+      let n = 0, sumiram = 0;
+      state.monitoramento.filter(m=>m.origem==='processo' && (cmd==='mon-atualizar' || m.id===a1)).forEach(m=>{
+        const f = fontes.find(x=>x.processoId===m.processoId && x.containerId===m.containerId);
+        if(f){ monAtualizarDoProcesso(m, f); m.removidoDoProcesso = false; n++; } else { m.removidoDoProcesso = true; sumiram++; }
+      });
+      persistMonitoramento(); renderApp();
+      toast(n + ' container' + (n===1?'':'s') + ' atualizado' + (n===1?'':'s') + ' com os dados dos Processos.' + (sumiram ? ' ' + sumiram + ' não está mais no processo.' : ''), n ? 'ok' : undefined);
+      return true;
+    }
+    case 'mon-excluir': {
+      const m = state.monitoramento.find(x=>x.id===a1); if(!m) return true;
+      if(!requestDelete('mon', a1)) return true;
+      state.monitoramento = state.monitoramento.filter(x=>x.id!==a1);
+      persistMonitoramento(); renderApp();
+      return true;
+    }
+  }
+  return false;
+}
+
+/* --- campos --- */
+function onMonitoramentoInput(el, evento){
+  if(el.hasAttribute('data-mon-filtro')){
+    state.monFiltro[el.getAttribute('data-mon-filtro')] = el.value;
+    aplicarFiltroMonitoramento();
+    return true;
+  }
+  if(el.hasAttribute('data-monsim')){
+    const k = el.getAttribute('data-monsim');
+    state.monSim[k] = el.value;
+    if(k==='fonte'){
+      const m = state.monitoramento.find(x=>x.id===el.value);
+      if(m){ const c = monCalcular(m);
+        Object.assign(state.monSim, { freeTime:String(c.ft||''), dias:String(c.uso||state.monSim.dias), custoDiario:m.custoDiario||'', moeda:m.moeda||'USD', cambio:m.cambio||'', qtd:'1' }); }
+      renderApp(); return true;
+    }
+    if(evento==='change' && k==='moeda'){ renderApp(); return true; }
+    atualizarSimFreeTime();
+    return true;
+  }
+  const [id, campo] = String(el.getAttribute('data-mon')).split('.');
+  const m = state.monitoramento.find(x=>x.id===id);
+  if(!m || !campo) return false;
+  m[campo] = el.value;
+  m.atualizadoEm = new Date().toISOString();
+  atualizarMonitoramentoCalculos();
+  salvarMonitoramentoDebounced();
+  return true;
+}
+function aplicarFiltroMonitoramento(){
+  const f = state.monFiltro, txt = String(f.texto||'').trim().toLowerCase();
+  let visiveis = 0;
+  document.querySelectorAll('.mon-card').forEach(card=>{
+    const okTxt = !txt || (card.getAttribute('data-mon-busca')||'').includes(txt);
+    const okSit = !f.sit || (card.getAttribute('data-mon-sit')||'')===f.sit || (f.sit==='_atencao' && ['vencendo','excedido','devolvido_excedido'].includes(card.getAttribute('data-mon-sit')));
+    card.style.display = (okTxt && okSit) ? '' : 'none';
+    if(okTxt && okSit) visiveis++;
+  });
+  const vazio = document.getElementById('mon-vazio-filtro'); if(vazio) vazio.style.display = (visiveis===0 && state.monitoramento.length) ? '' : 'none';
+}
+// Recalcula na tela (sem redesenhar, para não tirar o foco de quem está digitando).
+function atualizarMonitoramentoCalculos(){
+  const hoje = hojeLocalISO(); let totalBRL = 0, conta = { total:0, prazo:0, venc:0, exc:0 }, semCambio = 0;
+  state.monitoramento.forEach(m=>{
+    const c = monCalcular(m, hoje);
+    conta.total++;
+    if(c.situacao==='no_prazo' || c.situacao==='aguardando') conta.prazo++;
+    if(c.situacao==='vencendo') conta.venc++;
+    if(c.situacao==='excedido' || c.situacao==='devolvido_excedido') conta.exc++;
+    totalBRL += c.custoBRL; if(c.semCambio) semCambio++;
+    const card = document.querySelector(`.mon-card[data-mon-id="${m.id}"]`); if(!card) return;
+    card.setAttribute('data-mon-sit', c.situacao);
+    const set = (k, v) => { const e = card.querySelector(`[data-mon-calc="${k}"]`); if(e) e.textContent = v; };
+    const b = card.querySelector('[data-mon-calc="sit"]');
+    if(b){ b.textContent = monTextoSituacao(m, c); b.className = 'badge ' + MON_SITUACOES[c.situacao].classe; }
+    set('limite', c.limite ? fmtDateOnly(c.limite) : '—');
+    set('uso', c.ini!=null && c.ft>0 ? c.uso + ' dia' + (c.uso===1?'':'s') : '—');
+    set('exc', c.ini!=null && c.ft>0 ? String(c.excedentes) : '—');
+    set('custo', monCustoTxt(m, c));
+    const camb = card.querySelector('[data-mon-cambio]'); if(camb) camb.style.display = m.moeda==='R$' ? 'none' : '';
+    const av = card.querySelector('[data-mon-calc="aviso"]'); if(av) av.style.display = c.semCambio ? '' : 'none';
+    const busca = card.getAttribute('data-mon-busca'); // mantém a busca coerente com o que foi digitado
+    card.setAttribute('data-mon-busca', monTextoBusca(m));
+  });
+  const k = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+  k('mon-kpi-total', String(conta.total)); k('mon-kpi-prazo', String(conta.prazo)); k('mon-kpi-venc', String(conta.venc)); k('mon-kpi-exc', String(conta.exc));
+  k('mon-kpi-custo', fmtBRL(totalBRL)); const sc = document.getElementById('mon-kpi-semcambio'); if(sc){ sc.textContent = semCambio ? semCambio + ' sem câmbio informado' : 'Custo acumulado após o free time'; }
+  aplicarFiltroMonitoramento();
+}
+const monTextoBusca = m => [m.container, m.tipo, m.processoId, m.paisOrigem, m.paisDestino, m.portoOrigem, m.portoDestino].join(' ').toLowerCase();
+
+/* --- tela: Containers monitorados --- */
+function monCampo(id, campo, rotulo, valor, opts){
+  opts = opts || {};
+  const tipo = opts.type || 'text';
+  if(opts.options) return `<div class="field"><label>${rotulo}</label><select data-mon="${id}.${campo}">${opts.options.map(o=>`<option ${valor===o?'selected':''}>${esc(o)}</option>`).join('')}</select></div>`;
+  return `<div class="field" ${opts.attr||''}><label>${rotulo}</label><input data-mon="${id}.${campo}" type="${tipo}" ${tipo==='number'?'step="any" min="0"':''} value="${esc(valor)}" ${opts.ph?`placeholder="${esc(opts.ph)}"`:''} ${opts.up?'style="text-transform:uppercase;"':''} autocomplete="off"></div>`;
+}
+function monCardHtml(m, hoje){
+  const c = monCalcular(m, hoje), confirmando = state.pendingDelete === 'mon:' + m.id;
+  const vinculo = m.origem==='processo'
+    ? `<span class="badge badge-navy" data-action="proc-abrir:${esc(m.processoId)}" style="cursor:pointer;" title="Abrir o processo">${esc(m.processoId)}</span>`
+    : '<span class="badge badge-amber">Manual</span>';
+  return `
+  <div class="mon-card" data-mon-id="${m.id}" data-mon-sit="${c.situacao}" data-mon-busca="${esc(monTextoBusca(m))}">
+    <div class="mon-card-head">
+      <div class="mon-titulo"><span class="mon-nome">${esc(m.container) || 'Container sem número'}</span><span class="mon-tipo">${esc(m.tipo)}</span>${vinculo}
+        ${m.removidoDoProcesso ? '<span class="badge badge-danger" title="Este container não está mais no processo">Removido do processo</span>' : ''}</div>
+      <span data-mon-calc="sit" class="badge ${MON_SITUACOES[c.situacao].classe}">${esc(monTextoSituacao(m, c))}</span>
+      <div class="mon-acoes">
+        ${m.origem==='processo' ? `<button class="icon-btn" title="Atualizar com os dados do processo" data-action="mon-atualizar-um:${m.id}">${ICONS.edit}</button>` : ''}
+        <button class="icon-btn ${confirmando?'btn-perigo':''}" title="${confirmando?'Clique de novo para confirmar':'Remover do monitoramento'}" data-action="mon-excluir:${m.id}">${ICONS.trash}</button>
+      </div>
+    </div>
+    <div class="field-row grid-4">
+      ${monCampo(m.id,'container','Container',m.container,{ph:'Ex.: MSKU1234567', up:true})}
+      ${monCampo(m.id,'tipo','Tipo de container',m.tipo,{options:PROC_CONTAINER_TIPOS})}
+      ${monCampo(m.id,'etd','ETD (saída estimada)',m.etd,{type:'date'})}
+      ${monCampo(m.id,'eta','ETA (chegada estimada)',m.eta,{type:'date'})}
+    </div>
+    <div class="field-row grid-4" style="margin-top:12px;">
+      ${monCampo(m.id,'paisOrigem','País de origem',m.paisOrigem,{ph:'Ex.: China'})}
+      ${monCampo(m.id,'paisDestino','País de destino',m.paisDestino,{ph:'Ex.: Brasil'})}
+      ${monCampo(m.id,'portoOrigem','Porto de origem',m.portoOrigem,{ph:'Ex.: Shanghai'})}
+      ${monCampo(m.id,'portoDestino','Porto de destino',m.portoDestino,{ph:'Ex.: Santos'})}
+    </div>
+    <div class="mon-ft">
+      <div class="mon-ft-titulo">Free time e custo após o free time</div>
+      <div class="field-row grid-4">
+        ${monCampo(m.id,'freeTime','Free time (dias)',m.freeTime,{type:'number', ph:'Ex.: 7'})}
+        ${monCampo(m.id,'chegada','Chegada efetiva',m.chegada,{type:'date'})}
+        ${monCampo(m.id,'inicio','Início da contagem (opcional)',m.inicio,{type:'date'})}
+        ${monCampo(m.id,'devolucao','Devolução do container vazio',m.devolucao,{type:'date'})}
+      </div>
+      <div class="field-row grid-4" style="margin-top:12px;">
+        ${monCampo(m.id,'custoDiario','Custo diário após o free time',m.custoDiario,{type:'number', ph:'0,00'})}
+        ${monCampo(m.id,'moeda','Moeda',m.moeda,{options:['USD','EUR','RMB','R$']})}
+        ${monCampo(m.id,'cambio','Câmbio (R$ por unidade)',m.cambio,{type:'number', ph:'Ex.: 5,40', attr:`data-mon-cambio style="${m.moeda==='R$'?'display:none;':''}"`})}
+      </div>
+      <div class="mon-resultados">
+        <div><span>Limite do free time</span><b data-mon-calc="limite">${c.limite ? fmtDateOnly(c.limite) : '—'}</b></div>
+        <div><span>Dias de uso</span><b data-mon-calc="uso">${c.ini!=null && c.ft>0 ? c.uso + ' dia' + (c.uso===1?'':'s') : '—'}</b></div>
+        <div><span>Dias excedentes</span><b data-mon-calc="exc">${c.ini!=null && c.ft>0 ? c.excedentes : '—'}</b></div>
+        <div><span>Custo acumulado</span><b data-mon-calc="custo">${esc(monCustoTxt(m, c))}</b></div>
+      </div>
+      <p class="hint mon-aviso" data-mon-calc="aviso" style="${c.semCambio?'':'display:none;'}">Informe o câmbio para ver o custo em reais.</p>
+    </div>
+  </div>`;
+}
+function renderMonitoramento(){
+  const hoje = hojeLocalISO(), lista = state.monitoramento;
+  const disponiveis = containersDosProcessos().filter(x=>!monJaImportado(x)).length;
+  const ligados = lista.filter(m=>m.origem==='processo').length;
+  let conta = { prazo:0, venc:0, exc:0 }, totalBRL = 0, semCambio = 0;
+  lista.forEach(m=>{ const c = monCalcular(m, hoje);
+    if(c.situacao==='no_prazo' || c.situacao==='aguardando') conta.prazo++;
+    if(c.situacao==='vencendo') conta.venc++;
+    if(c.situacao==='excedido' || c.situacao==='devolvido_excedido') conta.exc++;
+    totalBRL += c.custoBRL; if(c.semCambio) semCambio++; });
+  const f = state.monFiltro;
+  return `
+  <div class="page-title">Monitoramento de Carga</div>
+  <div class="page-sub">Acompanhe os containers: ETD, ETA, origem e destino, free time e o custo que passa a correr depois dele. Adicione à mão ou puxe os containers cadastrados nos Processos.</div>
+  <hr class="hairline">
+
+  <div class="kpi-row" style="margin-bottom:20px;">
+    <div class="kpi"><div class="k-lbl">Containers monitorados</div><div class="k-val" id="mon-kpi-total">${lista.length}</div></div>
+    <div class="kpi"><div class="k-lbl">No free time</div><div class="k-val" id="mon-kpi-prazo">${conta.prazo}</div></div>
+    <div class="kpi"><div class="k-lbl">Free time vencendo (≤ 2 dias)</div><div class="k-val" id="mon-kpi-venc">${conta.venc}</div></div>
+    <div class="kpi"><div class="k-lbl">Excedidos</div><div class="k-val" id="mon-kpi-exc">${conta.exc}</div></div>
+  </div>
+  <div class="kpi" style="margin-bottom:20px;"><div class="k-lbl">Custo acumulado após o free time</div><div class="k-val" id="mon-kpi-custo">${fmtBRL(totalBRL)}</div>
+    <div class="k-sub" id="mon-kpi-semcambio">${semCambio ? semCambio + ' sem câmbio informado' : 'Soma de todos os containers, em reais'}</div></div>
+
+  <div class="lista-painel">
+    <div class="cot-barra" style="margin-bottom:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <button class="btn btn-primary btn-sm" data-action="mon-add">${ICONS.plus} Adicionar Container</button>
+      <button class="btn btn-ghost btn-sm" data-action="mon-importar" title="Puxa os containers com número cadastrados em Processos → Transporte">${ICONS.download} Puxar containers dos Processos${disponiveis ? ' ('+disponiveis+')' : ''}</button>
+      ${ligados ? `<button class="btn btn-ghost btn-sm" data-action="mon-atualizar" title="Atualiza ETD, ETA, portos, free time... dos containers que vieram de Processos">${ICONS.edit} Atualizar com os Processos</button>` : ''}
+    </div>
+    <div class="filter-bar" style="margin-bottom:14px;">
+      <div class="field"><label>Buscar</label><input data-mon-filtro="texto" value="${esc(f.texto)}" placeholder="Container, processo, porto, país..."></div>
+      <div class="field"><label>Situação</label>
+        <select data-mon-filtro="sit">
+          <option value="" ${!f.sit?'selected':''}>Todas</option>
+          <option value="_atencao" ${f.sit==='_atencao'?'selected':''}>Pedem atenção (vencendo / excedidos)</option>
+          ${Object.entries(MON_SITUACOES).map(([k,v])=>`<option value="${k}" ${f.sit===k?'selected':''}>${v.rotulo}</option>`).join('')}
+        </select></div>
+    </div>
+    ${lista.length ? lista.map(m=>monCardHtml(m, hoje)).join('') : `<div class="empty">${ICONS.cube}<h3>Nenhum container monitorado</h3><p>Use "Adicionar Container" ou "Puxar containers dos Processos".</p></div>`}
+    <div class="empty" id="mon-vazio-filtro" style="display:none;"><h3>Nada encontrado</h3><p>Ajuste a busca ou a situação.</p></div>
+    <p class="hint" style="margin:6px 0 0;">Contagem do free time: o dia da chegada (efetiva; sem ela, o ETA) conta como dia 1. Se houver data de devolução, a contagem para nela; sem devolução, vai até hoje.</p>
+  </div>`;
+}
+function posRenderMonitoramento(){
+  aplicarFiltroMonitoramento();
+  if(!(pode('processos','editar') || pode('processos','criar'))) document.querySelectorAll('[data-mon], [data-mon-filtro="__"]').forEach(e=>{ e.disabled = true; });
+}
+
+/* --- tela: Custo de Free Time (calculadora) --- */
+function monSimCalcular(){
+  const s = state.monSim, ft = Math.max(0, Math.floor(num(s.freeTime))), dias = Math.max(0, Math.floor(num(s.dias)));
+  const custoDia = Math.max(0, num(s.custoDiario)), qtd = Math.max(1, Math.floor(num(s.qtd)) || 1);
+  const taxa = s.moeda==='R$' ? 1 : num(s.cambio);
+  const exc = Math.max(0, dias - ft), custoUn = exc * custoDia;
+  return { ft, dias, custoDia, qtd, taxa, exc, custoUn, custoTotal: custoUn*qtd, brl: custoUn*qtd*taxa, semCambio: s.moeda!=='R$' && !(taxa>0) && custoUn>0 };
+}
+function monSimProjecaoHtml(r){
+  const linhas = [];
+  for(let d = r.ft; d <= r.ft + 10; d++){
+    const exc = Math.max(0, d - r.ft), custo = exc * r.custoDia * r.qtd;
+    linhas.push(`<tr${d===r.dias?' style="background:var(--amber-100);font-weight:700;"':''}><td>${d}</td><td class="num-mono">${exc}</td><td class="num-mono">${monMoedaTxt(custo, state.monSim.moeda)}</td><td class="num-mono">${r.taxa>0 ? fmtBRL(custo*r.taxa) : '—'}</td></tr>`);
+  }
+  return linhas.join('');
+}
+function atualizarSimFreeTime(){
+  const r = monSimCalcular(), moeda = state.monSim.moeda, set = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+  set('monsim-exc', String(r.exc)); set('monsim-unit', monMoedaTxt(r.custoUn, moeda)); set('monsim-total', monMoedaTxt(r.custoTotal, moeda));
+  set('monsim-brl', r.taxa>0 ? fmtBRL(r.brl) : (r.custoTotal>0 ? 'Informe o câmbio' : fmtBRL(0)));
+  const p = document.getElementById('monsim-proj'); if(p) p.innerHTML = monSimProjecaoHtml(r);
+  const camb = document.getElementById('monsim-cambio'); if(camb) camb.style.display = moeda==='R$' ? 'none' : '';
+}
+function renderMonitoramentoCusto(){
+  const s = state.monSim, r = monSimCalcular();
+  return `
+  <div class="page-title">Custo de Free Time</div>
+  <div class="page-sub">Informe os dias de free time, os dias de uso e o custo diário cobrado depois dele. O custo é calculado na hora, por container e para o total.</div>
+  <hr class="hairline">
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px;">Calculadora</div>
+    <div class="field-row grid-4">
+      <div class="field" style="grid-column:span 2;"><label>Carregar de um container monitorado</label>
+        <select data-monsim="fonte"><option value="">— preencher à mão —</option>
+          ${state.monitoramento.map(m=>`<option value="${m.id}" ${s.fonte===m.id?'selected':''}>${esc(m.container||'(sem número)')} · ${esc(m.tipo)}</option>`).join('')}</select></div>
+    </div>
+    <div class="field-row grid-4" style="margin-top:14px;">
+      <div class="field"><label>Free time (dias)</label><input data-monsim="freeTime" type="number" min="0" step="1" value="${esc(s.freeTime)}"></div>
+      <div class="field"><label>Dias de uso do container</label><input data-monsim="dias" type="number" min="0" step="1" value="${esc(s.dias)}"></div>
+      <div class="field"><label>Custo diário após o free time</label><input data-monsim="custoDiario" type="number" min="0" step="any" value="${esc(s.custoDiario)}" placeholder="0,00"></div>
+      <div class="field"><label>Moeda</label><select data-monsim="moeda">${['USD','EUR','RMB','R$'].map(o=>`<option ${s.moeda===o?'selected':''}>${o}</option>`).join('')}</select></div>
+    </div>
+    <div class="field-row grid-4" style="margin-top:14px;">
+      <div class="field"><label>Qtd. de containers</label><input data-monsim="qtd" type="number" min="1" step="1" value="${esc(s.qtd)}"></div>
+      <div class="field" id="monsim-cambio" style="${s.moeda==='R$'?'display:none;':''}"><label>Câmbio (R$ por unidade)</label><input data-monsim="cambio" type="number" min="0" step="any" value="${esc(s.cambio)}" placeholder="Ex.: 5,40"></div>
+    </div>
+    <div class="kpi-row" style="margin-top:20px;">
+      <div class="kpi"><div class="k-lbl">Dias excedentes</div><div class="k-val" id="monsim-exc">${r.exc}</div></div>
+      <div class="kpi"><div class="k-lbl">Custo por container</div><div class="k-val" id="monsim-unit">${esc(monMoedaTxt(r.custoUn, s.moeda))}</div></div>
+      <div class="kpi"><div class="k-lbl">Custo total</div><div class="k-val" id="monsim-total">${esc(monMoedaTxt(r.custoTotal, s.moeda))}</div></div>
+      <div class="kpi"><div class="k-lbl">Custo total em R$</div><div class="k-val" id="monsim-brl">${r.taxa>0 ? fmtBRL(r.brl) : (r.custoTotal>0 ? 'Informe o câmbio' : fmtBRL(0))}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:12px;">Relação dos dias com o custo</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Dias de uso</th><th class="num-mono">Dias excedentes</th><th class="num-mono">Custo (${esc(s.moeda)})</th><th class="num-mono">Custo (R$)</th></tr></thead>
+      <tbody id="monsim-proj">${monSimProjecaoHtml(r)}</tbody></table></div>
+    <p class="hint" style="margin:10px 0 0;">Do último dia de free time até 10 dias depois. Dentro do free time o custo é zero; cada dia a mais custa o valor diário informado, vezes a quantidade de containers.</p>
+  </div>`;
+}
+const MON_CSS = true;
+
 /* --------------------------------- Rotas -------------------------------- */
 const ROUTE_META = {
   'home':      {group:null},
@@ -4650,8 +5051,12 @@ const ROUTE_META = {
   'config':         {group:null, label:'Configurações'},
   'processos':      {group:'proc', label:'Processos'},
   'processoForm':   {group:'proc', label:'Cadastrar Novo Processo'},
+  'monitoramento':      {group:'mon', label:'Containers monitorados'},
+  'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
+state.monitoramento = []; state.monFiltro = { texto:'', sit:'' };
+state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
 const SIM_PROTECTED_ROUTES = ['simCarga','simCarregando','simPaletes','simEquipamentos','simEmbalagem','simResultado'];
 function navigate(route){
   hideAutocomplete();
@@ -4687,6 +5092,7 @@ function crumbsHtml(){
     if(state.route==='dadosFormal'||state.route==='numerarioFormal') items.push({label:'Importação Formal', route:'dadosFormal'});
   }
   if(meta.group==='cad') items.push({label:'Cadastro', route:'cad-cliente'});
+  if(meta.group==='mon') items.push({label:'Monitoramento de Carga', route:'monitoramento'});
   if(meta.group==='proc' && state.route!=='processos') items.push({label:'Processos', route:'processos'});
   if(state.route==='processoForm' && state.currentProcessoId){ items.push({label:'Processo '+state.currentProcessoId, route:'processoForm', cur:true}); return items.map((it,i)=>{ const sep = i>0 ? '<span class="sep">/</span>' : ''; return it.cur ? sep+`<span class="cur">${esc(it.label)}</span>` : sep+`<span class="seg" data-action="go:${it.route}">${esc(it.label)}</span>`; }).join(''); }
   if(meta.label) items.push({label:meta.label, route:state.route, cur:true});
@@ -4739,6 +5145,9 @@ function sideNavHtml(){
       lk('proc-novo', ICONS.plus, 'Cadastrar Novo Processo', r==='processoForm' && !state.currentProcessoId) +
       lk('go:processos', ICONS.folder, 'Processos cadastrados', r==='processos') +
       (state.currentProcessoId ? lk('go:processoForm', ICONS.edit, esc(state.currentProcessoId), r==='processoForm') : ''))}
+    ${grupo('mon', ICONS.ship, 'Monitoramento de Carga',
+      lk('go:monitoramento', ICONS.cube, 'Containers monitorados', r==='monitoramento') +
+      lk('go:monitoramentoCusto', ICONS.calc, 'Custo de Free Time', r==='monitoramentoCusto'))}
     ${grupo('sim', ICONS.cube, 'Simulador de Carga',
       lk('go:simInicio', ICONS.home, 'Início', r==='simInicio') +
       (nomeSim ? lk('go:simCarga', ICONS.cube, 'Dimensões da Carga', r==='simCarga') + lk('go:simCarregando', ICONS.ship, 'Carregando', r==='simCarregando') +
@@ -4754,6 +5163,8 @@ function sideNavHtml(){
 }
 function viewFor(route){
   switch(route){
+    case 'monitoramento': return renderMonitoramento();
+    case 'monitoramentoCusto': return renderMonitoramentoCusto();
     case 'home': return renderHome();
     case 'dados': return renderDados();
     case 'numerario': return renderNumerario();
@@ -4795,6 +5206,7 @@ function renderApp(){
   if(state.route==='dados') patchComputedDados();
   if(state.route==='dadosFormal') patchComputedDadosFormal();
   if(state.route==='simCarga') patchComputedSimCarga();
+  if(state.route==='monitoramento') posRenderMonitoramento();
   if(state.route==='simResultado') initResultado3D();
   if(state.lightbox3D) initLightbox3D();
   aplicarPermissoesNaTela();
@@ -8768,6 +9180,7 @@ function onAppClick(e){
   const [cmd, a1, a2] = action.split(':');
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1, a2))) return;
+  if(cmd.startsWith('mon-') && acaoMonitoramento(cmd, a1, a2)) return;
   if(cmd.startsWith('cot-') && acaoTemplateCotacoes(cmd, a1, a2)) return;
   if(cmd.startsWith('ftpl-') && acaoFiltrosTpl(cmd, a1)) return;
   if(cmd==='exportar'){ exportarTela(a1, a2); return; }
@@ -8936,6 +9349,7 @@ function onAppInput(e){
   const el = e.target;
   if(onConfigInput(el)) return;
   if(el.hasAttribute('data-proc')){ if(el.type!=='checkbox' && el.tagName!=='SELECT') onProcessoInput(el, 'input'); return; }
+  if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'input'); return; }
   if(el.hasAttribute('data-cad-filtro')){ onFiltroCadastro(el, 'input'); return; }
   const bind = el.getAttribute('data-bind');
   if(!bind) return;
@@ -8979,6 +9393,7 @@ function onAppChange(e){
   const el = e.target;
   if(onConfigChange(el)) return;
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
+  if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'change'); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
   if(el.hasAttribute('data-cadtpl-campo')){ onCadTemplateCampo(el); return; }
@@ -9181,7 +9596,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.3 · numerário e PDF · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.4 · monitoramento de carga · build 06/10/2026</span></div>
   `;
 }
 
