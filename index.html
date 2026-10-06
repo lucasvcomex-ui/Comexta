@@ -751,6 +751,16 @@ tbody tr:hover{background:#F9FAFD;}
   .user-btn-txt{display:none;}
 }
 
+
+/* Painel de cor própria ao redor de filtros + lista (Processos, Cotações Salvas e Cadastros) */
+.lista-painel{background:#E6ECF5; border:1px solid #D2DBEA; border-radius:14px; padding:18px 18px 16px; margin-top:6px;}
+.lista-painel .table-wrap{background:#fff; border-color:#D2DBEA;}
+.lista-painel .card-flat, .lista-painel .empty{background:#fff; border-radius:10px;}
+.lista-painel .empty{border:1px dashed #C9D3E4;}
+.lista-painel .filter-bar:last-child, .lista-painel .table-wrap:last-child{margin-bottom:0;}
+.lista-painel .kanban-scroll, .lista-painel .kanban-board{margin-bottom:0;}
+.lista-painel .field input, .lista-painel .field select, .lista-painel .filter-bar input, .lista-painel .filter-bar select{background:#fff;}
+@media (max-width:980px){ .lista-painel{padding:12px;} }
 </style>
 </head>
 <body>
@@ -2464,6 +2474,7 @@ function renderProcessos(){
   <div class="page-title">Processos</div>
   <div class="page-sub">Processos de importação da empresa: cliente, produtos, transporte, financeiro e desembaraço em um só lugar.${seloFiltroFixado('proc', ignorar)}</div>
   <hr class="hairline">
+  <div class="lista-painel">
   <div class="cot-barra">
     <div class="view-toggle">
       <button class="view-toggle-btn ${modo==='lista'?'active':''}" data-action="proc-modo:lista">${ICONS.file} Lista</button>
@@ -2473,7 +2484,8 @@ function renderProcessos(){
   </div>
   ${state.procTemplateAberto ? renderProcTemplate() : ''}
   ${barraFiltrosTpl('proc', ignorar, `<button class="btn btn-primary btn-sm" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo</button>`)}
-  ${conteudo}`;
+  ${conteudo}
+  </div>`;
 }
 
 // Janela Template: Configurar Card / Configurar Lista / Configurar Filtros
@@ -5894,10 +5906,12 @@ function renderCotacoesTodas(){
     ${seloFiltroFixado('cot', state.cotacoesViewMode==='cards' ? ['status'] : [])}
   </div>
   <hr class="hairline">
+  <div class="lista-painel">
   ${viewToggle}
   ${state.cotTemplateAberto ? renderCotTemplate() : ''}
   ${filterBar}
   ${corpo}
+  </div>
   `;
 }
 function renderCotacoesKanban(){
@@ -7224,9 +7238,11 @@ function renderCadastroRico(tipo){
   <div class="page-title">Cadastro — ${cfg.titulo}</div>
   <div class="page-sub">${subText}</div>
   <hr class="hairline">
+  <div class="lista-painel">
   ${barraCadastroTpl(tipo, totalCount, list.length)}
   ${formHtml}
   ${itemsHtml}
+  </div>
   `;
 }
 
@@ -9130,7 +9146,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.1 · menu lateral · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.2 · painéis de lista · build 06/10/2026</span></div>
   `;
 }
 
