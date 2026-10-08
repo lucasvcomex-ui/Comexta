@@ -763,6 +763,9 @@ tbody tr:hover{background:#F9FAFD;}
 @media (max-width:980px){ .lista-painel{padding:12px;} }
 
 /* Monitoramento de Carga */
+.mon-diag{margin:0 0 14px; padding:11px 14px; border-radius:10px; font-size:13.5px; background:var(--paper); border:1px solid var(--line); color:var(--ink);}
+.mon-diag.ok{background:var(--green-100); border-color:#BCD8C8; color:var(--green);}
+.mon-diag.erro{background:var(--red-100); border-color:#EBC3BF; color:var(--red);}
 .mon-card{background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:18px 20px; margin-bottom:16px;}
 .mon-card-head{display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
 .mon-titulo{display:flex; align-items:center; gap:10px; flex:1; min-width:220px; flex-wrap:wrap;}
@@ -793,6 +796,15 @@ tbody tr:hover{background:#F9FAFD;}
 .mon-sugestao{margin-top:10px; padding:9px 12px; background:var(--amber-100); border-radius:8px; font-size:13px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
 .mon-eventos{margin-top:12px;} .mon-eventos summary{cursor:pointer; font-size:13px; font-weight:700; color:var(--navy);} .mon-eventos .table-wrap{margin-top:8px;}
 @media (max-width:760px){ .mon-rastreio-fatos{grid-template-columns:1fr;} }
+
+.mon-toggle{flex-shrink:0;} .mon-toggle svg{transition:transform .15s ease;} .mon-toggle.aberto svg{transform:rotate(90deg);}
+.mon-card.mon-min{display:flex; align-items:center; gap:12px; padding:10px 14px; margin-bottom:10px;}
+.mon-min-grid{flex:1; min-width:0; display:grid; grid-template-columns:1.1fr 1.1fr 1.2fr .8fr 1.2fr .8fr; gap:12px;}
+.mon-min-grid > div{min-width:0; display:flex; flex-direction:column; gap:1px;}
+.mon-min-grid span{font-size:11px; color:var(--ink-soft);}
+.mon-min-grid b{font-size:13.5px; color:var(--navy-deep); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+@media (max-width:980px){ .mon-min-grid{grid-template-columns:1fr 1fr 1fr;} }
+@media (max-width:560px){ .mon-min-grid{grid-template-columns:1fr 1fr;} }
 </style>
 </head>
 <body>
@@ -1145,7 +1157,7 @@ const PERMISSAO_DA_ACAO = {
   'go:monitoramento':['monitoramento','ver'], 'go:monitoramentoCusto':['monitoramento','ver'],
   'mon-add':['monitoramento','criar'], 'mon-importar':['monitoramento','criar'],
   'mon-atualizar':['monitoramento','editar'], 'mon-atualizar-um':['monitoramento','editar'], 'mon-excluir':['monitoramento','editar'],
-  'mon-rastrear':['monitoramento','editar'], 'mon-rastrear-todos':['monitoramento','editar'], 'mon-aplicar-devolucao':['monitoramento','editar'],
+  'mon-testar-api':['monitoramento','ver'], 'mon-minimizar':['monitoramento','ver'], 'mon-minimizar-todos':['monitoramento','ver'], 'mon-rastrear':['monitoramento','editar'], 'mon-rastrear-todos':['monitoramento','editar'], 'mon-aplicar-devolucao':['monitoramento','editar'],
 };
 const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', mon:'monitoramento' };
 
@@ -4699,7 +4711,7 @@ function monData(v){ const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v||'')); 
 function monDiasEntre(a, b){ return Math.round((b - a) / 86400000); }
 function monAddDias(ts, n){ const d = new Date(ts + n*86400000); return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0'); }
 function novoContainerMonitorado(base){
-  return { id:uid(), origem:'manual', processoId:'', containerId:'', container:'', tipo:"40' HC", etd:'', eta:'', chegada:'',
+  return { id:uid(), origem:'manual', processoId:'', referencia:'', containerId:'', container:'', tipo:"40' HC", etd:'', eta:'', chegada:'',
     paisOrigem:'', paisDestino:'Brasil', portoOrigem:'', portoDestino:'', freeTime:'', inicio:'', devolucao:'',
     custoDiario:'', moeda:'USD', cambio:'', scac:'AUTO', rastreio:null, criadoEm:new Date().toISOString(), ...(base||{}) };
 }
@@ -4775,6 +4787,7 @@ const monJaImportado = x => state.monitoramento.some(m=>m.processoId===x.process
 function monAtualizarDoProcesso(m, dados){
   ['container','tipo','etd','eta','chegada','paisOrigem','portoOrigem','portoDestino'].forEach(k=>{ m[k] = dados[k]; });
   if(String(dados.freeTime||'').trim()!=='') m.freeTime = dados.freeTime;
+  if(m.referencia===undefined || m.referencia==='') m.referencia = dados.processoId || '';
   m.atualizadoEm = new Date().toISOString();
 }
 
@@ -4791,7 +4804,7 @@ function acaoMonitoramento(cmd, a1){
     case 'mon-importar': {
       const novos = containersDosProcessos().filter(x=>!monJaImportado(x));
       if(!novos.length){ toast('Nenhum container novo nos Processos (só entram containers com número preenchido).'); return true; }
-      novos.forEach(x=>state.monitoramento.push(novoContainerMonitorado({ ...x, origem:'processo' })));
+      novos.forEach(x=>state.monitoramento.push(novoContainerMonitorado({ ...x, origem:'processo', referencia:x.processoId })));
       persistMonitoramento(); renderApp();
       toast(novos.length + ' container' + (novos.length===1?'':'s') + ' puxado' + (novos.length===1?'':'s') + ' dos Processos.', 'ok');
       return true;
@@ -4809,6 +4822,16 @@ function acaoMonitoramento(cmd, a1){
     }
     case 'mon-rastrear': rastrearContainer(a1); return true;
     case 'mon-rastrear-todos': monRastrearTodos(); return true;
+    case 'mon-testar-api': monTestarApi(); return true;
+    case 'mon-minimizar': {
+      const mn = monMinCarregar(); if(mn[a1]) delete mn[a1]; else mn[a1] = true;
+      monMinSalvar(); monRedesenharCartao(a1); return true;
+    }
+    case 'mon-minimizar-todos': {
+      const mn = monMinCarregar(), algumAberto = state.monitoramento.some(m=>!mn[m.id]);
+      state.monitoramento.forEach(m=>{ if(algumAberto) mn[m.id] = true; else delete mn[m.id]; });
+      monMinSalvar(); renderApp(); return true;
+    }
     case 'mon-aplicar-devolucao': {
       const m = state.monitoramento.find(x=>x.id===a1);
       if(m && m.rastreio && m.rastreio.devolucaoSugerida){ m.devolucao = m.rastreio.devolucaoSugerida; m.atualizadoEm = new Date().toISOString(); persistMonitoramento(); renderApp(); toast('Data de devolução aplicada.', 'ok'); }
@@ -4859,7 +4882,8 @@ async function monChamarApi(m){
   const r = await fetch('/api/rastreio', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + (token||'') },
     body: JSON.stringify({ container: monNumero(m), scac: String(m.scac||'AUTO').toUpperCase().trim() || 'AUTO' }) });
   let corpo = null; try{ corpo = await r.json(); }catch(e){}
-  return { status:r.status, corpo };
+  let destino = ''; try{ destino = new URL(r.url).pathname; }catch(e){}
+  return { status:r.status, corpo, redirecionado:!!r.redirected, destino, tipo:(r.headers && r.headers.get && r.headers.get('content-type')) || '' };
 }
 function monAplicarRastreio(m, j){
   const mudou = [];
@@ -4884,13 +4908,14 @@ async function rastrearContainer(id, opcoes){
   if(!opcoes.lote) renderApp();
   let resultado = 'erro';
   try{
-    const { status, corpo } = await monChamarApi(m);
+    const { status, corpo, redirecionado, destino, tipo } = await monChamarApi(m);
     if(status===401){ sessaoExpirada(); return 'fatal'; }
     if(!corpo || !corpo.ok){
       const naoPublicada = status===404 || (!corpo && status!==0 && status<500);
       const msg = (corpo && corpo.mensagem)
-        || (naoPublicada ? 'A função de rastreio (/api/rastreio) não foi encontrada no site. Confira se o arquivo api/rastreio.mjs está na pasta api/ do GitHub e se o deploy terminou.'
-          : 'Falha ao consultar o rastreamento (erro ' + status + '). Abra /api/rastreio no navegador para ver o diagnóstico.');
+        || (redirecionado && !corpo ? 'A chamada foi redirecionada para "' + destino + '" em vez de chegar na função (login ou middleware do site bloqueando /api/). Use "Testar função de rastreio" para ver o diagnóstico.'
+          : naoPublicada ? 'A função de rastreio (/api/rastreio) não respondeu como API (erro ' + status + (/html/i.test(tipo) ? ', veio uma página HTML' : '') + '). Use "Testar função de rastreio" no topo da página para ver a causa.'
+          : 'Falha ao consultar o rastreamento (erro ' + status + '). Use "Testar função de rastreio" no topo da página para ver o diagnóstico.');
       m.rastreio = { ...(m.rastreio||{}), erro:msg, atualizadoEm:new Date().toISOString() };
       if(!opcoes.lote) toast(msg);
       resultado = naoPublicada || ([503,403,502,500].includes(status) && corpo && ['sem_chave','sem_permissao','chave_recusada','config'].includes(corpo.erro)) ? 'fatal' : 'erro';
@@ -4931,6 +4956,27 @@ async function monRastrearTodos(){
   state.monLote = null; renderApp();
   toast(parou ? (msgFatal || 'Rastreamento interrompido.') : (ok + ' container' + (ok===1?'':'s') + ' consultado' + (ok===1?'':'s') + (erro ? ' · ' + erro + ' com erro (veja nos cartões)' : '') + '.'), ok && !parou ? 'ok' : undefined);
 }
+async function monTestarApi(){
+  state.monDiag = { ok:null, texto:'Testando a função de rastreio…' }; renderApp();
+  try{
+    const r = await fetch('/api/rastreio', { method:'GET', headers:{ Accept:'application/json' } });
+    const tipo = r.headers.get('content-type') || '';
+    let j = null; if(/json/i.test(tipo)){ try{ j = await r.json(); }catch(e){} }
+    let destino = ''; try{ destino = new URL(r.url).pathname; }catch(e){}
+    if(j && j.ok && j.funcao==='rastreio'){
+      state.monDiag = { ok:!!j.kplerConfigurada, texto: j.kplerConfigurada
+        ? 'Tudo certo: a função está publicada e a chave da Kpler foi encontrada. Pode rastrear.'
+        : 'A função está publicada, mas a chave KPLER_API_KEY não chegou neste deploy. Em Vercel → Settings → Environment Variables, deixe a chave em Production e faça um Redeploy.' };
+    }else if(r.redirected){
+      state.monDiag = { ok:false, texto:'A chamada foi redirecionada para "' + destino + '" (código ' + r.status + '): o login/middleware do site está interceptando /api/. A função precisa ser liberada no middleware.' };
+    }else if(r.status===404){
+      state.monDiag = { ok:false, texto:'Erro 404: o site não tem a função /api/rastreio. O arquivo api/rastreio.mjs precisa estar dentro da pasta api/ do repositório do GitHub (não na raiz) e o deploy mais novo precisa estar em Production.' };
+    }else{
+      state.monDiag = { ok:false, texto:'O servidor respondeu ' + r.status + (/html/i.test(tipo) ? ' com uma página HTML' : '') + ' em vez da resposta da função. Confira o vercel.json (rewrites/trailingSlash) e o middleware.' };
+    }
+  }catch(e){ state.monDiag = { ok:false, texto:'Sem conexão com o servidor.' }; }
+  renderApp();
+}
 function monRastreioHtml(m){
   const busy = !!(state.monRastreando && state.monRastreando[m.id]), r = m.rastreio;
   const atraso = r && r.atrasoDias!=null ? (r.atrasoDias>0 ? `<span class="badge badge-danger">Atraso de ${r.atrasoDias} dia${r.atrasoDias===1?'':'s'}</span>` : '<span class="badge badge-ok">Sem atraso</span>') : '';
@@ -4960,6 +5006,39 @@ function monRastreioHtml(m){
           ${eventos.map(e=>`<tr><td>${e.data ? fmtDateOnly(e.data) : '—'}</td><td>${esc(MON_EVENTOS[e.tipo] || e.tipo || '')}</td><td>${esc(e.local||'')}</td><td>${esc(e.navio||'')}</td><td><span class="badge ${e.classificador==='actual'?'badge-ok':'badge-navy'}">${e.classificador==='actual'?'Real':'Previsto'}</span></td></tr>`).join('')}
         </tbody></table></div></details>` : ''}` : `<p class="hint" style="margin:8px 0 0;">Consulta o container na Kpler e atualiza ETD, ETA e chegada efetiva (que alimenta o free time).</p>`}
     </div>`;
+}
+
+/* --- janelas minimizadas (preferência de cada pessoa, guardada neste navegador) --- */
+function monMinCarregar(){
+  if(state.monMin) return state.monMin;
+  try{ state.monMin = JSON.parse(localStorage.getItem(chaveLocal('monitoramento:min')) || '{}') || {}; }catch(e){ state.monMin = {}; }
+  return state.monMin;
+}
+function monMinSalvar(){ try{ localStorage.setItem(chaveLocal('monitoramento:min'), JSON.stringify(state.monMin||{})); }catch(e){} }
+const monMinimizado = m => !!monMinCarregar()[m.id];
+function monCardMinimizadoHtml(m, c){
+  const v = x => x ? esc(x) : '—', d = x => x ? fmtDateOnly(x) : '—';
+  return `
+  <div class="mon-card mon-min" data-mon-id="${m.id}" data-mon-sit="${c.situacao}" data-mon-busca="${esc(monTextoBusca(m))}">
+    <button class="icon-btn mon-toggle" data-action="mon-minimizar:${m.id}" title="Expandir esta janela" aria-expanded="false">${ICON_CHEV}</button>
+    <div class="mon-min-grid">
+      <div><span>Referência do processo</span><b>${v(monRef(m))}</b></div>
+      <div><span>Container</span><b>${v(m.container)}</b></div>
+      <div><span>Porto de origem</span><b>${v(m.portoOrigem)}</b></div>
+      <div><span>ETD</span><b>${d(m.etd)}</b></div>
+      <div><span>Porto de destino</span><b>${v(m.portoDestino)}</b></div>
+      <div><span>ETA</span><b>${d(m.eta)}</b></div>
+    </div>
+  </div>`;
+}
+// Troca só o cartão alterado (sem redesenhar a página, para não perder o ponto de rolagem).
+function monRedesenharCartao(id){
+  const m = state.monitoramento.find(x=>x.id===id), antigo = document.querySelector(`.mon-card[data-mon-id="${id}"]`);
+  if(!m || !antigo || !document.createElement) return renderApp();
+  const tpl = document.createElement('template'); tpl.innerHTML = monCardHtml(m, hojeLocalISO()).trim();
+  const novo = tpl.content && tpl.content.firstElementChild; if(!novo) return renderApp();
+  antigo.replaceWith(novo);
+  aplicarFiltroMonitoramento();
 }
 
 /* --- campos --- */
@@ -5031,7 +5110,8 @@ function atualizarMonitoramentoCalculos(){
   k('mon-kpi-custo', fmtBRL(totalBRL)); const sc = document.getElementById('mon-kpi-semcambio'); if(sc){ sc.textContent = semCambio ? semCambio + ' sem câmbio informado' : 'Custo acumulado após o free time'; }
   aplicarFiltroMonitoramento();
 }
-const monTextoBusca = m => [m.container, m.tipo, m.processoId, m.paisOrigem, m.paisDestino, m.portoOrigem, m.portoDestino].join(' ').toLowerCase();
+const monRef = m => m.referencia===undefined ? (m.processoId||'') : m.referencia;   // cartões antigos sem o campo usam o nº do processo vinculado
+const monTextoBusca = m => [m.container, m.tipo, monRef(m), m.processoId, m.paisOrigem, m.paisDestino, m.portoOrigem, m.portoDestino].join(' ').toLowerCase();
 
 /* --- tela: Containers monitorados --- */
 function monCampo(id, campo, rotulo, valor, opts){
@@ -5042,12 +5122,14 @@ function monCampo(id, campo, rotulo, valor, opts){
 }
 function monCardHtml(m, hoje){
   const c = monCalcular(m, hoje), confirmando = state.pendingDelete === 'mon:' + m.id;
+  if(monMinimizado(m)) return monCardMinimizadoHtml(m, c);
   const vinculo = m.origem==='processo'
     ? `<span class="badge badge-navy" data-action="proc-abrir:${esc(m.processoId)}" style="cursor:pointer;" title="Abrir o processo">${esc(m.processoId)}</span>`
     : '<span class="badge badge-amber">Manual</span>';
   return `
   <div class="mon-card" data-mon-id="${m.id}" data-mon-sit="${c.situacao}" data-mon-busca="${esc(monTextoBusca(m))}">
     <div class="mon-card-head">
+      <button class="icon-btn mon-toggle aberto" data-action="mon-minimizar:${m.id}" title="Minimizar esta janela" aria-expanded="true">${ICON_CHEV}</button>
       <div class="mon-titulo"><span class="mon-nome">${esc(m.container) || 'Container sem número'}</span><span class="mon-tipo">${esc(m.tipo)}</span>${vinculo}
         ${m.removidoDoProcesso ? '<span class="badge badge-danger" title="Este container não está mais no processo">Removido do processo</span>' : ''}</div>
       <span data-mon-calc="sit" class="badge ${MON_SITUACOES[c.situacao].classe}">${esc(monTextoSituacao(m, c))}</span>
@@ -5056,17 +5138,20 @@ function monCardHtml(m, hoje){
         <button class="icon-btn ${confirmando?'btn-perigo':''}" title="${confirmando?'Clique de novo para confirmar':'Remover do monitoramento'}" data-action="mon-excluir:${m.id}">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="field-row grid-4">
+    <div class="field-row grid-3">
+      ${monCampo(m.id,'referencia','Referência do processo (Nº)',monRef(m),{ph:'Ex.: PRC-0001'})}
       ${monCampo(m.id,'container','Container',m.container,{ph:'Ex.: MSKU1234567', up:true})}
       ${monCampo(m.id,'tipo','Tipo de container',m.tipo,{options:PROC_CONTAINER_TIPOS})}
-      ${monCampo(m.id,'etd','ETD (saída estimada)',m.etd,{type:'date'})}
-      ${monCampo(m.id,'eta','ETA (chegada estimada)',m.eta,{type:'date'})}
     </div>
-    <div class="field-row grid-4" style="margin-top:12px;">
+    <div class="field-row grid-3" style="margin-top:12px;">
       ${monCampo(m.id,'paisOrigem','País de origem',m.paisOrigem,{ph:'Ex.: China'})}
-      ${monCampo(m.id,'paisDestino','País de destino',m.paisDestino,{ph:'Ex.: Brasil'})}
       ${monCampo(m.id,'portoOrigem','Porto de origem',m.portoOrigem,{ph:'Ex.: Shanghai'})}
+      ${monCampo(m.id,'etd','ETD (saída estimada)',m.etd,{type:'date'})}
+    </div>
+    <div class="field-row grid-3" style="margin-top:12px;">
+      ${monCampo(m.id,'paisDestino','País de destino',m.paisDestino,{ph:'Ex.: Brasil'})}
       ${monCampo(m.id,'portoDestino','Porto de destino',m.portoDestino,{ph:'Ex.: Santos'})}
+      ${monCampo(m.id,'eta','ETA (chegada estimada)',m.eta,{type:'date'})}
     </div>
     ${monRastreioHtml(m)}
     <div class="mon-ft">
@@ -5121,9 +5206,12 @@ function renderMonitoramento(){
     <div class="cot-barra" style="margin-bottom:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
       <button class="btn btn-primary btn-sm" data-action="mon-add">${ICONS.plus} Adicionar Container</button>
       <button class="btn btn-ghost btn-sm" data-action="mon-importar" title="Puxa os containers com número cadastrados em Processos → Transporte">${ICONS.download} Puxar containers dos Processos${disponiveis ? ' ('+disponiveis+')' : ''}</button>
+      ${lista.length ? `<button class="btn btn-ghost btn-sm" data-action="mon-minimizar-todos" title="Minimiza ou expande todas as janelas de uma vez">${lista.some(m=>!monMinimizado(m)) ? 'Minimizar todas' : 'Expandir todas'}</button>` : ''}
+      <button class="btn btn-ghost btn-sm" data-action="mon-testar-api" title="Verifica se a função /api/rastreio está publicada e se a chave da Kpler foi encontrada">Testar função de rastreio</button>
       <button class="btn btn-ghost btn-sm" data-action="mon-rastrear-todos" ${state.monLote?'disabled':''} title="Consulta na API de rastreamento todos os containers com número válido que ainda não foram devolvidos">${state.monLote ? 'Rastreando ' + state.monLote.feitos + '/' + state.monLote.total + '…' : 'Rastrear todos pela API'}</button>
       ${ligados ? `<button class="btn btn-ghost btn-sm" data-action="mon-atualizar" title="Atualiza ETD, ETA, portos, free time... dos containers que vieram de Processos">${ICONS.edit} Atualizar com os Processos</button>` : ''}
     </div>
+    ${state.monDiag ? `<div class="mon-diag ${state.monDiag.ok===true?'ok':state.monDiag.ok===false?'erro':''}">${esc(state.monDiag.texto)}</div>` : ''}
     <div class="filter-bar" style="margin-bottom:14px;">
       <div class="field"><label>Buscar</label><input data-mon-filtro="texto" value="${esc(f.texto)}" placeholder="Container, processo, porto, país..."></div>
       <div class="field"><label>Situação</label>
@@ -5214,7 +5302,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
-state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.monRastreando = {}; state.monLote = null;
+state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.monRastreando = {}; state.monLote = null; state.monDiag = null;
 state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
 const SIM_PROTECTED_ROUTES = ['simCarga','simCarregando','simPaletes','simEquipamentos','simEmbalagem','simResultado'];
 function navigate(route){
@@ -9781,7 +9869,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.13 · rastreio: diagnóstico · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.15 · monitoramento: referência e minimizar · build 06/10/2026</span></div>
   `;
 }
 
