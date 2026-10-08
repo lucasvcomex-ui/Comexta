@@ -6155,10 +6155,9 @@ function renderNumerarioFormal(){
       <td class="num-mono">${fmtPct(l.pisPct)}</td><td class="num-mono">${fmtBRL(l.pis)}</td>
       <td class="num-mono">${fmtPct(l.cofinsPct)}</td><td class="num-mono">${fmtBRL(l.cofins)}</td>
       <td class="num-mono">${fmtPct(l.icmsPct)}</td><td class="num-mono">${fmtBRL(l.icms)}</td>
-      <td class="num-mono">${fmtBRL(l.rateioAfrmmTabela)}</td>
       <td class="num-mono" style="font-weight:700;">${fmtBRL(l.custoTotalComCredito)}</td><td class="num-mono">${fmtBRL(l.custoUnitComCredito)}</td>
       <td class="num-mono" style="font-weight:700;">${fmtBRL(l.custoTotalSemCredito)}</td><td class="num-mono">${fmtBRL(l.custoUnitSemCredito)}</td>
-    </tr>`).join('') : `<tr><td colspan="26" style="text-align:center; color:var(--ink-soft); padding:24px;">Nenhum produto preenchido na aba Dados ainda.</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="25" style="text-align:center; color:var(--ink-soft); padding:24px;">Nenhum produto preenchido na aba Dados ainda.</td></tr>`;
 
   return `
   <div class="page-title">Importação Formal — Numerário</div>
@@ -6191,7 +6190,6 @@ function renderNumerarioFormal(){
         <th class="num-mono">PIS %</th><th class="num-mono">PIS R$</th>
         <th class="num-mono">COFINS %</th><th class="num-mono">COFINS R$</th>
         <th class="num-mono">ICMS %</th><th class="num-mono">ICMS R$</th>
-        <th class="num-mono" title="Informativo: o AFRMM compõe a base do ICMS e não soma no custo">AFRMM*</th>
         <th class="num-mono">Custo Total (c/créd.)</th><th class="num-mono">Custo Unit.</th><th class="num-mono">Custo Total (s/créd.)</th><th class="num-mono">Custo Unit.</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -6207,14 +6205,13 @@ function renderNumerarioFormal(){
         <td></td><td class="num-mono">${fmtBRL(r.totais.pis)}</td>
         <td></td><td class="num-mono">${fmtBRL(r.totais.cofins)}</td>
         <td></td><td class="num-mono">${fmtBRL(r.totais.icms)}</td>
-        <td class="num-mono">${fmtBRL(r.totais.rateioAfrmmTabela)}</td>
         <td class="num-mono">${fmtBRL(r.totais.custoTotalComCredito)}</td><td></td>
         <td class="num-mono">${fmtBRL(r.totais.custoTotalSemCredito)}</td><td></td>
       </tr></tfoot>
     </table>
   </div>
   <p class="hint" style="color:var(--ink-soft); font-size:12px; margin-top:0;">
-    * AFRMM é informativo: compõe a base do ICMS e não soma no custo. "Com créditos" considera que I.P.I., PIS, COFINS e ICMS são recuperáveis (regime não-Simples) — só o Imposto de Importação (não recuperável) entra no custo. "Sem créditos" soma todos os tributos ao custo (ex: empresas no Simples Nacional ou que não aproveitam os créditos).
+    "Com créditos" considera que I.P.I., PIS, COFINS e ICMS são recuperáveis (regime não-Simples) — só o Imposto de Importação (não recuperável) entra no custo. "Sem créditos" soma todos os tributos ao custo (ex: empresas no Simples Nacional ou que não aproveitam os créditos).
   </p>
 
   ${d.observacoes ? `
@@ -8815,25 +8812,23 @@ async function gerarDashboardPDFFormal(dados, meta){
     doc.autoTable({
       startY:y, margin:{left:28,right:28},
       head:[['Produto','NCM','Qtd','Total US$','Total R$','Rat. Frete','Rat. Acrésc.','V.A.','Armazenagem','Outras Despesas',
-        'I.I.','I.P.I.','PIS','COFINS','ICMS','AFRMM*','Custo Total\nc/créd.','Custo Unit.\nc/créd.','Custo Total\ns/créd.','Custo Unit.\ns/créd.']],
+        'I.I.','I.P.I.','PIS','COFINS','ICMS','Custo Total\nc/créd.','Custo Unit.\nc/créd.','Custo Total\ns/créd.','Custo Unit.\ns/créd.']],
       body: r.linhas.map(l=>[
         l.produto||'—', l.ncm||'—', fmtNum(l.qty), fmtUSD(l.totalUSD), fmtBRL(l.totalBRL),
         fmtBRL(l.rateioFreteTabela), fmtBRL(l.rateioAcrescimo), fmtBRL(l.valorAduaneiro), fmtBRL(l.rateioArmazenagemTabela), fmtBRL(l.rateioOutrasTabela),
-        fmtBRL(l.ii), fmtBRL(l.ipi), fmtBRL(l.pis), fmtBRL(l.cofins), fmtBRL(l.icms), fmtBRL(l.rateioAfrmmTabela),
+        fmtBRL(l.ii), fmtBRL(l.ipi), fmtBRL(l.pis), fmtBRL(l.cofins), fmtBRL(l.icms),
         fmtBRL(l.custoTotalComCredito), fmtBRL(l.custoUnitComCredito), fmtBRL(l.custoTotalSemCredito), fmtBRL(l.custoUnitSemCredito),
       ]),
       foot:[['TOTAL','', fmtNum(r.totais.qty), fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL),
         fmtBRL(r.totais.rateioFreteTabela), fmtBRL(r.totais.rateioAcrescimo), fmtBRL(r.totais.valorAduaneiro), fmtBRL(r.totais.rateioArmazenagemTabela), fmtBRL(r.totais.rateioOutrasTabela),
         fmtBRL(r.totais.ii), fmtBRL(r.totais.ipi), fmtBRL(r.totais.pis), fmtBRL(r.totais.cofins), fmtBRL(r.totais.icms),
-        fmtBRL(r.totais.rateioAfrmmTabela), fmtBRL(r.totais.custoTotalComCredito), '', fmtBRL(r.totais.custoTotalSemCredito), '']],
+        fmtBRL(r.totais.custoTotalComCredito), '', fmtBRL(r.totais.custoTotalSemCredito), '']],
       theme:'grid', styles:{fontSize:6, cellPadding:2.5}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:5.8},
-      columnStyles:{17:{fontStyle:'bold'}, 19:{fontStyle:'bold'}},   // Custo Unit. c/créd. e s/créd.
+      columnStyles:{16:{fontStyle:'bold'}, 18:{fontStyle:'bold'}},   // Custo Unit. c/créd. e s/créd.
       footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
     });
 
-    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(110,120,135);
-    doc.text('* AFRMM é informativo: compõe a base do ICMS e não soma no custo. Frete, Seguro, Acréscimo, Capatazia e Siscomex do Desembaraço também só compõem as bases dos tributos.', 28, doc.lastAutoTable.finalY + 11);
-    const yEnd = doc.lastAutoTable.finalY + 36;
+    const yEnd = doc.lastAutoTable.finalY + 26;
     const dashItems = [
       {label:'Invoice', value:c.sumTotalBRL, color:[23,58,94]},
       {label:'Frete (Marít.+Orig.+Dest.)', value:c.freteTotalBRL, color:[192,122,37]},
@@ -9781,7 +9776,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.10 · dashboard sem AFRMM · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.11 · rateio sem AFRMM · build 06/10/2026</span></div>
   `;
 }
 
