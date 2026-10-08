@@ -6031,7 +6031,7 @@ function renderNumerario(){
 
   const rows = r.linhas.length ? r.linhas.map((l,i)=>`
     <tr>
-      <td>${esc(l.fornecedor)||'—'}</td><td>${esc(l.produto)||'—'}</td>
+      <td>${esc(l.produto)||'—'}</td>
       <td class="num-mono">${fmtNum(l.qty)}</td><td class="num-mono">${fmtUSD(l.vu)}</td><td class="num-mono">${fmtNum(l.peso)} kg</td>
       <td class="num-mono">${fmtUSD(l.totalUSD)}</td><td class="num-mono">${fmtBRL(l.totalBRL)}</td>
       <td class="num-mono">${fmtBRL(l.rateioFrete)}</td><td class="num-mono">${fmtBRL(l.rateioSeguro)}</td>
@@ -6039,7 +6039,7 @@ function renderNumerario(){
       <td class="num-mono">${fmtBRL(l.rateioBcIcms)}</td><td class="num-mono">${fmtBRL(l.rateioIcms)}</td><td class="num-mono">${fmtBRL(l.rateioDespExtra)}</td>
       <td class="num-mono" style="font-weight:700;">${fmtBRL(l.custoTotalSimples)}</td><td class="num-mono">${fmtBRL(l.custoUnitSimples)}</td>
       <td class="num-mono" style="font-weight:700;">${fmtBRL(l.custoTotalLucroReal)}</td><td class="num-mono">${fmtBRL(l.custoUnitLucroReal)}</td>
-    </tr>`).join('') : `<tr><td colspan="17" style="text-align:center; color:var(--ink-soft); padding:24px;">Nenhum produto preenchido na aba Dados ainda.</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="16" style="text-align:center; color:var(--ink-soft); padding:24px;">Nenhum produto preenchido na aba Dados ainda.</td></tr>`;
 
   return `
   <div class="page-title">Numerário — Resumo e Rateio das Despesas</div>
@@ -6066,7 +6066,7 @@ function renderNumerario(){
     <table style="min-width:1500px;">
       <thead>
         <tr>
-          <th rowspan="2">Fornecedor</th><th rowspan="2">Produto</th><th rowspan="2">Qtd.</th><th rowspan="2">Vlr Unit $</th><th rowspan="2">Peso Líq.</th>
+          <th rowspan="2">Produto</th><th rowspan="2">Qtd.</th><th rowspan="2">Vlr Unit $</th><th rowspan="2">Peso Líq.</th>
           <th rowspan="2" class="num-mono">Vlr Total $</th><th rowspan="2" class="num-mono">Vlr Total R$</th>
           <th rowspan="2" class="num-mono">Rateio Frete</th><th rowspan="2" class="num-mono">Rateio Seguro</th><th rowspan="2" class="num-mono">Vlr Aduaneiro</th>
           <th rowspan="2" class="num-mono">Rateio I.I.</th><th rowspan="2" class="num-mono">Rateio BC ICMS</th><th rowspan="2" class="num-mono">Rateio ICMS</th><th rowspan="2" class="num-mono">Rateio Desp. Extra</th>
@@ -6076,7 +6076,7 @@ function renderNumerario(){
       </thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
-        <td colspan="2">TOTAL</td><td class="num-mono">${fmtNum(r.totais.qty)}</td><td></td><td class="num-mono">${fmtNum(r.totais.peso)} kg</td>
+        <td>TOTAL</td><td class="num-mono">${fmtNum(r.totais.qty)}</td><td></td><td class="num-mono">${fmtNum(r.totais.peso)} kg</td>
         <td class="num-mono">${fmtUSD(r.totais.totalUSD)}</td><td class="num-mono">${fmtBRL(r.totais.totalBRL)}</td>
         <td class="num-mono">${fmtBRL(r.totais.rateioFrete)}</td><td class="num-mono">${fmtBRL(r.totais.rateioSeguro)}</td>
         <td class="num-mono">${fmtBRL(r.totais.valorAduaneiroProduto)}</td><td class="num-mono">${fmtBRL(r.totais.rateioII)}</td>
@@ -6144,7 +6144,7 @@ function renderNumerarioFormal(){
 
   const rows = r.linhas.length ? r.linhas.map(l=>`
     <tr>
-      <td>${esc(l.fornecedor)||'—'}</td><td>${esc(l.produto)||'—'}</td><td>${esc(l.ncm)||'—'}</td>
+      <td>${esc(l.produto)||'—'}</td><td>${esc(l.ncm)||'—'}</td>
       <td class="num-mono">${fmtNum(l.qty)}</td><td class="num-mono">${fmtUSD(l.vu)}</td><td class="num-mono">${fmtNum(l.peso)} kg</td>
       <td class="num-mono">${fmtUSD(l.totalUSD)}</td><td class="num-mono">${fmtBRL(l.totalBRL)}</td>
       <td class="num-mono">${fmtBRL(l.rateioFreteTabela)}</td><td class="num-mono">${fmtBRL(l.rateioAcrescimo)}</td>
@@ -6158,7 +6158,7 @@ function renderNumerarioFormal(){
       <td class="num-mono">${fmtBRL(l.rateioAfrmmTabela)}</td>
       <td class="num-mono" style="font-weight:700;">${fmtBRL(l.custoTotalComCredito)}</td><td class="num-mono">${fmtBRL(l.custoUnitComCredito)}</td>
       <td class="num-mono" style="font-weight:700;">${fmtBRL(l.custoTotalSemCredito)}</td><td class="num-mono">${fmtBRL(l.custoUnitSemCredito)}</td>
-    </tr>`).join('') : `<tr><td colspan="27" style="text-align:center; color:var(--ink-soft); padding:24px;">Nenhum produto preenchido na aba Dados ainda.</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="26" style="text-align:center; color:var(--ink-soft); padding:24px;">Nenhum produto preenchido na aba Dados ainda.</td></tr>`;
 
   return `
   <div class="page-title">Importação Formal — Numerário</div>
@@ -6182,7 +6182,7 @@ function renderNumerarioFormal(){
   <div class="table-wrap" style="margin-bottom:10px;">
     <table style="min-width:1800px;">
       <thead><tr>
-        <th>Fornecedor</th><th>Produto</th><th>NCM</th><th>Qtd.</th><th class="num-mono">Vlr Unit $</th><th class="num-mono">Peso Líq.</th>
+        <th>Produto</th><th>NCM</th><th>Qtd.</th><th class="num-mono">Vlr Unit $</th><th class="num-mono">Peso Líq.</th>
         <th class="num-mono">Vlr Total $</th><th class="num-mono">Vlr Total R$</th>
         <th class="num-mono">Rateio Frete</th><th class="num-mono">Rateio Acréscimo</th><th class="num-mono">Vlr Aduaneiro</th>
         <th class="num-mono">Armazenagem</th><th class="num-mono">Outras Despesas</th>
@@ -6196,7 +6196,7 @@ function renderNumerarioFormal(){
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
-        <td colspan="3">TOTAL</td><td class="num-mono">${fmtNum(r.totais.qty)}</td><td></td>
+        <td colspan="2">TOTAL</td><td class="num-mono">${fmtNum(r.totais.qty)}</td><td></td>
         <td class="num-mono">${fmtNum(r.totais.peso)} kg</td>
         <td class="num-mono">${fmtUSD(r.totais.totalUSD)}</td><td class="num-mono">${fmtBRL(r.totais.totalBRL)}</td>
         <td class="num-mono">${fmtBRL(r.totais.rateioFreteTabela)}</td><td class="num-mono">${fmtBRL(r.totais.rateioAcrescimo)}</td>
@@ -8552,18 +8552,18 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
   doc.text('Rateio dos Custos por Produto', 28, y2-8);
   doc.autoTable({
     startY:y2, margin:{left:28,right:28},
-    head:[['Fornecedor','Produto','Qtd','Unit US$','Peso','Total US$','Total R$','Rateio Frete','Rateio Seguro','V.A.','Rateio I.I.','BC ICMS','ICMS','Rateio Extra','Custo Total\n(Sim)','Custo Unit\n(Sim)','Custo Total\n(Lucro)','Custo Unit\n(Lucro)']],
+    head:[['Produto','Qtd','Unit US$','Peso','Total US$','Total R$','Rateio Frete','Rateio Seguro','V.A.','Rateio I.I.','BC ICMS','ICMS','Rateio Extra','Custo Total\n(Sim)','Custo Unit\n(Sim)','Custo Total\n(Lucro)','Custo Unit\n(Lucro)']],
     body: r.linhas.map(l=>[
-      l.fornecedor||'—', l.produto||'—', fmtNum(l.qty), fmtUSD(l.vu), fmtNum(l.peso), fmtUSD(l.totalUSD),
+      l.produto||'—', fmtNum(l.qty), fmtUSD(l.vu), fmtNum(l.peso), fmtUSD(l.totalUSD),
       fmtBRL(l.totalBRL), fmtBRL(l.rateioFrete), fmtBRL(l.rateioSeguro), fmtBRL(l.valorAduaneiroProduto),
       fmtBRL(l.rateioII), fmtBRL(l.rateioBcIcms), fmtBRL(l.rateioIcms), fmtBRL(l.rateioDespExtra),
       fmtBRL(l.custoTotalSimples), fmtBRL(l.custoUnitSimples), fmtBRL(l.custoTotalLucroReal), fmtBRL(l.custoUnitLucroReal),
     ]),
-    foot:[['TOTAL','', fmtNum(r.totais.qty), '', fmtNum(r.totais.peso), fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL), fmtBRL(r.totais.rateioFrete),
+    foot:[['TOTAL', fmtNum(r.totais.qty), '', fmtNum(r.totais.peso), fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL), fmtBRL(r.totais.rateioFrete),
       fmtBRL(r.totais.rateioSeguro), fmtBRL(r.totais.valorAduaneiroProduto), fmtBRL(r.totais.rateioII), fmtBRL(r.totais.rateioBcIcms), fmtBRL(r.totais.rateioIcms),
       fmtBRL(r.totais.rateioDespExtra), fmtBRL(r.totais.custoTotalSimples), '', fmtBRL(r.totais.custoTotalLucroReal), '']],
     theme:'grid', styles:{fontSize:6.6, cellPadding:3}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:6.3},
-    columnStyles:{15:{fontStyle:'bold'}, 17:{fontStyle:'bold'}},   // Custo Unit. (Simples) e Custo Unit. (Lucro)
+    columnStyles:{14:{fontStyle:'bold'}, 16:{fontStyle:'bold'}},   // Custo Unit. (Simples) e Custo Unit. (Lucro)
     footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
   });
 
@@ -8814,20 +8814,20 @@ async function gerarDashboardPDFFormal(dados, meta){
     y += 18;
     doc.autoTable({
       startY:y, margin:{left:28,right:28},
-      head:[['Fornecedor','Produto','NCM','Qtd','Total US$','Total R$','Rat. Frete','Rat. Acrésc.','V.A.','Armazenagem','Outras Despesas',
+      head:[['Produto','NCM','Qtd','Total US$','Total R$','Rat. Frete','Rat. Acrésc.','V.A.','Armazenagem','Outras Despesas',
         'I.I.','I.P.I.','PIS','COFINS','ICMS','AFRMM*','Custo Total\nc/créd.','Custo Unit.\nc/créd.','Custo Total\ns/créd.','Custo Unit.\ns/créd.']],
       body: r.linhas.map(l=>[
-        l.fornecedor||'—', l.produto||'—', l.ncm||'—', fmtNum(l.qty), fmtUSD(l.totalUSD), fmtBRL(l.totalBRL),
+        l.produto||'—', l.ncm||'—', fmtNum(l.qty), fmtUSD(l.totalUSD), fmtBRL(l.totalBRL),
         fmtBRL(l.rateioFreteTabela), fmtBRL(l.rateioAcrescimo), fmtBRL(l.valorAduaneiro), fmtBRL(l.rateioArmazenagemTabela), fmtBRL(l.rateioOutrasTabela),
         fmtBRL(l.ii), fmtBRL(l.ipi), fmtBRL(l.pis), fmtBRL(l.cofins), fmtBRL(l.icms), fmtBRL(l.rateioAfrmmTabela),
         fmtBRL(l.custoTotalComCredito), fmtBRL(l.custoUnitComCredito), fmtBRL(l.custoTotalSemCredito), fmtBRL(l.custoUnitSemCredito),
       ]),
-      foot:[['TOTAL','','', fmtNum(r.totais.qty), fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL),
+      foot:[['TOTAL','', fmtNum(r.totais.qty), fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL),
         fmtBRL(r.totais.rateioFreteTabela), fmtBRL(r.totais.rateioAcrescimo), fmtBRL(r.totais.valorAduaneiro), fmtBRL(r.totais.rateioArmazenagemTabela), fmtBRL(r.totais.rateioOutrasTabela),
         fmtBRL(r.totais.ii), fmtBRL(r.totais.ipi), fmtBRL(r.totais.pis), fmtBRL(r.totais.cofins), fmtBRL(r.totais.icms),
         fmtBRL(r.totais.rateioAfrmmTabela), fmtBRL(r.totais.custoTotalComCredito), '', fmtBRL(r.totais.custoTotalSemCredito), '']],
       theme:'grid', styles:{fontSize:6, cellPadding:2.5}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:5.8},
-      columnStyles:{18:{fontStyle:'bold'}, 20:{fontStyle:'bold'}},   // Custo Unit. c/créd. e s/créd.
+      columnStyles:{17:{fontStyle:'bold'}, 19:{fontStyle:'bold'}},   // Custo Unit. c/créd. e s/créd.
       footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
     });
 
@@ -8843,7 +8843,6 @@ async function gerarDashboardPDFFormal(dados, meta){
       {label:'I.P.I.', value:r.totais.ipi, color:[31,158,123]},
       {label:'PIS+COFINS', value:r.totais.pis+r.totais.cofins, color:[150,110,190]},
       {label:'ICMS', value:r.totais.icms, color:[178,58,50]},
-      {label:'AFRMM', value:num(dados.afrmm), color:[139,94,60]},
     ];
     const pageH0 = doc.internal.pageSize.getHeight();
     let yDash = yEnd;
@@ -9782,7 +9781,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.8 · resumo só com tributos · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.10 · dashboard sem AFRMM · build 06/10/2026</span></div>
   `;
 }
 
