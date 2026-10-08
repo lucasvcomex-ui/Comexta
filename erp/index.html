@@ -856,7 +856,7 @@ const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:ind
 const SECAO_DA_CHAVE = {
   'cotacoes:index':'cotacoes', 'cotacoesFormal:index':'cotacoes', 'simulacoes:index':'simulador',
   'clientes:list':'cadastros', 'fornecedores:list':'cadastros', 'produtos:list':'cadastros',
-  'processos:index':'processos', 'monitoramento:list':'processos',
+  'processos:index':'processos', 'monitoramento:list':'monitoramento',
 };
 const ESTADO_DA_CHAVE = {
   'cotacoes:index':'cotacoesIndex', 'cotacoesFormal:index':'cotacoesFormalIndex', 'simulacoes:index':'simulacoesIndex',
@@ -870,7 +870,9 @@ const NUMERACAO_DA_CHAVE = {
   'simulacoes:index':{ prefixo:'SIM-', atual:'currentSimulacaoId' },
   'processos:index':{ prefixo:'PRC-', atual:'currentProcessoId' },
 };
-const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga', processos:'Processos' };
+const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga', processos:'Processos', monitoramento:'Monitoramento de Carga' };
+// Quem ainda não tem a área "Monitoramento de Carga" definida herda a permissão de Processos (como era antes de existir a área própria).
+const comMonitoramentoHerdado = perms => { const p = perms || {}; return p.monitoramento ? p : { ...p, monitoramento: p.processos }; };
 
 let usuarioAtual = null; // { id, email, nome, telefone, cargo, foto, papel, permissoes, convidado, empresa_id }
 let empresaAtual = null;
@@ -885,7 +887,7 @@ let gravacoesPendentes = 0;
 function pode(secao, acao){
   if(!usuarioAtual) return false;
   if(usuarioAtual.papel==='admin') return true;
-  const p = (usuarioAtual.permissoes||{})[secao] || {};
+  const p = comMonitoramentoHerdado(usuarioAtual.permissoes)[secao] || {};
   if(acao==='ver') return !!(p.ver || p.criar || p.editar);
   return !!p[acao];
 }
@@ -1140,12 +1142,12 @@ const PERMISSAO_DA_ACAO = {
   'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-numerario-pdf':['processos','ver'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 
-  'go:monitoramento':['processos','ver'], 'go:monitoramentoCusto':['processos','ver'],
-  'mon-add':['processos','criar'], 'mon-importar':['processos','criar'],
-  'mon-atualizar':['processos','editar'], 'mon-atualizar-um':['processos','editar'], 'mon-excluir':['processos','editar'],
-  'mon-rastrear':['processos','editar'], 'mon-rastrear-todos':['processos','editar'], 'mon-aplicar-devolucao':['processos','editar'],
+  'go:monitoramento':['monitoramento','ver'], 'go:monitoramentoCusto':['monitoramento','ver'],
+  'mon-add':['monitoramento','criar'], 'mon-importar':['monitoramento','criar'],
+  'mon-atualizar':['monitoramento','editar'], 'mon-atualizar-um':['monitoramento','editar'], 'mon-excluir':['monitoramento','editar'],
+  'mon-rastrear':['monitoramento','editar'], 'mon-rastrear-todos':['monitoramento','editar'], 'mon-aplicar-devolucao':['monitoramento','editar'],
 };
-const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', mon:'processos' };
+const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', mon:'monitoramento' };
 
 function permissaoDaAcao(action){
   return PERMISSAO_DA_ACAO[action] || PERMISSAO_DA_ACAO[action.split(':')[0]] || null;
@@ -1226,10 +1228,10 @@ function nomeEmpresa(){ return (empresaAtual && (empresaAtual.nome_fantasia || e
 function perfilIncompleto(){ return !!usuarioAtual && usuarioAtual.convidado && (!usuarioAtual.telefone || !usuarioAtual.cargo); }
 
 function permissoesPadraoConvite(){
-  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false}, processos:{ver:true,criar:false,editar:false} };
+  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false}, processos:{ver:true,criar:false,editar:false}, monitoramento:{ver:true,criar:false,editar:false} };
 }
 function matrizPermissoesHtml(prefixo, permissoes, desabilitada){
-  const p = permissoes || {};
+  const p = comMonitoramentoHerdado(permissoes);
   return `<div class="perm-matrix">
     <div class="pm-head"><span>Área</span>${CFG_ACOES.map(a=>`<span>${a==='ver'?'Visualizar':a==='criar'?'Criar':'Editar'}</span>`).join('')}</div>
     ${Object.entries(SECOES).map(([secao, rotulo])=>`
@@ -1254,7 +1256,7 @@ function lerMatriz(prefixo){
 function resumoPermissoes(perfil){
   if(perfil.papel==='admin') return 'Acesso total';
   const partes = Object.entries(SECOES).map(([secao, rotulo])=>{
-    const p = (perfil.permissoes||{})[secao] || {};
+    const p = comMonitoramentoHerdado(perfil.permissoes)[secao] || {};
     const acoes = [p.ver||p.criar||p.editar ? 'ver' : null, p.criar ? 'criar' : null, p.editar ? 'editar' : null].filter(Boolean);
     return acoes.length ? `${rotulo.split(' ')[0]}: ${acoes.join(', ')}` : null;
   }).filter(Boolean);
@@ -1325,7 +1327,7 @@ function renderConfigPerfil(){
   <div class="card">
     <div class="section-title" style="margin-bottom:12px;"><span class="num">02</span> Meu acesso</div>
     <p class="page-sub" style="margin:0 0 14px;">Empresa: <b>${esc(nomeEmpresa())}</b> · ${souAdmin() ? 'Administrador (acesso total)' : 'Permissões definidas pelo administrador'}</p>
-    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1}, processos:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
+    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1}, processos:{ver:1,criar:1,editar:1}, monitoramento:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
   </div>`;
 }
 
@@ -4680,8 +4682,8 @@ Object.defineProperty(state, 'fornecedores', { configurable:true, enumerable:tru
 
 /* ============================ Monitoramento de Carga ============================
    Containers acompanhados (ETD, ETA, países, portos, free time e custo após o free time). Podem ser
-   adicionados à mão ou puxados dos Processos (Transporte → Containers). Fica na mesma área de permissão
-   dos Processos. Se o servidor ainda não aceitar a chave "monitoramento:list", uma cópia local garante
+   adicionados à mão ou puxados dos Processos (Transporte → Containers). Tem área de permissão própria
+   ("Monitoramento de Carga"; quem ainda não a tem definida herda a de Processos). Se o servidor ainda não aceitar a chave "monitoramento:list", uma cópia local garante
    que nada se perca neste navegador. */
 const MON_SITUACOES = {
   sem_dados:  { rotulo:'Informe free time e data', classe:'badge-navy' },
@@ -5135,7 +5137,7 @@ function renderMonitoramento(){
 }
 function posRenderMonitoramento(){
   aplicarFiltroMonitoramento();
-  if(!(pode('processos','editar') || pode('processos','criar'))) document.querySelectorAll('[data-mon], [data-mon-filtro="__"]').forEach(e=>{ e.disabled = true; });
+  if(!(pode('monitoramento','editar') || pode('monitoramento','criar'))) document.querySelectorAll('[data-mon], [data-mon-filtro="__"]').forEach(e=>{ e.disabled = true; });
 }
 
 /* --- tela: Custo de Free Time (calculadora) --- */
@@ -9776,7 +9778,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.11 · rateio sem AFRMM · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.12 · permissão do Monitoramento · build 06/10/2026</span></div>
   `;
 }
 
