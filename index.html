@@ -4887,10 +4887,13 @@ async function rastrearContainer(id, opcoes){
     const { status, corpo } = await monChamarApi(m);
     if(status===401){ sessaoExpirada(); return 'fatal'; }
     if(!corpo || !corpo.ok){
-      const msg = (corpo && corpo.mensagem) || 'Falha ao consultar o rastreamento.';
+      const naoPublicada = status===404 || (!corpo && status!==0 && status<500);
+      const msg = (corpo && corpo.mensagem)
+        || (naoPublicada ? 'A função de rastreio (/api/rastreio) não foi encontrada no site. Confira se o arquivo api/rastreio.mjs está na pasta api/ do GitHub e se o deploy terminou.'
+          : 'Falha ao consultar o rastreamento (erro ' + status + '). Abra /api/rastreio no navegador para ver o diagnóstico.');
       m.rastreio = { ...(m.rastreio||{}), erro:msg, atualizadoEm:new Date().toISOString() };
       if(!opcoes.lote) toast(msg);
-      resultado = [503,403,502].includes(status) && corpo && ['sem_chave','sem_permissao','chave_recusada','config'].includes(corpo.erro) ? 'fatal' : 'erro';
+      resultado = naoPublicada || ([503,403,502,500].includes(status) && corpo && ['sem_chave','sem_permissao','chave_recusada','config'].includes(corpo.erro)) ? 'fatal' : 'erro';
     }else{
       const mudou = monAplicarRastreio(m, corpo);
       resultado = 'ok';
@@ -9778,7 +9781,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.12 · permissão do Monitoramento · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.13 · rastreio: diagnóstico · build 06/10/2026</span></div>
   `;
 }
 
