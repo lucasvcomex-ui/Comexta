@@ -986,6 +986,7 @@ function aplicarNoEstado(key, valor){
   if(key==='produtos:list') state.produtos = (valor||[]).map(normalizeProdutoCadastro);
   else if(key==='clientes:list') state.clientes = (valor||[]).map(e=>({ ...e, tipoCadastro: e.tipoCadastro || 'cliente' }));
   else state[campo] = valor || [];
+  if(key==='cotacoesFormal:index') recalcularResumosFormaisSalvos();
 }
 
 function gravarNoServidor(key){
@@ -4261,7 +4262,9 @@ function computeDadosFormal(d){
   const outrasLinhasCalc = d.outrasDespesasLinhas.map(l=>calcDespesaLinha(l,outrasCambio));
   const outrasTotal = sum(outrasLinhasCalc.map(l=>l.total));
 
-  const despesasNF = armazenagemTotal+outrasTotal+num(d.capatazia)+num(d.siscomex)+num(d.afrmm); // compõem a Nota Fiscal, rateadas por valor
+  // Custo = Invoice + Frete (aba Frete) + Armazenagem + Outras Despesas + tributos. Frete, Seguro, Acréscimo, Capatazia, Siscomex e AFRMM
+  // do Desembaraço NÃO somam no custo: servem só para compor as bases dos tributos (Valor Aduaneiro e base do ICMS).
+  const despesasNF = armazenagemTotal+outrasTotal;
   const afrmmSiscomexTotal = num(d.siscomex)+num(d.afrmm); // só estes dois entram na base do ICMS
 
   const cambioDesembaraco = num(d.desembaracoCambio);
@@ -4291,14 +4294,17 @@ function computeRateioFormal(d, c){
     const rateioAcrescimo = valorShare*c.acrescimoBRLD;               // rateio por valor (K)
     const valorAduaneiro = p.totalBRL+rateioFrete+rateioSeguro+rateioAcrescimo; // L — base do I.I./I.P.I./PIS/COFINS
     const vmldProduto = p.totalBRL+rateioFrete+rateioSeguro;          // VMLD por produto (sem acréscimo)
-    const rateioDespesasNF = valorShare*c.despesasNF;                 // Capatazia + Siscomex + AFRMM + Armazenagem + Outras (soma no custo final)
+    const rateioDespesasNF = valorShare*c.despesasNF;                 // Armazenagem + Outras Despesas (soma no custo final)
     const rateioAfrmmSiscomex = valorShare*c.afrmmSiscomexTotal;      // só Siscomex + AFRMM (base do ICMS)
 
     // --- Colunas de exibição da tabela "Rateio dos Custos por Produto" (Numerário/PDF) ---
     // Rateio Frete exibido = Frete Marítimo + Taxas de Origem + Taxas de Destino (aba Frete) + Seguro
-    const rateioFreteTabela = pesoShare*c.freteTotalBRL + rateioSeguro;
+    // O CUSTO usa o frete REAL pago (aba Frete: marítimo + origem + destino, já com os seguros lançados lá), nunca o
+    // frete/seguro "declarados" no Desembaraço — esses servem só de base de cálculo dos tributos (Valor Aduaneiro).
+    const freteShare = c.sumPeso>0 ? pesoShare : valorShare;          // por peso; sem pesos, por valor
+    const rateioFreteTabela = freteShare*c.freteTotalBRL;
     const rateioArmazenagemTabela = valorShare*c.armazenagemTotal;
-    const rateioOutrasTabela = valorShare*(c.outrasTotal + num(d.capatazia) + num(d.siscomex));
+    const rateioOutrasTabela = valorShare*c.outrasTotal;
     const rateioAfrmmTabela = valorShare*num(d.afrmm);
 
     const iiRate = num(p.ii), ipiRate = num(p.ipi), pisRate = num(p.pis), cofinsRate = num(p.cofins), icmsRate = num(p.icms);
@@ -4315,8 +4321,10 @@ function computeRateioFormal(d, c){
     const bcIcms = icmsRate<1 ? (valorAduaneiro+ii+ipi+pis+cofins+rateioAfrmmSiscomex)/(1-icmsRate) : 0;
     const icms = bcIcms*icmsRate;
 
-    const custoTotalComCredito = valorAduaneiro+ii+rateioDespesasNF;
-    const custoTotalSemCredito = valorAduaneiro+ii+ipi+pis+cofins+icms+rateioDespesasNF;
+    // Custo = Invoice + Frete (aba Frete) + Armazenagem + Outras Despesas + tributos (I.I., IPI, PIS, COFINS e ICMS).
+    // É exatamente a soma das linhas do "Resumo das Despesas". Com créditos, IPI/PIS/COFINS/ICMS (recuperáveis) ficam de fora.
+    const custoTotalComCredito = p.totalBRL + rateioFreteTabela + rateioDespesasNF + ii;
+    const custoTotalSemCredito = custoTotalComCredito + ipi + pis + cofins + icms;
     const custoUnitComCredito = p.qty>0 ? custoTotalComCredito/p.qty : 0;
     const custoUnitSemCredito = p.qty>0 ? custoTotalSemCredito/p.qty : 0;
 
@@ -4643,6 +4651,8 @@ async function loadInitialData(){
   if(prod) state.produtos = prod.map(normalizeProdutoCadastro);
   if(draftF) state.dadosFormal = normalizeDadosFormal(draftF);
   if(idxF) state.cotacoesFormalIndex = idxF;
+  // a fórmula do custo mudou: recalcula o resumo guardado nas cotações Formais já salvas (e grava a correção)
+  if(recalcularResumosFormaisSalvos() && pode('cotacoes','editar')) persistCotacoesFormalIndex();
   if(draftS) state.simulacao = normalizeSimulacao(draftS);
   if(idxS) state.simulacoesIndex = idxS;
 }
@@ -5839,7 +5849,7 @@ function renderDadosFormal(){
         <div class="field"><label>Siscomex (R$)</label><input type="number" step="any" min="0" class="input-blue" data-bind="siscomex" value="${esc(d.siscomex)}" placeholder="0.00"></div>
         <div class="field"><label>AFRMM (R$)</label><input type="number" step="any" min="0" class="input-blue" data-bind="afrmm" value="${esc(d.afrmm)}" placeholder="0.00"></div>
       </div>
-      <p class="hint" style="margin:8px 0 0;">Siscomex e AFRMM entram na base de cálculo do ICMS (VMLD + I.I. + I.P.I. + PIS + COFINS + AFRMM + Siscomex). Capatazia soma apenas no custo final da mercadoria.</p>
+      <p class="hint" style="margin:8px 0 0;">Siscomex e AFRMM entram na base de cálculo do ICMS (VMLD + I.I. + I.P.I. + PIS + COFINS + AFRMM + Siscomex). Frete, Seguro, Acréscimo, Capatazia, Siscomex e AFRMM compõem as bases de cálculo dos tributos e não são somados no Resumo das Despesas nem no custo — só o resultado dos tributos entra na soma.</p>
       <hr class="hairline">
       <p class="hint" style="margin:0 0 10px;">Cada produto pode ter NCM e alíquotas diferentes — preencha a alíquota de cada tributo por produto.</p>
       <div class="table-wrap">
@@ -6157,9 +6167,9 @@ function renderNumerarioFormal(){
 
   <div class="section-title" style="margin-bottom:12px;"><span class="num">01</span> Resumo das Despesas</div>
   <div class="table-wrap" style="margin-bottom:20px;">
-    ${resumoTabelaHtml(resumoDespesasFormal(d,c,r))}
+    ${resumoTabelaHtml(resumoDespesasFormal(d,c,r), 'Total das despesas (= Custo Total s/ créditos)', fmtBRL(resumoTotalFormal(d,c,r)))}
   </div>
-  <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 20px;">A coluna Taxa mostra o câmbio aplicado a cada despesa em moeda estrangeira (USD/EUR/RMB). Cada produto usa o câmbio próprio informado na aba Dados. As alíquotas de I.I., I.P.I., PIS, COFINS e ICMS são definidas por produto (NCM), na aba Dados → Desembaraço. Base do ICMS = Valor Aduaneiro + I.I. + I.P.I. + PIS + COFINS + AFRMM + Siscomex.</p>
+  <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 20px;">A coluna Taxa mostra o câmbio aplicado a cada despesa em moeda estrangeira (USD/EUR/RMB). Cada produto usa o câmbio próprio informado na aba Dados. Frete, Seguro, Acréscimo, Capatazia, Siscomex e AFRMM do Desembaraço não entram na soma: servem só para compor as bases dos tributos — o custo soma apenas o resultado dos tributos (I.I., I.P.I., PIS, COFINS e ICMS). As alíquotas de I.I., I.P.I., PIS, COFINS e ICMS são definidas por produto (NCM), na aba Dados → Desembaraço. Base do ICMS = Valor Aduaneiro + I.I. + I.P.I. + PIS + COFINS + AFRMM + Siscomex.</p>
 
   <div class="kpi-row" style="margin-bottom:24px;">
     <div class="kpi"><div class="k-lbl">Valor Aduaneiro</div><div class="k-val">${fmtBRL(r.totais.valorAduaneiro)}</div></div>
@@ -6181,7 +6191,7 @@ function renderNumerarioFormal(){
         <th class="num-mono">PIS %</th><th class="num-mono">PIS R$</th>
         <th class="num-mono">COFINS %</th><th class="num-mono">COFINS R$</th>
         <th class="num-mono">ICMS %</th><th class="num-mono">ICMS R$</th>
-        <th class="num-mono">AFRMM</th>
+        <th class="num-mono" title="Informativo: o AFRMM compõe a base do ICMS e não soma no custo">AFRMM*</th>
         <th class="num-mono">Custo Total (c/créd.)</th><th class="num-mono">Custo Unit.</th><th class="num-mono">Custo Total (s/créd.)</th><th class="num-mono">Custo Unit.</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -6204,7 +6214,7 @@ function renderNumerarioFormal(){
     </table>
   </div>
   <p class="hint" style="color:var(--ink-soft); font-size:12px; margin-top:0;">
-    "Com créditos" considera que I.P.I., PIS, COFINS e ICMS são recuperáveis (regime não-Simples) — só o Imposto de Importação (não recuperável) entra no custo. "Sem créditos" soma todos os tributos ao custo (ex: empresas no Simples Nacional ou que não aproveitam os créditos).
+    * AFRMM é informativo: compõe a base do ICMS e não soma no custo. "Com créditos" considera que I.P.I., PIS, COFINS e ICMS são recuperáveis (regime não-Simples) — só o Imposto de Importação (não recuperável) entra no custo. "Sem créditos" soma todos os tributos ao custo (ex: empresas no Simples Nacional ou que não aproveitam os créditos).
   </p>
 
   ${d.observacoes ? `
@@ -8380,6 +8390,24 @@ function fmtPct2(n){ return (num(n)*100).toLocaleString('pt-BR', { minimumFracti
 function linhaProdutoResumo(p, taxa){
   return { label: `${p.fornecedor||'—'} — ${p.produto||'—'}`, ext: fmtUSD(p.totalUSD), brl: fmtBRL(p.totalBRL), taxa: fmtNum(num(taxa),4), indent:true };
 }
+// Cotações Formais salvas guardam um "resumo" (custos) calculado na hora de salvar. Como a fórmula do custo mudou,
+// recalcula o resumo de todas as cotações salvas a partir dos dados de cada uma.
+function resumoFormalAtual(dados){
+  const d = normalizeDadosFormal(dados), c = computeDadosFormal(d), r = computeRateioFormal(d, c);
+  return { itens:r.linhas.length, valorAduaneiro:r.totais.valorAduaneiro, custoComCredito:r.totais.custoTotalComCredito, custoSemCredito:r.totais.custoTotalSemCredito };
+}
+function recalcularResumosFormaisSalvos(){
+  let mudou = 0;
+  (state.cotacoesFormalIndex||[]).forEach(cot=>{
+    try{
+      const novo = resumoFormalAtual(cot.dados), velho = cot.resumo || {};
+      if(Math.abs(num(velho.custoSemCredito)-novo.custoSemCredito)>0.005 || Math.abs(num(velho.custoComCredito)-novo.custoComCredito)>0.005 || num(velho.itens)!==novo.itens){
+        cot.resumo = { ...velho, ...novo }; mudou++;
+      }
+    }catch(e){ console.error('resumo da cotação', cot && cot.id, e); }
+  });
+  return mudou;
+}
 function resumoDespesasSimplificada(d, c, r){
   const prods = c.produtos.filter(p=>(p.qty>0) || p.fornecedor || p.produto);
   const linhas = prods.length ? prods.map(p=>linhaProdutoResumo(p, d.cambioInvoice))
@@ -8412,12 +8440,22 @@ function resumoDespesasFormal(d, c, r){
     { label:'PIS', ext:'', brl:fmtBRL(r.totais.pis), taxa:'' },
     { label:'COFINS', ext:'', brl:fmtBRL(r.totais.cofins), taxa:'' },
     { label:'ICMS', ext:'', brl:fmtBRL(r.totais.icms), taxa:'' },
-    { label:'AFRMM', ext:'', brl:fmtBRL(num(d.afrmm)), taxa:'' },
   ];
 }
-function resumoTabelaHtml(rows){
+// Total das despesas do Resumo = Custo Total (s/ créditos). Calculado direto dos valores (não dos textos).
+function resumoTotalFormal(d, c, r){
+  const ok = l => l.descricao || num(l.tarifa)>0;
+  const prods = c.produtos.filter(p=>(p.qty>0) || p.fornecedor || p.produto);
+  const somaLinhas = ls => ls.filter(ok).reduce((a,l)=>a+num(l.total), 0);
+  return prods.reduce((a,p)=>a+num(p.totalBRL), 0)
+    + somaLinhas(c.freteLinhasCalc) + somaLinhas(c.taxasOrigemCalc) + somaLinhas(c.taxasDestinoCalc)
+    + somaLinhas(c.armazenagemLinhasCalc) + somaLinhas(c.outrasLinhasCalc)
+    + r.totais.ii + r.totais.ipi + r.totais.pis + r.totais.cofins + r.totais.icms;
+}
+function resumoTabelaHtml(rows, totalLabel, totalValor){
   return `<table><thead><tr><th>Despesa</th><th class="num-mono">Moeda Ext.</th><th class="num-mono">Moeda R$</th><th class="num-mono">Taxa</th></tr></thead>
-    <tbody>${rows.map(x=>`<tr><td${x.indent?' style="padding-left:24px;"':''}>${esc(x.label)}</td><td class="num-mono">${x.ext}</td><td class="num-mono">${x.brl}</td><td class="num-mono">${x.taxa}</td></tr>`).join('')}</tbody></table>`;
+    <tbody>${rows.map(x=>`<tr><td${x.indent?' style="padding-left:24px;"':''}>${esc(x.label)}</td><td class="num-mono">${x.ext}</td><td class="num-mono">${x.brl}</td><td class="num-mono">${x.taxa}</td></tr>`).join('')}</tbody>
+    ${totalLabel ? `<tfoot><tr><td>${esc(totalLabel)}</td><td></td><td class="num-mono">${totalValor}</td><td></td></tr></tfoot>` : ''}</table>`;
 }
 function resumoRowsPdf(rows){ return rows.map(x=>[(x.indent?'   ':'')+x.label, x.ext, x.brl, x.taxa]); }
 // Tabela "Informações do Produto" (impostos por produto) — entre o Resumo das Despesas e o Rateio de Custos.
@@ -8751,6 +8789,8 @@ async function gerarDashboardPDFFormal(dados, meta){
       startY:y, margin:{left:28,right:28},
       head:[['Despesa','Moeda Ext.','Moeda R$','Taxa']],
       body: resumoRowsPdf(resumoDespesasFormal(dados, c, r)),
+      foot: [['Total das despesas (= Custo Total s/ créditos)', '', fmtBRL(resumoTotalFormal(dados, c, r)), '']],
+      footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
       theme:'grid', styles:{fontSize:7.5, cellPadding:3}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:7},
       columnStyles:{1:{halign:'right', cellWidth:100}, 2:{halign:'right', cellWidth:100}, 3:{halign:'right', cellWidth:70}},
     });
@@ -8775,7 +8815,7 @@ async function gerarDashboardPDFFormal(dados, meta){
     doc.autoTable({
       startY:y, margin:{left:28,right:28},
       head:[['Fornecedor','Produto','NCM','Qtd','Total US$','Total R$','Rat. Frete','Rat. Acrésc.','V.A.','Armazenagem','Outras Despesas',
-        'I.I.','I.P.I.','PIS','COFINS','ICMS','AFRMM','Custo Total\nc/créd.','Custo Unit.\nc/créd.','Custo Total\ns/créd.','Custo Unit.\ns/créd.']],
+        'I.I.','I.P.I.','PIS','COFINS','ICMS','AFRMM*','Custo Total\nc/créd.','Custo Unit.\nc/créd.','Custo Total\ns/créd.','Custo Unit.\ns/créd.']],
       body: r.linhas.map(l=>[
         l.fornecedor||'—', l.produto||'—', l.ncm||'—', fmtNum(l.qty), fmtUSD(l.totalUSD), fmtBRL(l.totalBRL),
         fmtBRL(l.rateioFreteTabela), fmtBRL(l.rateioAcrescimo), fmtBRL(l.valorAduaneiro), fmtBRL(l.rateioArmazenagemTabela), fmtBRL(l.rateioOutrasTabela),
@@ -8791,7 +8831,9 @@ async function gerarDashboardPDFFormal(dados, meta){
       footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
     });
 
-    const yEnd = doc.lastAutoTable.finalY + 26;
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(110,120,135);
+    doc.text('* AFRMM é informativo: compõe a base do ICMS e não soma no custo. Frete, Seguro, Acréscimo, Capatazia e Siscomex do Desembaraço também só compõem as bases dos tributos.', 28, doc.lastAutoTable.finalY + 11);
+    const yEnd = doc.lastAutoTable.finalY + 36;
     const dashItems = [
       {label:'Invoice', value:c.sumTotalBRL, color:[23,58,94]},
       {label:'Frete (Marít.+Orig.+Dest.)', value:c.freteTotalBRL, color:[192,122,37]},
@@ -9740,7 +9782,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.6 · rastreio por API · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.8 · resumo só com tributos · build 06/10/2026</span></div>
   `;
 }
 
