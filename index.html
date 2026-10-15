@@ -805,6 +805,38 @@ tbody tr:hover{background:#F9FAFD;}
 .mon-min-grid b{font-size:13.5px; color:var(--navy-deep); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 @media (max-width:980px){ .mon-min-grid{grid-template-columns:1fr 1fr 1fr;} }
 @media (max-width:560px){ .mon-min-grid{grid-template-columns:1fr 1fr;} }
+
+/* Dashboards da Home */
+.dash-topo{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:26px 0 16px; flex-wrap:wrap;}
+.dash-bloco{margin-bottom:20px; padding:20px 22px;}
+.dash-head{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:14px;}
+.dash-nome{font-size:18px; font-weight:700; color:var(--navy-deep);}
+.dash-periodo{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+.dash-controles{display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;}
+.dash-seg{display:inline-flex; background:var(--paper); border:1px solid var(--line); border-radius:9px; padding:3px; gap:2px;}
+.dash-seg button{border:0; background:none; padding:6px 13px; border-radius:7px; font-size:13px; cursor:pointer; color:#4B586B; font-family:inherit;}
+.dash-seg button.ativo{background:var(--navy); color:#fff; font-weight:700;}
+.dash-sel{display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:#4B586B;}
+.dash-sel select{border:1px solid #DFE3EC; border-radius:8px; padding:6px 8px; font-size:13px; font-family:inherit; background:#fff;}
+.dash-comp{display:flex; align-items:center; gap:6px; font-size:12.5px; color:#4B586B; flex-wrap:wrap;}
+.dash-comp em{color:var(--ink-soft); font-size:12px;}
+.dash-chip{border:1px solid #DFE3EC; background:#fff; border-radius:999px; padding:4px 11px; font-size:12.5px; cursor:pointer; font-family:inherit; color:#4B586B;}
+.dash-chip.ativo{background:var(--amber-100); border-color:var(--amber); color:var(--amber-deep); font-weight:700;}
+.dash-kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px;}
+.dash-kpi{background:var(--paper); border:1px solid var(--line); border-left:4px solid var(--cor,#173A5E); border-radius:10px; padding:11px 14px; display:flex; flex-direction:column; gap:3px; text-align:left; font-family:inherit;}
+.dash-kpi span{font-size:12px; color:var(--ink-soft);}
+.dash-kpi b{font-size:20px; color:var(--navy-deep); font-family:var(--font-mono);}
+.dash-kpi.sel{cursor:pointer; transition:transform .12s ease, box-shadow .12s ease;}
+.dash-kpi.sel:hover{transform:translateY(-1px); box-shadow:var(--shadow);}
+.dash-kpi.sel.ativo{background:#fff; box-shadow:0 0 0 2px var(--cor,#173A5E);}
+.dash-corpo{display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:18px;}
+.dash-lado{display:flex; flex-direction:column; gap:14px;}
+.dash-sub-t{font-size:12.5px; font-weight:700; color:#4B586B; margin-bottom:6px;}
+.dash-canvas{position:relative; height:310px;} .dash-canvas.curto{height:148px;}
+.dash-baixar-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px;}
+.dash-baixar-t{font-size:13px; font-weight:700; color:var(--navy); margin-bottom:8px;}
+.dash-check{display:flex; align-items:center; gap:8px; font-size:14px; margin:6px 0; cursor:pointer;}
+@media (max-width:980px){ .dash-corpo{grid-template-columns:1fr;} .dash-controles{justify-content:flex-start;} .dash-baixar-grid{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
@@ -5304,6 +5336,8 @@ const ROUTE_META = {
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
 state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.monRastreando = {}; state.monLote = null; state.monDiag = null;
+state.dash = { cot:{gran:'mes',ano:0,mes:0,comp:[]}, proc:{gran:'mes',ano:0,mes:0,comp:[]}, mon:{gran:'mes',ano:0,mes:0,comp:[],medida:'qtd'}, fin:{gran:'mes',ano:0,mes:0,comp:[],visao:'total'} };
+state.dashSel = { cot:true, proc:true, mon:true, fin:true, cad:true }; state.dashFormato = 'pdf'; state.dashBaixar = { aberto:false };
 state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
 const SIM_PROTECTED_ROUTES = ['simCarga','simCarregando','simPaletes','simEquipamentos','simEmbalagem','simResultado'];
 function navigate(route){
@@ -9460,6 +9494,7 @@ function onAppClick(e){
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1, a2))) return;
   if(cmd.startsWith('mon-') && acaoMonitoramento(cmd, a1, a2)) return;
+  if(cmd.startsWith('dash-') && acaoDash(cmd, a1, a2)) return;
   if(cmd.startsWith('cot-') && acaoTemplateCotacoes(cmd, a1, a2)) return;
   if(cmd.startsWith('ftpl-') && acaoFiltrosTpl(cmd, a1)) return;
   if(cmd==='exportar'){ exportarTela(a1, a2); return; }
@@ -9673,6 +9708,7 @@ function onAppChange(e){
   if(onConfigChange(el)) return;
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'change'); return; }
+  if(el.hasAttribute('data-dash') || el.hasAttribute('data-dash-sel') || el.hasAttribute('data-dash-fmt')){ onDashInput(el); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
   if(el.hasAttribute('data-cadtpl-campo')){ onCadTemplateCampo(el); return; }
@@ -9809,74 +9845,414 @@ init();
 
 /* --------------------------------- Home ----------------------------------- */
 function renderHome(){
-  const nCot = state.cotacoesIndex.length + state.cotacoesFormalIndex.length;
-  const nCli = state.clientes.length, nProd = state.produtos.length;
+  const visiveis = DASH_ORDEM.filter(dashVisivel);
+  const painel = state.dashBaixar.aberto ? `
+  <div class="card dash-baixar">
+    <div class="section-title" style="margin-bottom:12px;">Baixar dashboards</div>
+    <div class="dash-baixar-grid">
+      <div>
+        <div class="dash-baixar-t">Quais dashboards?</div>
+        ${DASH_ORDEM.concat(['cad']).filter(i=>i==='cad' || dashVisivel(i)).map(i=>`<label class="dash-check"><input type="checkbox" data-dash-sel="${i}" ${state.dashSel[i]?'checked':''}> ${esc(DASH_TITULOS[i])}</label>`).join('')}
+      </div>
+      <div>
+        <div class="dash-baixar-t">Formato</div>
+        <label class="dash-check"><input type="radio" name="dash-fmt" data-dash-fmt="pdf" ${state.dashFormato==='pdf'?'checked':''}> PDF (gráficos + tabelas)</label>
+        <label class="dash-check"><input type="radio" name="dash-fmt" data-dash-fmt="xml" ${state.dashFormato==='xml'?'checked':''}> XML (dados)</label>
+        <p class="hint" style="margin:10px 0 0;">O arquivo sai com o período e a comparação que estão na tela de cada dashboard.</p>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary btn-sm" data-action="dash-baixar">${ICONS.download} Baixar selecionados</button>
+      <button class="btn btn-ghost btn-sm" data-action="dash-baixar-abrir">Fechar</button>
+    </div>
+  </div>` : '';
   return `
   <div class="home-hero">
     <div class="kicker">Painel de controle</div>
     <h1>Comexta, comércio exterior inteligente</h1>
-    <p>Preencha os dados da invoice, do frete e do desembaraço aduaneiro; o sistema calcula o rateio de custos por produto automaticamente e guarda cada cotação com um número sequencial, pronta para reabrir ou exportar em PDF.</p>
+    <p>Acompanhe cotações, processos, containers e custos. Cada dashboard tem o seu próprio período (dia, semana, mês ou ano) e pode comparar o mesmo período entre anos diferentes.</p>
   </div>
 
-  <div class="module-grid">
-    <div class="module-card blue ${state.openModule==='imp'?'open':''}" id="mod-imp">
-      <div class="module-head" data-action="toggle-module:imp">
-        <div class="module-icon">${ICONS.ship}</div>
-        <div class="mt"><h3>Importação</h3><p>Simplificada e Formal — dados da invoice, numerário com rateio de custos e histórico de cotações.</p></div>
-        <div class="module-chevron">${ICONS.chevron}</div>
-      </div>
-      <div class="module-sub"><div class="module-sub-inner">
-        <div class="sub-btn" data-action="go:dados">${ICONS.data} Nova Cotação (Simplificada) <span class="desc">Invoice, produtos, frete e desembaraço</span></div>
-        <div class="sub-btn" data-action="go:dadosFormal">${ICONS.data} Nova Cotação (Formal) <span class="desc">NCM, tributos por produto e despesas detalhadas</span></div>
-        <div class="sub-btn" data-action="go:cotacoesTodas">${ICONS.quote} Cotações Salvas <span class="desc">${nCot} salva${nCot===1?'':'s'}</span></div>
-      </div></div>
-    </div>
-
-    <div class="module-card blue ${state.openModule==='proc'?'open':''}" id="mod-proc">
-      <div class="module-head" data-action="toggle-module:proc">
-        <div class="module-icon">${ICONS.folder}</div>
-        <div class="mt"><h3>Processos</h3><p>Acompanhamento dos processos de importação: cliente, produto, transporte, financeiro e desembaraço.</p></div>
-        <div class="module-chevron">${ICONS.chevron}</div>
-      </div>
-      <div class="module-sub"><div class="module-sub-inner">
-        <div class="sub-btn" data-action="proc-novo">${ICONS.plus} Cadastrar Novo Processo <span class="desc">Cliente, produto, transporte, financeiro e desembaraço</span></div>
-        <div class="sub-btn" data-action="go:processos">${ICONS.folder} Processos cadastrados <span class="desc">${(state.processosIndex||[]).length} processo${(state.processosIndex||[]).length===1?'':'s'}</span></div>
-      </div></div>
-    </div>
-
-    <div class="module-card amber ${state.openModule==='cad'?'open':''}" id="mod-cad">
-      <div class="module-head" data-action="toggle-module:cad">
-        <div class="module-icon">${ICONS.users}</div>
-        <div class="mt"><h3>Cadastro</h3><p>Clientes e empresas (fornecedores, agentes, despachantes…) e produtos usados para agilizar o preenchimento.</p></div>
-        <div class="module-chevron">${ICONS.chevron}</div>
-      </div>
-      <div class="module-sub"><div class="module-sub-inner">
-        <div class="sub-btn" data-action="go:cad-cliente">${ICONS.client} Clientes e Empresas <span class="desc">${nCli} cadastro${nCli===1?'':'s'}</span></div>
-        <div class="sub-btn" data-action="go:cad-produto">${ICONS.product} Produto <span class="desc">${nProd} cadastrado${nProd===1?'':'s'}</span></div>
-      </div></div>
-    </div>
+  <div class="dash-topo">
+    <div class="section-title" style="margin:0;"><span class="num">•</span> Dashboards</div>
+    <button class="btn btn-ghost btn-sm" data-action="dash-baixar-abrir">${ICONS.download} Baixar dashboards</button>
   </div>
-
-  <div class="section-title" style="margin:34px 0 16px;"><span class="num">•</span> Dashboards</div>
+  ${painel}
+  ${visiveis.map(id=>`<div class="card dash-bloco" id="dash-${id}">${dashBlocoHtml(id)}</div>`).join('')}
   <div class="dash-grid">
     <div class="card-flat dash-card">
       <div class="dash-title">Cadastros Ativos</div>
       <div class="dash-canvas-wrap"><canvas id="chart-cadastros"></canvas></div>
     </div>
-    <div class="card-flat dash-card">
-      <div class="dash-title">Cotações Salvas</div>
-      ${nCot ? `<div class="dash-canvas-wrap"><canvas id="chart-cotacoes"></canvas></div>`
-             : `<div class="dash-empty">${ICONS.quote}<span>Nenhuma cotação salva ainda</span></div>`}
-    </div>
-    <div class="card-flat dash-card">
-      <div class="dash-title">Custos Totais do Rateio</div>
-      ${nCot ? `<div class="dash-canvas-wrap"><canvas id="chart-custos"></canvas></div>`
-             : `<div class="dash-empty">${ICONS.calc}<span>Salve um cálculo no Numerário para ver os custos</span></div>`}
-    </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.16 · referência do cliente · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.17 · dashboards da Home · build 15/10/2026</span></div>
   `;
+}
+
+/* ============================ Dashboards da Home ============================
+   Cotações Salvas, Processos (por status), Monitoramento de Carga e Financeiro dos processos.
+   Cada um tem o próprio período (dia / semana / mês / ano) e pode comparar o mesmo período entre anos.
+   Os dados vêm direto do que está cadastrado; nada é guardado à parte. */
+const DASH_ORDEM = ['cot','proc','mon','fin'];
+const DASH_TITULOS = { cot:'Cotações Salvas', proc:'Processos por Status', mon:'Monitoramento de Carga', fin:'Financeiro dos Processos', cad:'Cadastros Ativos' };
+const DASH_SECAO = { cot:'cotacoes', proc:'processos', mon:'monitoramento', fin:'processos' };
+const dashVisivel = id => { try{ return pode(DASH_SECAO[id], 'ver'); }catch(e){ return true; } };
+const DASH_MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const DASH_MESES_LONGOS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DASH_GRAN = { dia:'Dia', semana:'Semana', mes:'Mês', ano:'Ano' };
+const DASH_CORES_ANO = ['#173A5E','#C07A25','#2F6B4F','#6E5EA6','#B23A32','#4E8F6F','#8F5A17','#3B5F8A'];
+const DASH_COR_STATUS_PROC = { aberto:'#173A5E', producao:'#3B5F8A', transito_origem:'#C07A25', warehouse_origem:'#D69A4A', desembaraco_origem:'#E3B877', porto_origem:'#A8691C',
+  transito_internacional:'#8F5A17', porto_destino:'#B0793A', desembaraco:'#6E5EA6', desembaracado:'#8E7FC4', transito_destino:'#2F6B4F', entregue:'#4E8F6F', finalizado:'#1F4E38', cancelado:'#B23A32' };
+const DASH_COR_SIT_MON = { sem_dados:'#9AA5B8', aguardando:'#173A5E', no_prazo:'#2F6B4F', vencendo:'#C07A25', excedido:'#B23A32', devolvido_ok:'#4E8F6F', devolvido_excedido:'#8F2E28' };
+
+function dashParseData(v){
+  const s = String(v||'').trim(); if(!s) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if(m) return { y:+m[1], m:+m[2], d:+m[3] };
+  const t = Date.parse(s); if(Number.isNaN(t)) return null;
+  const dt = new Date(t); return { y:dt.getFullYear(), m:dt.getMonth()+1, d:dt.getDate() };
+}
+// Semana ISO (segunda a domingo); o ano ISO pode diferir do ano do calendário nas pontas.
+function dashIsoSemana(y, m, d){
+  const alvo = new Date(Date.UTC(y, m-1, d));
+  const dia = (alvo.getUTCDay() + 6) % 7;
+  alvo.setUTCDate(alvo.getUTCDate() - dia + 3);
+  const anoIso = alvo.getUTCFullYear();
+  const quinta = new Date(Date.UTC(anoIso, 0, 4));
+  const sem = 1 + Math.round(((alvo - quinta) / 86400000 - 3 + ((quinta.getUTCDay() + 6) % 7)) / 7);
+  return { ano:anoIso, sem };
+}
+const dashSemanasNoAno = y => dashIsoSemana(y, 12, 28).sem;
+function dashCfg(id){
+  const c = state.dash[id], hoje = new Date();
+  if(!c.ano) c.ano = hoje.getFullYear();
+  if(!c.mes) c.mes = hoje.getMonth() + 1;
+  return c;
+}
+function dashFaixaFn(cfg){
+  if(cfg.gran==='dia') return dt => dt.y===cfg.ano && dt.m===cfg.mes;
+  if(cfg.gran==='semana') return dt => dashIsoSemana(dt.y, dt.m, dt.d).ano===cfg.ano;
+  if(cfg.gran==='mes') return dt => dt.y===cfg.ano;
+  return () => true;
+}
+function dashTextoPeriodo(cfg, anos){
+  if(cfg.gran==='dia') return DASH_MESES_LONGOS[cfg.mes-1] + ' de ' + cfg.ano + ' (dia a dia)';
+  if(cfg.gran==='semana') return 'Semanas de ' + cfg.ano;
+  if(cfg.gran==='mes') return 'Meses de ' + cfg.ano;
+  return 'Todos os anos (' + (anos[0]||cfg.ano) + ' a ' + (anos[anos.length-1]||cfg.ano) + ')';
+}
+function dashEixo(cfg, anosSerie, anosDados){
+  if(cfg.gran==='dia'){
+    const n = Math.max(...anosSerie.map(a=>new Date(a, cfg.mes, 0).getDate()));
+    return { labels:Array.from({length:n}, (_,i)=>String(i+1)), anos:null };
+  }
+  if(cfg.gran==='semana'){
+    const n = Math.max(...anosSerie.map(dashSemanasNoAno));
+    return { labels:Array.from({length:n}, (_,i)=>'S'+(i+1)), anos:null };
+  }
+  if(cfg.gran==='mes') return { labels:[...DASH_MESES], anos:null };
+  const min = Math.min(...anosDados), max = Math.max(...anosDados);
+  const anos = []; for(let a=min; a<=max; a++) anos.push(a);
+  return { labels:anos.map(String), anos };
+}
+function dashIndice(cfg, dt, ano, eixo){
+  if(cfg.gran==='dia') return (dt.y===ano && dt.m===cfg.mes) ? dt.d-1 : -1;
+  if(cfg.gran==='semana'){ const w = dashIsoSemana(dt.y, dt.m, dt.d); return w.ano===ano ? w.sem-1 : -1; }
+  if(cfg.gran==='mes') return dt.y===ano ? dt.m-1 : -1;
+  return eixo.anos.indexOf(dt.y);
+}
+
+/* --- modelos: cada dashboard devolve registros {dt, cat, v, ...} --- */
+function dashModelo(id){
+  const hoje = hojeLocalISO(), regs = []; let semData = 0, semCambio = 0;
+  if(id==='cot'){
+    const add = (lista, tipo) => (lista||[]).forEach(c=>{
+      const dt = dashParseData(c.criadoEm); if(!dt){ semData++; return; }
+      const st = (c.dados && c.dados.statusCotacao) || 'em_andamento';
+      regs.push({ dt, cat: COT_STATUS_LABEL[st] ? st : 'em_andamento', v:1, tipo, resumo:c.resumo||{}, ref:c.id });
+    });
+    add(state.cotacoesIndex, 'Simplificada'); add(state.cotacoesFormalIndex, 'Formal');
+    return { id, regs, semData, fmt:n=>String(Math.round(n)), unidade:'cotações',
+      categorias:[['em_andamento','Em Andamento','#173A5E'], ['enviado_cliente','Enviado Cliente','#C07A25'], ['aceito','Aprovado','#2F6B4F'], ['negado','Negado','#B23A32']] };
+  }
+  if(id==='proc'){
+    (state.processosIndex||[]).forEach(p=>{
+      const dt = dashParseData(dataAberturaProcesso(p)); if(!dt){ semData++; return; }
+      regs.push({ dt, cat:statusProc(p), v:1, modal:((p.transporte||{}).modal)||'', ref:p.id });
+    });
+    const usados = Object.keys(PROC_STATUS).filter(k=>regs.some(r=>r.cat===k));
+    return { id, regs, semData, fmt:n=>String(Math.round(n)), unidade:'processos',
+      categorias: usados.map(k=>[k, PROC_STATUS[k].label, DASH_COR_STATUS_PROC[k]||'#9AA5B8']) };
+  }
+  if(id==='mon'){
+    const custo = state.dash.mon.medida==='custo';
+    (state.monitoramento||[]).forEach(m=>{
+      const dt = dashParseData(m.chegada || m.eta || m.etd); if(!dt){ semData++; return; }
+      const c = monCalcular(m, hoje);
+      regs.push({ dt, cat:c.situacao, v: custo ? c.custoBRL : 1, qtd:1, custoBRL:c.custoBRL, porto:m.portoDestino||'', ref:m.container||'' });
+    });
+    return { id, regs, semData, fmt: custo ? fmtBRL : (n=>String(Math.round(n))), unidade: custo ? 'R$' : 'containers',
+      categorias: Object.entries(MON_SITUACOES).map(([k,v])=>[k, v.rotulo, DASH_COR_SIT_MON[k]]) };
+  }
+  // financeiro: parcelas lançadas na aba Financeiro de cada processo, convertidas para R$ pelo câmbio do processo
+  (state.processosIndex||[]).forEach(raw=>{
+    let p; try{ p = procNorm(raw); }catch(e){ return; }
+    ((p.financeiro||{}).parcelas||[]).forEach(pa=>{
+      const dt = dashParseData(pa.vencimento); if(!dt){ semData++; return; }
+      const valor = numProcSimples(pa.valor); if(!(valor>0)) return;
+      const cambio = cambioProc(p, pa.moeda);
+      if(!(cambio>0)){ semCambio++; return; }
+      const brl = valor * cambio;
+      const venc = String(pa.vencimento).slice(0,10) < hoje;
+      regs.push({ dt, cat: pa.pago ? 'pago' : (venc ? 'vencido' : 'aberto'), v:brl, ref:p.id, desc:pa.descricao||'' });
+    });
+  });
+  const visao = state.dash.fin.visao;
+  const todas = [['pago','Pagos','#2F6B4F'], ['aberto','Em aberto','#173A5E'], ['vencido','Vencidos','#B23A32']];
+  return { id, regs, regsKpi:regs, semData, semCambio, fmt:fmtBRL, unidade:'R$',
+    filtro: visao==='total' ? null : (r=>r.cat===visao),
+    categorias: visao==='total' ? todas : todas.filter(c=>c[0]===visao) };
+}
+function dashKpis(id, rf){
+  const soma = f => rf.filter(f).reduce((a,r)=>a+r.v, 0), n = f => rf.filter(f).length;
+  if(id==='cot') return [
+    { rot:'Cotações no período', val:String(rf.length) },
+    { rot:'Aprovadas', val:String(n(r=>r.cat==='aceito')), cor:'#2F6B4F' },
+    { rot:'Negadas', val:String(n(r=>r.cat==='negado')), cor:'#B23A32' },
+    { rot:'Em aberto (andamento + enviadas)', val:String(n(r=>r.cat==='em_andamento'||r.cat==='enviado_cliente')) } ];
+  if(id==='proc') return [
+    { rot:'Processos no período', val:String(rf.length) },
+    { rot:'Em andamento', val:String(n(r=>!['finalizado','entregue','cancelado'].includes(r.cat))), cor:'#C07A25' },
+    { rot:'Entregues / finalizados', val:String(n(r=>r.cat==='finalizado'||r.cat==='entregue')), cor:'#2F6B4F' },
+    { rot:'Cancelados', val:String(n(r=>r.cat==='cancelado')), cor:'#B23A32' } ];
+  if(id==='mon') return [
+    { rot:'Containers no período', val:String(rf.length) },
+    { rot:'No free time', val:String(n(r=>r.cat==='no_prazo'||r.cat==='aguardando')), cor:'#2F6B4F' },
+    { rot:'Free time vencendo', val:String(n(r=>r.cat==='vencendo')), cor:'#C07A25' },
+    { rot:'Excedidos', val:String(n(r=>r.cat==='excedido'||r.cat==='devolvido_excedido')), cor:'#B23A32' },
+    { rot:'Custo após o free time', val:fmtBRL(rf.reduce((a,r)=>a+r.custoBRL,0)) } ];
+  return [
+    { rot:'Custos totais', val:fmtBRL(soma(()=>true)), visao:'total' },
+    { rot:'Custos pagos', val:fmtBRL(soma(r=>r.cat==='pago')), cor:'#2F6B4F', visao:'pago' },
+    { rot:'Em aberto (a vencer)', val:fmtBRL(soma(r=>r.cat==='aberto')), cor:'#173A5E', visao:'aberto' },
+    { rot:'Vencidos', val:fmtBRL(soma(r=>r.cat==='vencido')), cor:'#B23A32', visao:'vencido' } ];
+}
+function dashExtra(id, rf){
+  const agrupa = (chaveFn, valorFn, max) => {
+    const m = new Map(); rf.forEach(r=>{ const k = chaveFn(r) || '—'; m.set(k, (m.get(k)||0) + valorFn(r)); });
+    const l = [...m.entries()].filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0, max||6);
+    return { labels:l.map(x=>x[0]), valores:l.map(x=>x[1]) };
+  };
+  if(id==='cot'){
+    const s = f => rf.filter(r=>r.tipo===f);
+    const sm = (lista, k) => lista.reduce((a,r)=>a+(Number(r.resumo[k])||0), 0);
+    return { titulo:'Custos totais das cotações (R$)', fmt:fmtBRL, labels:['Simplificada — Simples Nacional','Simplificada — Lucro Real','Formal — c/ créditos','Formal — s/ créditos'],
+      valores:[sm(s('Simplificada'),'custoSimples'), sm(s('Simplificada'),'custoLucroReal'), sm(s('Formal'),'custoComCredito'), sm(s('Formal'),'custoSemCredito')], cor:'#173A5E' };
+  }
+  if(id==='proc'){ const g = agrupa(r=>PROC_MODAIS[r.modal]||'Sem modal', ()=>1); return { titulo:'Processos por modal', fmt:n=>String(Math.round(n)), ...g, cor:'#C07A25' }; }
+  if(id==='mon'){ const g = agrupa(r=>r.porto, r=>r.qtd, 6); return { titulo:'Containers por porto de destino', fmt:n=>String(Math.round(n)), ...g, cor:'#2F6B4F' }; }
+  const g = agrupa(r=>r.ref, r=>r.v, 6); return { titulo:'Maiores custos por processo (R$)', fmt:fmtBRL, ...g, cor:'#6E5EA6' };
+}
+function dashDados(id){
+  const mod = dashModelo(id), cfg = dashCfg(id);
+  const anos = [...new Set([...mod.regs.map(r=>r.dt.y), new Date().getFullYear()])].sort((a,b)=>a-b);
+  cfg.comp = cfg.comp.filter(a=>a!==cfg.ano);
+  const base = mod.filtro ? mod.regs.filter(mod.filtro) : mod.regs;
+  const faixa = dashFaixaFn(cfg);
+  const anosSerie = cfg.gran==='ano' ? [null] : [cfg.ano, ...cfg.comp];
+  const anosNum = anosSerie.filter(a=>a!=null);
+  const eixo = dashEixo(cfg, anosNum.length ? anosNum : [cfg.ano], anos);
+  const zeros = () => new Array(eixo.labels.length).fill(0);
+  const series = anosSerie.map(a=>{
+    const v = zeros(); base.forEach(r=>{ const i = dashIndice(cfg, r.dt, a, eixo); if(i>=0 && i<v.length) v[i] += r.v; });
+    return { nome: a==null ? 'Total' : String(a), valores:v };
+  });
+  const cats = mod.categorias.map(([chave, nome, cor])=>{
+    const v = zeros(); base.forEach(r=>{ if(r.cat!==chave) return; const i = dashIndice(cfg, r.dt, cfg.gran==='ano' ? null : cfg.ano, eixo); if(i>=0 && i<v.length) v[i] += r.v; });
+    return { chave, nome, cor, valores:v };
+  });
+  const rf = base.filter(r=>faixa(r.dt));
+  const rfKpi = (mod.regsKpi || mod.regs).filter(r=>faixa(r.dt));
+  const dist = cats.map(c=>({ nome:c.nome, cor:c.cor, valor:c.valores.reduce((a,b)=>a+b,0) })).filter(x=>x.valor>0);
+  return { id, titulo:DASH_TITULOS[id], mod, cfg, anos, eixo, series, cats, dist, kpis:dashKpis(id, rfKpi), extra:dashExtra(id, rf),
+    comparar: cfg.gran!=='ano' && cfg.comp.length>0, periodo:dashTextoPeriodo(cfg, anos), vazio: mod.regs.length===0 };
+}
+
+/* --- tela --- */
+function dashControlesHtml(id, D){
+  const cfg = D.cfg;
+  const outros = D.anos.filter(a=>a!==cfg.ano);
+  return `<div class="dash-controles">
+    <div class="dash-seg">${Object.entries(DASH_GRAN).map(([g,r])=>`<button class="${cfg.gran===g?'ativo':''}" data-action="dash-gran:${id}:${g}">${r}</button>`).join('')}</div>
+    ${cfg.gran!=='ano' ? `<label class="dash-sel">Ano <select data-dash="${id}:ano">${D.anos.map(a=>`<option ${a===cfg.ano?'selected':''}>${a}</option>`).join('')}</select></label>` : ''}
+    ${cfg.gran==='dia' ? `<label class="dash-sel">Mês <select data-dash="${id}:mes">${DASH_MESES_LONGOS.map((m,i)=>`<option value="${i+1}" ${i+1===cfg.mes?'selected':''}>${m}</option>`).join('')}</select></label>` : ''}
+    ${cfg.gran!=='ano' ? `<div class="dash-comp"><span>Comparar com:</span>${outros.length ? outros.map(a=>`<button class="dash-chip ${cfg.comp.includes(a)?'ativo':''}" data-action="dash-comp:${id}:${a}">${a}</button>`).join('') : '<em>sem outros anos com dados</em>'}</div>`
+      : '<span class="hint">Cada barra é um ano, então a visão anual já compara os anos.</span>'}
+    ${id==='mon' ? `<div class="dash-seg dash-medida"><button class="${state.dash.mon.medida==='qtd'?'ativo':''}" data-action="dash-medida:mon:qtd">Containers</button><button class="${state.dash.mon.medida==='custo'?'ativo':''}" data-action="dash-medida:mon:custo">Custo (R$)</button></div>` : ''}
+  </div>`;
+}
+function dashBlocoHtml(id){
+  const D = dashDados(id);
+  const avisos = [];
+  if(D.mod.semData) avisos.push(D.mod.semData + ' registro' + (D.mod.semData===1?'':'s') + ' sem data (fora do gráfico)');
+  if(D.mod.semCambio) avisos.push(D.mod.semCambio + ' lançamento' + (D.mod.semCambio===1?'':'s') + ' em moeda estrangeira sem câmbio informado (fora da soma)');
+  const kpis = D.kpis.map(k => id==='fin'
+    ? `<button class="dash-kpi sel ${state.dash.fin.visao===k.visao?'ativo':''}" style="--cor:${k.cor||'#173A5E'}" data-action="dash-visao:fin:${k.visao}"><span>${esc(k.rot)}</span><b>${esc(k.val)}</b></button>`
+    : `<div class="dash-kpi" style="--cor:${k.cor||'#173A5E'}"><span>${esc(k.rot)}</span><b>${esc(k.val)}</b></div>`).join('');
+  return `
+    <div class="dash-head">
+      <div><div class="dash-nome">${esc(D.titulo)}</div><div class="dash-periodo">${esc(D.periodo)}${D.comparar ? ' · comparando com ' + D.cfg.comp.join(', ') : ''}</div></div>
+      ${dashControlesHtml(id, D)}
+    </div>
+    ${id==='fin' ? '<p class="hint" style="margin:0 0 10px;">Clique em um quadro para ver só aquele grupo. Em aberto = ainda no prazo; vencidos = não pagos com vencimento já passado.</p>' : ''}
+    <div class="dash-kpis">${kpis}</div>
+    ${D.vazio ? `<div class="dash-empty">${ICONS.calc}<span>Ainda não há dados para este dashboard.</span></div>` : `
+    <div class="dash-corpo">
+      <div class="dash-principal"><div class="dash-sub-t">${D.comparar ? 'Comparação entre anos' : 'Por período'}</div><div class="dash-canvas"><canvas id="dash-${id}-main"></canvas></div></div>
+      <div class="dash-lado">
+        <div><div class="dash-sub-t">Distribuição no período</div><div class="dash-canvas curto"><canvas id="dash-${id}-pizza"></canvas></div></div>
+        <div><div class="dash-sub-t">${esc(D.extra.titulo)}</div><div class="dash-canvas curto"><canvas id="dash-${id}-extra"></canvas></div></div>
+      </div>
+    </div>`}
+    ${avisos.length ? `<p class="hint" style="margin:10px 0 0;">${esc(avisos.join(' · '))}</p>` : ''}`;
+}
+function dashDesenhar(id){
+  if(typeof Chart==='undefined') return;
+  const D = dashDados(id); if(D.vazio) return;
+  Chart.defaults.font.family = "Play, Inter, sans-serif";
+  const fmt = D.mod.fmt;
+  const eixoY = { beginAtZero:true, ticks:{ precision:0, callback:v=>fmt(v) } };
+  const cMain = document.getElementById('dash-'+id+'-main');
+  if(cMain){
+    if(D.comparar){
+      homeCharts['dash-'+id+'-main'] = new Chart(cMain, { type:'line',
+        data:{ labels:D.eixo.labels, datasets:D.series.map((s,i)=>({ label:s.nome, data:s.valores, borderColor:DASH_CORES_ANO[i%DASH_CORES_ANO.length], backgroundColor:DASH_CORES_ANO[i%DASH_CORES_ANO.length], tension:.25, pointRadius:3 })) },
+        options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+          plugins:{ legend:{position:'bottom'}, tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y)}} }, scales:{ y:eixoY } } });
+    }else{
+      homeCharts['dash-'+id+'-main'] = new Chart(cMain, { type:'bar',
+        data:{ labels:D.eixo.labels, datasets:D.cats.filter(c=>c.valores.some(v=>v>0)).map(c=>({ label:c.nome, data:c.valores, backgroundColor:c.cor, borderRadius:3, maxBarThickness:34 })) },
+        options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+          plugins:{ legend:{position:'bottom', labels:{boxWidth:11, font:{size:11}}}, tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y)}} },
+          scales:{ x:{stacked:true}, y:{...eixoY, stacked:true} } } });
+    }
+  }
+  const cPie = document.getElementById('dash-'+id+'-pizza');
+  if(cPie) homeCharts['dash-'+id+'-pizza'] = new Chart(cPie, { type:'doughnut',
+    data:{ labels:D.dist.map(x=>x.nome), datasets:[{ data:D.dist.map(x=>x.valor), backgroundColor:D.dist.map(x=>x.cor) }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right', labels:{boxWidth:10, font:{size:11}}}, tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.parsed)}} } } });
+  const cEx = document.getElementById('dash-'+id+'-extra');
+  if(cEx) homeCharts['dash-'+id+'-extra'] = new Chart(cEx, { type:'bar',
+    data:{ labels:D.extra.labels, datasets:[{ data:D.extra.valores, backgroundColor:D.extra.cor, borderRadius:3, maxBarThickness:22 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>' '+D.extra.fmt(c.parsed.x)}} },
+      scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>D.extra.fmt(v) } } } } });
+}
+function dashRedesenhar(id){
+  const el = document.getElementById('dash-'+id); if(!el) return renderApp();
+  Object.keys(homeCharts).filter(k=>k.startsWith('dash-'+id+'-')).forEach(k=>{ try{ homeCharts[k].destroy(); }catch(e){} delete homeCharts[k]; });
+  el.innerHTML = dashBlocoHtml(id);
+  dashDesenhar(id);
+}
+
+/* --- ações --- */
+function acaoDash(cmd, a1, a2){
+  switch(cmd){
+    case 'dash-gran': state.dash[a1].gran = a2; dashRedesenhar(a1); return true;
+    case 'dash-comp': { const c = state.dash[a1], a = Number(a2); c.comp = c.comp.includes(a) ? c.comp.filter(x=>x!==a) : [...c.comp, a].sort((x,y)=>x-y); dashRedesenhar(a1); return true; }
+    case 'dash-visao': state.dash.fin.visao = a2; dashRedesenhar('fin'); return true;
+    case 'dash-medida': state.dash.mon.medida = a2; dashRedesenhar('mon'); return true;
+    case 'dash-baixar-abrir': state.dashBaixar.aberto = !state.dashBaixar.aberto; renderApp(); return true;
+    case 'dash-baixar': dashBaixar(); return true;
+  }
+  return false;
+}
+function onDashInput(el){
+  if(el.hasAttribute('data-dash-sel')){ state.dashSel[el.getAttribute('data-dash-sel')] = el.checked; return; }
+  if(el.hasAttribute('data-dash-fmt')){ state.dashFormato = el.getAttribute('data-dash-fmt'); return; }
+  const [id, campo] = String(el.getAttribute('data-dash')).split(':');
+  state.dash[id][campo] = Number(el.value);
+  dashRedesenhar(id);
+}
+
+/* --- exportação (PDF e XML) --- */
+const xmlEsc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function dashSnapshotCadastros(){
+  const outras = state.clientes.length - empresasDoTipo('cliente').length - state.fornecedores.length;
+  return [['Clientes', empresasDoTipo('cliente').length], ['Fornecedores', state.fornecedores.length], ['Outras empresas', outras], ['Produtos', state.produtos.length]];
+}
+function dashXml(ids){
+  const L = [];
+  L.push('<?xml version="1.0" encoding="UTF-8"?>');
+  L.push(`<dashboards geradoEm="${xmlEsc(new Date().toISOString())}" sistema="Comexta">`);
+  ids.forEach(id=>{
+    if(id==='cad'){
+      L.push(`  <dashboard id="cad" titulo="${xmlEsc(DASH_TITULOS.cad)}">`);
+      dashSnapshotCadastros().forEach(([r,v])=>L.push(`    <item rotulo="${xmlEsc(r)}" valor="${v}"/>`));
+      L.push('  </dashboard>'); return;
+    }
+    const D = dashDados(id), cfg = D.cfg;
+    L.push(`  <dashboard id="${id}" titulo="${xmlEsc(D.titulo)}" visao="${xmlEsc(DASH_GRAN[cfg.gran])}" periodo="${xmlEsc(D.periodo)}" ano="${cfg.gran==='ano'?'':cfg.ano}" mes="${cfg.gran==='dia'?cfg.mes:''}" comparar="${xmlEsc(cfg.gran==='ano'?'':cfg.comp.join(','))}"${id==='fin'?` filtro="${xmlEsc(state.dash.fin.visao)}"`:''}${id==='mon'?` medida="${xmlEsc(state.dash.mon.medida)}"`:''} unidade="${xmlEsc(D.mod.unidade)}">`);
+    L.push('    <indicadores>'); D.kpis.forEach(k=>L.push(`      <indicador rotulo="${xmlEsc(k.rot)}" valor="${xmlEsc(k.val)}"/>`)); L.push('    </indicadores>');
+    L.push('    <series>');
+    D.series.forEach(s=>{ L.push(`      <serie nome="${xmlEsc(s.nome)}">`); s.valores.forEach((v,i)=>L.push(`        <ponto rotulo="${xmlEsc(D.eixo.labels[i])}" valor="${Math.round(v*100)/100}"/>`)); L.push('      </serie>'); });
+    L.push('    </series>');
+    L.push('    <categorias>');
+    D.cats.forEach(c=>{ L.push(`      <categoria nome="${xmlEsc(c.nome)}">`); c.valores.forEach((v,i)=>L.push(`        <ponto rotulo="${xmlEsc(D.eixo.labels[i])}" valor="${Math.round(v*100)/100}"/>`)); L.push('      </categoria>'); });
+    L.push('    </categorias>');
+    L.push('    <distribuicao>'); D.dist.forEach(x=>L.push(`      <item rotulo="${xmlEsc(x.nome)}" valor="${Math.round(x.valor*100)/100}"/>`)); L.push('    </distribuicao>');
+    L.push(`    <destaque titulo="${xmlEsc(D.extra.titulo)}">`); D.extra.labels.forEach((r,i)=>L.push(`      <item rotulo="${xmlEsc(r)}" valor="${Math.round(D.extra.valores[i]*100)/100}"/>`)); L.push('    </destaque>');
+    L.push('  </dashboard>');
+  });
+  L.push('</dashboards>');
+  return L.join('\n');
+}
+function dashBaixarArquivo(blob, nome){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+async function dashPdf(ids){
+  if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){ toast('Não foi possível carregar a biblioteca de PDF. Verifique sua conexão e recarregue a página.'); return; }
+  const doc = new window.jspdf.jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+  prepararFundoPdf(doc);
+  if(typeof doc.autoTable!=='function'){ toast('Não foi possível carregar o plugin de tabelas do PDF.'); return; }
+  const imagem = chave => { try{ const ch = homeCharts[chave]; return ch ? ch.toBase64Image('image/png', 1) : null; }catch(e){ return null; } };
+  ids.forEach((id, n)=>{
+    if(n>0) doc.addPage();
+    if(id==='cad'){
+      pdfHeader(doc, 'Dashboard — ' + DASH_TITULOS.cad, 'Situação atual dos cadastros', fmtDate(new Date().toISOString()));
+      const img = imagem('cadastros'); let y = 80;
+      if(img){ doc.addImage(img, 'PNG', 28, y, 480, 220); y += 236; }
+      doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[['Cadastro','Quantidade']], body:dashSnapshotCadastros().map(([r,v])=>[r, String(v)]), theme:'grid', styles:{fontSize:9, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf()} });
+      return;
+    }
+    const D = dashDados(id);
+    pdfHeader(doc, 'Dashboard — ' + D.titulo, D.periodo + (D.comparar ? ' · comparando com ' + D.cfg.comp.join(', ') : '') + (id==='fin' ? ' · filtro: ' + ({total:'custos totais',pago:'pagos',aberto:'em aberto',vencido:'vencidos'})[state.dash.fin.visao] : '') + (id==='mon' ? ' · medida: ' + (state.dash.mon.medida==='custo'?'custo (R$)':'containers') : ''), fmtDate(new Date().toISOString()));
+    let y = 78;
+    doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[D.kpis.map(k=>k.rot)], body:[D.kpis.map(k=>k.val)], theme:'grid', styles:{fontSize:9, cellPadding:5, halign:'center'}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:8} });
+    y = doc.lastAutoTable.finalY + 14;
+    const im1 = imagem('dash-'+id+'-main'), im2 = imagem('dash-'+id+'-pizza');
+    if(im1){ doc.addImage(im1, 'PNG', 28, y, 500, 210); }
+    if(im2){ doc.addImage(im2, 'PNG', 540, y, 270, 210); }
+    if(im1 || im2) y += 224;
+    const eixoRot = D.cfg.gran==='dia' ? 'Dia' : D.cfg.gran==='semana' ? 'Semana' : D.cfg.gran==='mes' ? 'Mês' : 'Ano';
+    // comparando anos: uma coluna por ano; senão: uma coluna por categoria + total
+    const colunas = D.comparar ? D.series : [...D.cats.filter(c=>c.valores.some(v=>v>0)), { nome:'Total', valores:D.series[0].valores }];
+    const cab = [eixoRot, ...colunas.map(c=>c.nome)];
+    const corpo = D.eixo.labels.map((rot, i)=>[rot, ...colunas.map(c=>D.mod.fmt(c.valores[i]))]);
+    doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[cab], body:corpo, theme:'grid', styles:{fontSize:7.5, cellPadding:3, halign:'right'}, columnStyles:{0:{halign:'left'}}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), halign:'center'} });
+  });
+  await downloadPdfBlob(doc, 'comexta-dashboards-' + hojeLocalISO() + '.pdf');
+}
+async function dashBaixar(){
+  const ids = DASH_ORDEM.concat(['cad']).filter(i=>state.dashSel[i] && (i==='cad' || dashVisivel(i)));
+  if(!ids.length){ toast('Selecione pelo menos um dashboard.'); return; }
+  if(state.dashFormato==='xml'){
+    dashBaixarArquivo(new Blob([dashXml(ids)], { type:'application/xml;charset=utf-8' }), 'comexta-dashboards-' + hojeLocalISO() + '.xml');
+    toast('XML gerado com ' + ids.length + ' dashboard' + (ids.length===1?'':'s') + '.', 'ok');
+    return;
+  }
+  await dashPdf(ids);
 }
 
 /* ------------------------------ Dashboards (Chart.js) ----------------------- */
@@ -9888,49 +10264,20 @@ function destroyHomeCharts(){
 function renderHomeCharts(){
   destroyHomeCharts();
   if(typeof Chart==='undefined'){ console.error('Chart.js não carregou — verifique a conexão.'); return; }
-
   const ctxCad = document.getElementById('chart-cadastros');
   if(ctxCad){
+    const cad = dashSnapshotCadastros();
     homeCharts.cadastros = new Chart(ctxCad, {
       type:'bar',
-      data:{ labels:['Clientes','Fornecedores','Outras empresas','Produtos'],
-        datasets:[{ label:'Cadastros', data:[empresasDoTipo('cliente').length, state.fornecedores.length,
-          state.clientes.length - empresasDoTipo('cliente').length - state.fornecedores.length, state.produtos.length],
-          backgroundColor:['#173A5E','#C07A25','#6E5EA6','#2F6B4F'], borderRadius:5, maxBarThickness:46 }] },
+      data:{ labels:cad.map(x=>x[0]), datasets:[{ label:'Cadastros', data:cad.map(x=>x[1]), backgroundColor:['#173A5E','#C07A25','#6E5EA6','#2F6B4F'], borderRadius:5, maxBarThickness:46 }] },
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(c)=>' '+c.parsed.y+' cadastro(s)'}} },
         scales:{ y:{ beginAtZero:true, ticks:{precision:0} } } }
     });
   }
-
-  if(state.cotacoesIndex.length){
-    const cotSimpl = state.cotacoesIndex.filter(c=>!c.resumo.limiteExcedido).length;
-    const cotFormal = state.cotacoesIndex.filter(c=>c.resumo.limiteExcedido).length;
-    const ctxCot = document.getElementById('chart-cotacoes');
-    if(ctxCot){
-      homeCharts.cotacoes = new Chart(ctxCot, {
-        type:'pie',
-        data:{ labels:['Simplificada (dentro do limite)','Formal (acima de US$3.000)'],
-          datasets:[{ data:[cotSimpl,cotFormal], backgroundColor:['#2F6B4F','#B23A32'] }] },
-        options:{ responsive:true, maintainAspectRatio:false,
-          plugins:{ legend:{position:'bottom', labels:{boxWidth:11, font:{size:11}}} } }
-      });
-    }
-    const totSimples = sum(state.cotacoesIndex.map(c=>c.resumo.custoSimples));
-    const totLucroReal = sum(state.cotacoesIndex.map(c=>c.resumo.custoLucroReal));
-    const ctxCusto = document.getElementById('chart-custos');
-    if(ctxCusto){
-      homeCharts.custos = new Chart(ctxCusto, {
-        type:'bar',
-        data:{ labels:['Custo Total\n(Simples Nacional)','Custo Total\n(Lucro Real/Presumido)'],
-          datasets:[{ label:'R$', data:[totSimples,totLucroReal], backgroundColor:['#173A5E','#C07A25'], borderRadius:5, maxBarThickness:56 }] },
-        options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-          plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(c)=>' '+fmtBRL(c.parsed.x)}} },
-          scales:{ x:{ ticks:{ callback:(v)=>fmtBRL(v) } } } }
-      });
-    }
-  }
+  DASH_ORDEM.filter(dashVisivel).forEach(dashDesenhar);
 }
+
 </script>
 </body>
 </html>
