@@ -3368,6 +3368,7 @@ const COT_CAMPOS = (()=>{
 
     ['Cliente', 'cliente', 'Cliente / empresa', (tipo, c)=>c.dados.cliente],
     ['Cliente', 'clienteCnpjCpf', 'CNPJ/CPF do cliente', (tipo, c)=>c.dados.clienteCnpjCpf],
+    ['Cliente', 'referenciaCliente', 'Referência do cliente', (tipo, c)=>c.dados.referenciaCliente],
     ['Cliente', 'responsavel', 'Responsável', (tipo, c)=>c.dados.responsavel],
     ['Cliente', 'vendedor', 'Vendedor', (tipo, c)=>c.dados.vendedor],
 
@@ -3405,7 +3406,7 @@ const COT_CAMPOS = (()=>{
   return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor, ...(extra||{}) }));
 })();
 const COT_TITULO_CURTO = {
-  criadoEm:'Criada em', atualizadoEm:'Atualizada', dataCotacao:'Data', cliente:'Cliente', clienteCnpjCpf:'CNPJ/CPF',
+  criadoEm:'Criada em', atualizadoEm:'Atualizada', dataCotacao:'Data', cliente:'Cliente', clienteCnpjCpf:'CNPJ/CPF', referenciaCliente:'Ref. cliente',
   rotaPaises:'Países', rotaCidades:'Cidades', rotaPortos:'Portos', paisOrigem:'País origem', paisDestino:'País destino',
   portoOrigem:'Porto origem', portoDestino:'Porto destino', transitTime:'Transit time', navio:'Navio', pesoBruto:'Peso bruto',
   cbm:'Cubagem', custoA:'Custo A', custoB:'Custo B', valorAduaneiro:'Valor aduan.', limite:'Limite simpl.',
@@ -3415,8 +3416,8 @@ COT_CAMPOS.forEach(c=>{ c.curto = COT_TITULO_CURTO[c.id] || c.label; });
 const COT_CAMPO = Object.fromEntries(COT_CAMPOS.map(c=>[c.id, c]));
 
 const COT_TEMPLATE_PADRAO = {
-  lista: ['tipo', 'status', 'cliente', 'criadoEm', 'validade', 'itens', 'custoA', 'custoB'],
-  card: ['cliente', 'vendedor', 'incoterm', 'rotaPaises', 'rotaCidades', 'rotaPortos'],
+  lista: ['tipo', 'status', 'cliente', 'referenciaCliente', 'criadoEm', 'validade', 'itens', 'custoA', 'custoB'],
+  card: ['cliente', 'referenciaCliente', 'vendedor', 'incoterm', 'rotaPaises', 'rotaCidades', 'rotaPortos'],
   filtros: ['tipo', 'numero', 'busca', 'criadoEm', 'vendedor', 'responsavel', 'paisOrigem', 'paisDestino', 'cidadeOrigem', 'cidadeDestino', 'portoOrigem', 'portoDestino', 'ncms', 'incoterm', 'status', 'motivoNegado'],
 };
 
@@ -4153,7 +4154,7 @@ function novoProduto(){ return {id:uid(), fornecedor:'', produto:'', quantidade:
 function dadosPadrao(){
   return {
     responsavel:'',
-    cliente:'', clienteCnpjCpf:'', dataCotacao:'', validadeCotacao:'', vendedor:'',
+    cliente:'', clienteCnpjCpf:'', referenciaCliente:'', dataCotacao:'', validadeCotacao:'', vendedor:'',
     clienteCidadeOrigem:'', clienteCidadeDestino:'',
     paisOrigem:'', paisDestino:'Brasil', cidadeOrigem:'', cidadeDestino:'', portoOrigem:'', portoDestino:'', etd:'', eta:'',
     cambioInvoice:'', produtos:[novoProduto()],
@@ -4204,7 +4205,7 @@ function calcDespesaLinha(linha, cambio){
 function dadosFormalPadrao(){
   return {
     responsavel:'',
-    cliente:'', clienteCnpjCpf:'', dataCotacao:'', validadeCotacao:'', vendedor:'',
+    cliente:'', clienteCnpjCpf:'', referenciaCliente:'', dataCotacao:'', validadeCotacao:'', vendedor:'',
     clienteCidadeOrigem:'', clienteCidadeDestino:'',
     paisOrigem:'', paisDestino:'Brasil', portoOrigem:'', portoDestino:'', etd:'', eta:'', incoterm:'FOB',
     produtos:[novoProdutoFormal()],
@@ -5524,6 +5525,9 @@ function renderDados(){
         <div class="field"><label>Validade da Cotação</label>
           <input type="date" data-bind="validadeCotacao" value="${esc(d.validadeCotacao)}">
         </div>
+        <div class="field"><label>Referência do cliente</label>
+          <input data-bind="referenciaCliente" value="${esc(d.referenciaCliente)}" placeholder="Pedido / PO do cliente" autocomplete="off">
+        </div>
       </div>
     </div>
 
@@ -5818,10 +5822,11 @@ function renderDadosFormal(){
           </select>
         </div>
       </div>
-      <div class="field-row grid-3" style="margin-top:16px;">
+      <div class="field-row grid-4" style="margin-top:16px;">
         <div class="field"><label>Data da Cotação</label><input type="date" data-bind="dataCotacao" value="${esc(d.dataCotacao)}"></div>
         <div class="field"><label>Validade da Cotação</label><input type="date" data-bind="validadeCotacao" value="${esc(d.validadeCotacao)}"></div>
         <div class="field"><label>Nome do Vendedor</label>${campoPessoaHtml('vendedores', d.vendedor, 'Nome do vendedor responsável')}</div>
+        <div class="field"><label>Referência do cliente</label><input data-bind="referenciaCliente" value="${esc(d.referenciaCliente)}" placeholder="Pedido / PO do cliente" autocomplete="off"></div>
       </div>
     </div>
 
@@ -8577,7 +8582,7 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
 
   const clienteFields = [
     ['Cliente', dados.cliente||'—'], ['CNPJ/CPF', dados.clienteCnpjCpf||'—'],
-    ['Nome do Vendedor', dados.vendedor||'—'],
+    ['Referência do cliente', dados.referenciaCliente||'—'], ['Nome do Vendedor', dados.vendedor||'—'],
     ['Data da Cotação', fmtDateOnly(dados.dataCotacao)], ['Validade da Cotação', fmtDateOnly(dados.validadeCotacao)],
     ['País de Origem', dados.paisOrigem||'—'], ['País de Destino', dados.paisDestino||'—'],
     ['Cidade de Origem', dados.cidadeOrigem||'—'], ['Cidade de Destino', dados.cidadeDestino||'—'],
@@ -8585,7 +8590,7 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
     ['ETD', fmtDateOnly(dados.etd)], ['ETA', fmtDateOnly(dados.eta)],
   ];
   if(clienteFields.length % 2 !== 0) clienteFields.push(['','']);
-  const hasClienteInfo = dados.cliente || dados.clienteCnpjCpf || dados.dataCotacao || dados.validadeCotacao || dados.vendedor ||
+  const hasClienteInfo = dados.cliente || dados.clienteCnpjCpf || dados.referenciaCliente || dados.dataCotacao || dados.validadeCotacao || dados.vendedor ||
     dados.paisOrigem || dados.portoOrigem || dados.portoDestino || dados.cidadeOrigem || dados.cidadeDestino || dados.etd || dados.eta;
   if(hasClienteInfo){
     doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
@@ -8848,15 +8853,16 @@ async function gerarDashboardPDFFormal(dados, meta){
     let y = 72;
     const clienteFields = [
       ['Cliente', dados.cliente||'—'], ['CNPJ/CPF', dados.clienteCnpjCpf||'—'],
-      ['Incoterm', dados.incoterm||'—'], ['Data da Cotação', fmtDateOnly(dados.dataCotacao)],
-      ['Nome do Vendedor', dados.vendedor||'—'], ['Validade da Cotação', fmtDateOnly(dados.validadeCotacao)],
+      ['Referência do cliente', dados.referenciaCliente||'—'], ['Incoterm', dados.incoterm||'—'],
+      ['Data da Cotação', fmtDateOnly(dados.dataCotacao)], ['Nome do Vendedor', dados.vendedor||'—'],
+      ['Validade da Cotação', fmtDateOnly(dados.validadeCotacao)],
       ['País de Origem', dados.paisOrigem||'—'], ['País de Destino', dados.paisDestino||'—'],
       ['Cidade de Origem', dados.freteOrigem||'—'], ['Cidade de Destino', dados.freteDestino||'—'],
       ['Porto/Aeroporto de Origem', dados.portoOrigem||'—'], ['Porto/Aeroporto de Destino', dados.portoDestino||'—'],
       ['ETD', fmtDateOnly(dados.freteEtd)], ['ETA', fmtDateOnly(dados.freteEta)],
     ];
     if(clienteFields.length % 2 !== 0) clienteFields.push(['','']);
-    const hasClienteInfo = dados.cliente || dados.clienteCnpjCpf || dados.vendedor || dados.paisOrigem || dados.portoOrigem || dados.portoDestino ||
+    const hasClienteInfo = dados.cliente || dados.clienteCnpjCpf || dados.referenciaCliente || dados.vendedor || dados.paisOrigem || dados.portoOrigem || dados.portoDestino ||
       dados.freteOrigem || dados.freteDestino || dados.freteEtd || dados.freteEta;
     if(hasClienteInfo){
       doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
@@ -9869,7 +9875,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.15 · monitoramento: referência e minimizar · build 06/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.16 · referência do cliente · build 06/10/2026</span></div>
   `;
 }
 
