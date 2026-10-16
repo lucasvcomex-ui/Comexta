@@ -837,6 +837,9 @@ tbody tr:hover{background:#F9FAFD;}
 .dash-baixar-t{font-size:13px; font-weight:700; color:var(--navy); margin-bottom:8px;}
 .dash-check{display:flex; align-items:center; gap:8px; font-size:14px; margin:6px 0; cursor:pointer;}
 @media (max-width:980px){ .dash-corpo{grid-template-columns:1fr;} .dash-controles{justify-content:flex-start;} .dash-baixar-grid{grid-template-columns:1fr;} }
+
+.mon-cliente{font-size:12.5px; color:var(--navy); background:var(--navy-100); border-radius:6px; padding:2px 8px; font-weight:700;}
+.mon-card.mon-destaque{box-shadow:0 0 0 3px var(--amber), var(--shadow-lg); transition:box-shadow .3s ease;}
 </style>
 </head>
 <body>
@@ -895,7 +898,7 @@ function toast(msg, kind){
 // Rascunhos e filtros ficam só neste navegador, separados por usuário.
 // Cada chave tem uma versão: se outra pessoa salvou antes, as alterações são mescladas item a item.
 const sb = window.comextaSupabase;
-const CHAVE_LOCAL = /:draft$|^filtros(Todas|Proc|Cot):/;
+const CHAVE_LOCAL = /:draft$|^filtros(Todas|Proc|Cot|Mon):/;
 const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','processos:index','monitoramento:list'];
 const SECAO_DA_CHAVE = {
   'cotacoes:index':'cotacoes', 'cotacoesFormal:index':'cotacoes', 'simulacoes:index':'simulador',
@@ -1189,7 +1192,7 @@ const PERMISSAO_DA_ACAO = {
   'go:monitoramento':['monitoramento','ver'], 'go:monitoramentoCusto':['monitoramento','ver'],
   'mon-add':['monitoramento','criar'], 'mon-importar':['monitoramento','criar'],
   'mon-atualizar':['monitoramento','editar'], 'mon-atualizar-um':['monitoramento','editar'], 'mon-excluir':['monitoramento','editar'],
-  'mon-testar-api':['monitoramento','ver'], 'mon-minimizar':['monitoramento','ver'], 'mon-minimizar-todos':['monitoramento','ver'], 'mon-rastrear':['monitoramento','editar'], 'mon-rastrear-todos':['monitoramento','editar'], 'mon-aplicar-devolucao':['monitoramento','editar'],
+  'mon-testar-api':['monitoramento','ver'], 'mon-modo':['monitoramento','ver'], 'mon-template':['monitoramento','ver'], 'mon-tpl-aba':['monitoramento','ver'], 'mon-tpl-grupo':['monitoramento','ver'], 'mon-tpl-padrao':['monitoramento','ver'], 'mon-tpl-salvar':['monitoramento','ver'], 'mon-abrir':['monitoramento','ver'], 'mon-minimizar':['monitoramento','ver'], 'mon-minimizar-todos':['monitoramento','ver'], 'mon-rastrear':['monitoramento','editar'], 'mon-rastrear-todos':['monitoramento','editar'], 'mon-aplicar-devolucao':['monitoramento','editar'],
 };
 const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', mon:'monitoramento' };
 
@@ -2270,6 +2273,7 @@ function acoesProcessoHtml(p){
 const FILTROS_TPL = {
   proc: { chave:'filtrosProc:fixado', catalogo:()=>catalogoFiltrosProc(), itens:()=>state.processosIndex||[], prefs:()=>prefsProcessos() },
   cot:  { chave:'filtrosCot:fixado',  catalogo:()=>catalogoFiltrosCot(),  itens:()=>itensCotacoes(), prefs:()=>prefsCotacoes() },
+  mon:  { chave:'filtrosMon:fixado',  catalogo:()=>catalogoFiltrosMon(),  itens:()=>state.monitoramento||[], prefs:()=>prefsMonitoramento() },
 };
 function filtrosAplicados(escopo){
   if(!state.filtrosAplicados) state.filtrosAplicados = {};
@@ -4002,6 +4006,16 @@ function dadosExportacao(tela){
       linhas: itens.map(({tipo, cot})=>[cot.id, ...campos.map(c=>{ try{ return textoPlano(c.valor(tipo, cot)); }catch(e){ return ''; } })]),
       filtros: resumoFiltrosTpl('cot', cards ? ['status'] : []) };
   }
+  if(tela==='mon'){
+    const prefs = prefsMonitoramento(), cards = prefs.modo==='card';
+    const ids = (cards ? ['situacao', ...prefs.card.filter(id=>id!=='situacao')] : prefs.lista).filter(id=>id!=='container');
+    const campos = ids.map(id=>MON_CAMPO[id]).filter(Boolean);
+    const itens = aplicarFiltrosTpl('mon', state.monitoramento||[]);
+    return { titulo:'Monitoramento de Carga', arquivo:'monitoramento-de-carga',
+      colunas: ['Container', ...campos.map(c=>c.label)],
+      linhas: itens.map(m=>[m.container||'', ...campos.map(c=>{ try{ return textoPlano(c.valor(m)); }catch(e){ return ''; } })]),
+      filtros: resumoFiltrosTpl('mon', []) };
+  }
   if(tela==='proc'){
     const prefs = prefsProcessos(), cards = prefs.modo==='card';
     const ids = cards ? ['status', ...prefs.card.filter(id=>id!=='id' && id!=='status')] : prefs.lista.filter(id=>id!=='id');
@@ -4675,8 +4689,8 @@ const saveDraftFormal = debounce(async ()=>{ await storeSet('dadosFormal:draft',
 const saveDraftSimulacao = debounce(async ()=>{ await storeSet('simulacao:draft', state.simulacao); }, 500);
 
 async function loadInitialData(){
-  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado', 'processo:draft', 'filtrosProc:fixado', 'filtrosCot:fixado']);
-  state.filtrosAplicados = { proc: v['filtrosProc:fixado'] || {}, cot: v['filtrosCot:fixado'] || {} };
+  const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado', 'processo:draft', 'filtrosProc:fixado', 'filtrosCot:fixado', 'filtrosMon:fixado']);
+  state.filtrosAplicados = { proc: v['filtrosProc:fixado'] || {}, cot: v['filtrosCot:fixado'] || {}, mon: v['filtrosMon:fixado'] || {} };
   if(v['processos:index']) state.processosIndex = v['processos:index'];
   state.monitoramento = v['monitoramento:list'] || lerCopiaLocalMonitoramento() || [];
   if(v['processo:draft'] && v['processo:draft'].draft){
@@ -4744,7 +4758,7 @@ function monData(v){ const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v||'')); 
 function monDiasEntre(a, b){ return Math.round((b - a) / 86400000); }
 function monAddDias(ts, n){ const d = new Date(ts + n*86400000); return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0'); }
 function novoContainerMonitorado(base){
-  return { id:uid(), origem:'manual', processoId:'', referencia:'', containerId:'', container:'', tipo:"40' HC", etd:'', eta:'', chegada:'',
+  return { id:uid(), origem:'manual', processoId:'', referencia:'', referenciaCliente:'', cliente:'', containerId:'', container:'', tipo:"40' HC", etd:'', eta:'', chegada:'',
     paisOrigem:'', paisDestino:'Brasil', portoOrigem:'', portoDestino:'', freeTime:'', inicio:'', devolucao:'',
     custoDiario:'', moeda:'USD', cambio:'', scac:'AUTO', rastreio:null, criadoEm:new Date().toISOString(), ...(base||{}) };
 }
@@ -4811,22 +4825,30 @@ function containersDosProcessos(){
       const numero = String(c.numero||'').trim();
       if(!numero) return;
       out.push({ processoId:p.id, containerId:c.id, container:numero.toUpperCase(), tipo:c.tipo || "40' HC", etd:t.etd||'', eta:t.eta||'', chegada:t.chegada||'',
-        paisOrigem:paisesDoProcesso(p), portoOrigem:t.origem||'', portoDestino:t.destino||'', freeTime:t.freeTime||'' });
+        paisOrigem:paisesDoProcesso(p), portoOrigem:t.origem||'', portoDestino:t.destino||'', freeTime:t.freeTime||'',
+        referenciaCliente:(p.cliente||{}).referenciaCliente||'', cliente:(p.cliente||{}).nome||'' });
     });
   });
   return out;
 }
 const monJaImportado = x => state.monitoramento.some(m=>m.processoId===x.processoId && m.containerId===x.containerId);
 function monAtualizarDoProcesso(m, dados){
-  ['container','tipo','etd','eta','chegada','paisOrigem','portoOrigem','portoDestino'].forEach(k=>{ m[k] = dados[k]; });
+  ['container','tipo','etd','eta','chegada','paisOrigem','portoOrigem','portoDestino','referenciaCliente','cliente'].forEach(k=>{ m[k] = dados[k] || ''; });
   if(String(dados.freeTime||'').trim()!=='') m.freeTime = dados.freeTime;
   if(m.referencia===undefined || m.referencia==='') m.referencia = dados.processoId || '';
+  m.removidoDoProcesso = false;
   m.atualizadoEm = new Date().toISOString();
 }
 
 /* --- ações --- */
-function acaoMonitoramento(cmd, a1){
+function acaoMonitoramento(cmd, a1, a2){
+  if(acaoTemplateMon(cmd, a1, a2)) return true;
   switch(cmd){
+    case 'mon-abrir': {
+      salvarPrefsMonitoramento({ modo:'janela' });
+      const mn = monMinCarregar(); delete mn[a1]; monMinSalvar();
+      state.monFoco = a1; renderApp(); return true;
+    }
     case 'mon-add': {
       const novo = novoContainerMonitorado();
       state.monitoramento.unshift(novo);
@@ -5099,6 +5121,10 @@ function onMonitoramentoInput(el, evento){
   if(!m || !campo) return false;
   m[campo] = el.value;
   m.atualizadoEm = new Date().toISOString();
+  if(evento==='change' && campo==='referencia'){
+    const achou = monPuxarDoProcessoPorReferencia(m);
+    if(achou){ persistMonitoramento(); monRedesenharCartao(m.id); toast('Referência do cliente puxada do processo ' + achou + (m.referenciaCliente ? '.' : ' (o processo ainda não tem referência do cliente).'), m.referenciaCliente ? 'ok' : undefined); return true; }
+  }
   atualizarMonitoramentoCalculos();
   salvarMonitoramentoDebounced();
   return true;
@@ -5143,8 +5169,20 @@ function atualizarMonitoramentoCalculos(){
   k('mon-kpi-custo', fmtBRL(totalBRL)); const sc = document.getElementById('mon-kpi-semcambio'); if(sc){ sc.textContent = semCambio ? semCambio + ' sem câmbio informado' : 'Custo acumulado após o free time'; }
   aplicarFiltroMonitoramento();
 }
+function monProcessoPorReferencia(ref){
+  const r = String(ref||'').trim().toLowerCase(); if(!r) return null;
+  return (state.processosIndex||[]).find(p=>String(p.id||'').toLowerCase()===r) || null;
+}
+// Container cadastrado à mão: se a "Referência do processo" é o nº de um processo cadastrado, traz dele a referência do cliente.
+function monPuxarDoProcessoPorReferencia(m){
+  if(m.origem==='processo') return false;
+  const p = monProcessoPorReferencia(monRef(m)); if(!p) return false;
+  const c = procNorm(p).cliente || {};
+  m.referenciaCliente = c.referenciaCliente || ''; m.cliente = c.nome || '';
+  return p.id;
+}
 const monRef = m => m.referencia===undefined ? (m.processoId||'') : m.referencia;   // cartões antigos sem o campo usam o nº do processo vinculado
-const monTextoBusca = m => [m.container, m.tipo, monRef(m), m.processoId, m.paisOrigem, m.paisDestino, m.portoOrigem, m.portoDestino].join(' ').toLowerCase();
+const monTextoBusca = m => [m.container, m.tipo, monRef(m), m.referenciaCliente, m.cliente, m.processoId, m.paisOrigem, m.paisDestino, m.portoOrigem, m.portoDestino].join(' ').toLowerCase();
 
 /* --- tela: Containers monitorados --- */
 function monCampo(id, campo, rotulo, valor, opts){
@@ -5163,7 +5201,7 @@ function monCardHtml(m, hoje){
   <div class="mon-card" data-mon-id="${m.id}" data-mon-sit="${c.situacao}" data-mon-busca="${esc(monTextoBusca(m))}">
     <div class="mon-card-head">
       <button class="icon-btn mon-toggle aberto" data-action="mon-minimizar:${m.id}" title="Minimizar esta janela" aria-expanded="true">${ICON_CHEV}</button>
-      <div class="mon-titulo"><span class="mon-nome">${esc(m.container) || 'Container sem número'}</span><span class="mon-tipo">${esc(m.tipo)}</span>${vinculo}
+      <div class="mon-titulo"><span class="mon-nome">${esc(m.container) || 'Container sem número'}</span><span class="mon-tipo">${esc(m.tipo)}</span>${vinculo}${m.cliente ? `<span class="mon-cliente" title="Cliente do processo">${esc(m.cliente)}</span>` : ''}
         ${m.removidoDoProcesso ? '<span class="badge badge-danger" title="Este container não está mais no processo">Removido do processo</span>' : ''}</div>
       <span data-mon-calc="sit" class="badge ${MON_SITUACOES[c.situacao].classe}">${esc(monTextoSituacao(m, c))}</span>
       <div class="mon-acoes">
@@ -5171,8 +5209,9 @@ function monCardHtml(m, hoje){
         <button class="icon-btn ${confirmando?'btn-perigo':''}" title="${confirmando?'Clique de novo para confirmar':'Remover do monitoramento'}" data-action="mon-excluir:${m.id}">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="field-row grid-3">
+    <div class="field-row grid-4">
       ${monCampo(m.id,'referencia','Referência do processo (Nº)',monRef(m),{ph:'Ex.: PRC-0001'})}
+      ${monCampo(m.id,'referenciaCliente','Referência do cliente',m.referenciaCliente||'',{ph: m.origem==='processo' ? 'Vem do processo' : 'Pedido / PO do cliente'})}
       ${monCampo(m.id,'container','Container',m.container,{ph:'Ex.: MSKU1234567', up:true})}
       ${monCampo(m.id,'tipo','Tipo de container',m.tipo,{options:PROC_CONTAINER_TIPOS})}
     </div>
@@ -5210,24 +5249,267 @@ function monCardHtml(m, hoje){
     </div>
   </div>`;
 }
+/* ============ Monitoramento: campos, filtros e template (mesmo padrão de Cotações e Processos) ============ */
+const MON_JANELAS_TEMPLATE = ['Geral', 'Rota e embarque', 'Free time e custo', 'Rastreamento'];
+const MON_CAMPOS = (()=>{
+  const d = v => v ? fmtDateOnly(v) : '';
+  const c = m => monCalcular(m, hojeLocalISO());
+  const ra = m => m.rastreio || {};
+  const temFt = x => x.ini!=null && x.ft>0;
+  const campos = [
+    ['Geral', 'referencia', 'Referência do processo (Nº)', m=>monRef(m)],
+    ['Geral', 'referenciaCliente', 'Referência do cliente', m=>m.referenciaCliente||''],
+    ['Geral', 'cliente', 'Cliente', m=>m.cliente||''],
+    ['Geral', 'container', 'Container', m=>m.container||''],
+    ['Geral', 'tipo', 'Tipo de container', m=>m.tipo||''],
+    ['Geral', 'situacao', 'Situação do free time', m=>monTextoSituacao(m, c(m)), { badge:true }],
+    ['Geral', 'origem', 'Origem do registro', m=>m.origem==='processo' ? 'Processo' : 'Manual'],
+    ['Geral', 'criadoEm', 'Cadastrado em', m=>m.criadoEm ? fmtDate(m.criadoEm) : ''],
+
+    ['Rota e embarque', 'paisOrigem', 'País de origem', m=>m.paisOrigem||''],
+    ['Rota e embarque', 'portoOrigem', 'Porto de origem', m=>m.portoOrigem||''],
+    ['Rota e embarque', 'etd', 'ETD (saída estimada)', m=>d(m.etd)],
+    ['Rota e embarque', 'paisDestino', 'País de destino', m=>m.paisDestino||''],
+    ['Rota e embarque', 'portoDestino', 'Porto de destino', m=>m.portoDestino||''],
+    ['Rota e embarque', 'eta', 'ETA (chegada estimada)', m=>d(m.eta)],
+    ['Rota e embarque', 'chegada', 'Chegada efetiva', m=>d(m.chegada)],
+    ['Rota e embarque', 'rota', 'Rota (porto de origem → destino)', m=>(m.portoOrigem||m.portoDestino) ? (m.portoOrigem||'—') + ' → ' + (m.portoDestino||'—') : ''],
+
+    ['Free time e custo', 'freeTime', 'Free time (dias)', m=>m.freeTime||''],
+    ['Free time e custo', 'inicio', 'Início da contagem', m=>d(m.inicio || m.chegada || m.eta)],
+    ['Free time e custo', 'limite', 'Limite do free time', m=>d(c(m).limite)],
+    ['Free time e custo', 'uso', 'Dias de uso', m=>temFt(c(m)) ? String(c(m).uso) : ''],
+    ['Free time e custo', 'excedentes', 'Dias excedentes', m=>temFt(c(m)) ? String(c(m).excedentes) : ''],
+    ['Free time e custo', 'custoDiario', 'Custo diário após o free time', m=>num(m.custoDiario)>0 ? monMoedaTxt(num(m.custoDiario), m.moeda) : ''],
+    ['Free time e custo', 'custo', 'Custo acumulado (na moeda)', m=>c(m).custo>0 ? monMoedaTxt(c(m).custo, m.moeda) : ''],
+    ['Free time e custo', 'custoBRL', 'Custo acumulado (R$)', m=>c(m).custoBRL>0 ? fmtBRL(c(m).custoBRL) : ''],
+    ['Free time e custo', 'devolucao', 'Devolução do container vazio', m=>d(m.devolucao)],
+
+    ['Rastreamento', 'scac', 'Armador (SCAC)', m=>(m.scac && m.scac!=='AUTO') ? m.scac : ((ra(m).armador||{}).scac||'')],
+    ['Rastreamento', 'armador', 'Armador (nome)', m=>(ra(m).armador||{}).nome||''],
+    ['Rastreamento', 'navio', 'Navio / viagem', m=>ra(m).navio ? ra(m).navio + (ra(m).viagem ? ' · ' + ra(m).viagem : '') : ''],
+    ['Rastreamento', 'situacaoViagem', 'Situação da viagem', m=>ra(m).situacao ? (MON_SIT_VIAGEM[ra(m).situacao] || ra(m).situacao) : ''],
+    ['Rastreamento', 'atraso', 'Atraso previsto (dias)', m=>ra(m).atrasoDias!=null ? String(ra(m).atrasoDias) : ''],
+    ['Rastreamento', 'statusRastreio', 'Situação do rastreio', m=>ra(m).status ? (MON_ST_PEDIDO[ra(m).status] || ra(m).status) : ''],
+    ['Rastreamento', 'ultimaConsulta', 'Última consulta', m=>ra(m).atualizadoEm ? fmtDate(ra(m).atualizadoEm) : ''],
+  ];
+  return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor, ...(extra||{}) }));
+})();
+const MON_CAMPO = Object.fromEntries(MON_CAMPOS.map(c=>[c.id, c]));
+const MON_TEMPLATE_PADRAO = {
+  filtros: ['busca', 'situacao', 'etd', 'eta'],
+  lista: ['referencia', 'referenciaCliente', 'portoOrigem', 'etd', 'portoDestino', 'eta', 'situacao'],
+  card: ['referencia', 'referenciaCliente', 'tipo', 'portoOrigem', 'etd', 'portoDestino', 'eta', 'custoBRL'],
+};
+function prefsMonitoramento(){
+  const p = ((usuarioAtual && usuarioAtual.preferencias) || {}).monitoramento || {};
+  const valido = (arr, mapa) => Array.isArray(arr) ? arr.filter(id=>mapa[id]) : null;
+  return { modo: (p.modo==='lista' || p.modo==='card') ? p.modo : 'janela',
+    lista: valido(p.lista, MON_CAMPO) || MON_TEMPLATE_PADRAO.lista,
+    card: valido(p.card, MON_CAMPO) || MON_TEMPLATE_PADRAO.card,
+    filtros: valido(p.filtros, mapaFiltrosTpl('mon')) || MON_TEMPLATE_PADRAO.filtros };
+}
+const salvarPrefsMonitoramento = (alteracao, mensagem) => salvarPreferencias('monitoramento', alteracao, prefsMonitoramento(), mensagem);
+
+// Catálogo de filtros: todos os campos (texto, lista de opções, período ou faixa de valores) + busca em qualquer campo
+let _catFiltrosMon = null;
+function catalogoFiltrosMon(){
+  if(_catFiltrosMon) return _catFiltrosMon;
+  const data = v => v ? [String(v).slice(0,10)] : [];
+  const n1 = v => { const x = Number(v); return (v===''||v==null||!isFinite(x)) ? [] : [String(x)]; };
+  const c = m => monCalcular(m, hojeLocalISO());
+  const temFt = x => x.ini!=null && x.ft>0;
+  const fixo = obj => ()=>Object.entries(obj);
+  const especial = {
+    situacao: { tipo:'opcao', valores:m=>[c(m).situacao], opcoes:fixo(Object.fromEntries(Object.entries(MON_SITUACOES).map(([k,v])=>[k, v.rotulo]))) },
+    origem: { tipo:'opcao', valores:m=>[m.origem==='processo' ? 'processo' : 'manual'], opcoes:fixo({ processo:'Processo', manual:'Manual' }) },
+    tipo: { tipo:'opcao', valores:m=>[m.tipo] }, cliente: { tipo:'opcao' },
+    paisOrigem: { tipo:'opcao' }, paisDestino: { tipo:'opcao' }, portoOrigem: { tipo:'opcao' }, portoDestino: { tipo:'opcao' },
+    scac: { tipo:'opcao' }, armador: { tipo:'opcao' },
+    situacaoViagem: { tipo:'opcao', valores:m=>[(m.rastreio||{}).situacao||''], opcoes:fixo(MON_SIT_VIAGEM) },
+    statusRastreio: { tipo:'opcao', valores:m=>[(m.rastreio||{}).status||''], opcoes:fixo(MON_ST_PEDIDO) },
+    criadoEm: { tipo:'periodo', valores:m=>data(m.criadoEm) }, etd: { tipo:'periodo', valores:m=>data(m.etd) }, eta: { tipo:'periodo', valores:m=>data(m.eta) },
+    chegada: { tipo:'periodo', valores:m=>data(m.chegada) }, inicio: { tipo:'periodo', valores:m=>data(m.inicio || m.chegada || m.eta) },
+    limite: { tipo:'periodo', valores:m=>data(c(m).limite) }, devolucao: { tipo:'periodo', valores:m=>data(m.devolucao) },
+    ultimaConsulta: { tipo:'periodo', valores:m=>data((m.rastreio||{}).atualizadoEm) },
+    freeTime: { tipo:'faixa', valores:m=>n1(m.freeTime) },
+    uso: { tipo:'faixa', valores:m=>temFt(c(m)) ? [String(c(m).uso)] : [] }, excedentes: { tipo:'faixa', valores:m=>temFt(c(m)) ? [String(c(m).excedentes)] : [] },
+    custoDiario: { tipo:'faixa', valores:m=>n1(num(m.custoDiario)||'') }, custoBRL: { tipo:'faixa', valores:m=>c(m).custoBRL>0 ? [String(c(m).custoBRL)] : [] },
+    custo: { tipo:'faixa', valores:m=>c(m).custo>0 ? [String(c(m).custo)] : [] },
+    atraso: { tipo:'faixa', valores:m=>n1(((m.rastreio||{}).atrasoDias)) },
+  };
+  const busca = { id:'busca', label:'Busca em qualquer campo', janela:'Geral', tipo:'texto', placeholder:'Buscar…',
+    valores:m=>MON_CAMPOS.map(cp=>{ try{ return String(cp.valor(m)||''); }catch(e){ return ''; } }) };
+  _catFiltrosMon = [busca, ...MON_CAMPOS.map(cp=>{
+    const e = especial[cp.id] || {};
+    const valores = e.valores || (m=>{ try{ return [String(cp.valor(m)||'')]; }catch(err){ return []; } });
+    return { id:cp.id, label:cp.label, janela:cp.janela, tipo:e.tipo || 'texto', valores, ...(e.opcoes ? { opcoes:e.opcoes } : {}) };
+  })];
+  return _catFiltrosMon;
+}
+
+/* --- janela Template: Configurar Card / Lista / Filtros --- */
+function renderMonTemplate(){
+  const aba = state.monTemplateAba || 'card';
+  if(!state.monTemplateSel){ const pr = prefsMonitoramento(); state.monTemplateSel = { card:[...pr.card], lista:[...pr.lista], filtros:[...pr.filtros] }; }
+  const sel = new Set(state.monTemplateSel[aba]);
+  let grupos;
+  if(aba==='filtros'){
+    grupos = gruposFiltrosTplHtml('mon', MON_JANELAS_TEMPLATE, sel, 'mon-tpl-grupo', 'data-mtpl-campo');
+  }else{
+    grupos = MON_JANELAS_TEMPLATE.map(janela=>{
+      const campos = MON_CAMPOS.filter(c=>c.janela===janela && c.id!=='container' && !(aba==='card' && c.id==='situacao'));
+      if(!campos.length) return '';
+      const marcados = campos.filter(c=>sel.has(c.id)).length;
+      return `<div class="tpl-grupo">
+        <div class="tpl-grupo-topo"><b>${esc(janela)}</b>
+          <span class="membro-sub">${marcados} de ${campos.length}</span>
+          <button class="link-btn" data-action="mon-tpl-grupo:${janela}:${marcados===campos.length?'0':'1'}">${marcados===campos.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+        ${campos.map(c=>`<label class="tpl-campo"><input type="checkbox" data-mtpl-campo="${esc(c.id)}" ${sel.has(c.id)?'checked':''}> ${esc(c.label)}</label>`).join('')}
+      </div>`;
+    }).join('');
+  }
+  const textos = {
+    card: 'Escolha as informações que aparecem em cada card. O container aparece sempre no topo do card, e os cards ficam agrupados pela situação do free time.',
+    lista: 'Escolha as colunas da lista. O container aparece sempre na primeira coluna.',
+    filtros: 'Escolha os filtros da tela: todas as informações do container estão disponíveis (texto, lista de opções, período ou faixa de valores). Os filtros valem ao clicar em Filtrar; filtros ocultos deixam de ser aplicados. Valem também para as Janelas.',
+  };
+  const contagem = aba==='filtros' ? (sel.size===1 ? 'filtro selecionado' : 'filtros selecionados') : (sel.size===1 ? 'informação selecionada' : 'informações selecionadas');
+  return `<div class="card proc-template">
+    <div class="proc-template-topo">
+      <div class="section-title">${ICONS.gear} Template</div>
+      <div class="pers-tabs" style="margin:0;">
+        <button class="pers-tab ${aba==='card'?'active':''}" data-action="mon-tpl-aba:card">Configurar Card</button>
+        <button class="pers-tab ${aba==='lista'?'active':''}" data-action="mon-tpl-aba:lista">Configurar Lista</button>
+        <button class="pers-tab ${aba==='filtros'?'active':''}" data-action="mon-tpl-aba:filtros">Configurar Filtros</button>
+      </div>
+    </div>
+    <p class="page-sub" style="margin:10px 0 16px;">${textos[aba]} Esta escolha vale só para você.</p>
+    <div class="tpl-grupos">${grupos}</div>
+    <div class="btn-row" style="margin-top:18px; justify-content:space-between;">
+      <span class="membro-sub">${sel.size} ${contagem}</span>
+      <div class="btn-row">
+        <button class="btn btn-ghost" data-action="mon-tpl-padrao">Restaurar padrão</button>
+        <button class="btn btn-ghost" data-action="mon-template">Cancelar</button>
+        <button class="btn btn-primary" data-action="mon-tpl-salvar">${ICONS.check} Salvar ${({ card:'card', lista:'lista', filtros:'filtros' })[aba]}</button>
+      </div>
+    </div>
+  </div>`;
+}
+function acaoTemplateMon(cmd, a1, a2){
+  switch(cmd){
+    case 'mon-modo': salvarPrefsMonitoramento({ modo:a1 }); renderApp(); return true;
+    case 'mon-template': state.monTemplateAberto = !state.monTemplateAberto; state.monTemplateSel = null; renderApp(); return true;
+    case 'mon-tpl-aba': state.monTemplateAba = a1; renderApp(); return true;
+    case 'mon-tpl-grupo': {
+      const aba = state.monTemplateAba || 'card';
+      const ids = aba==='filtros' ? catalogoFiltrosMon().filter(f=>f.janela===a1).map(f=>f.id)
+        : MON_CAMPOS.filter(c=>c.janela===a1 && c.id!=='container' && !(aba==='card' && c.id==='situacao')).map(c=>c.id);
+      const atual = new Set(state.monTemplateSel[aba]);
+      ids.forEach(id=> a2==='1' ? atual.add(id) : atual.delete(id));
+      state.monTemplateSel[aba] = (aba==='filtros' ? catalogoFiltrosMon().map(f=>f.id) : MON_CAMPOS.map(c=>c.id)).filter(id=>atual.has(id));
+      renderApp(); return true;
+    }
+    case 'mon-tpl-padrao': { const aba = state.monTemplateAba || 'card'; state.monTemplateSel[aba] = [...MON_TEMPLATE_PADRAO[aba]]; renderApp(); return true; }
+    case 'mon-tpl-salvar': {
+      const aba = state.monTemplateAba || 'card', escolhidos = state.monTemplateSel[aba];
+      if(aba!=='filtros' && !escolhidos.length) return toast('Selecione pelo menos uma informação.'), true;
+      const alteracao = { [aba]: [...escolhidos] };
+      if(aba!=='filtros') alteracao.modo = aba; else limparFiltrosOcultosTpl('mon', escolhidos);
+      salvarPrefsMonitoramento(alteracao, ({ card:'Template do card salvo.', lista:'Template da lista salvo.', filtros:'Filtros da tela salvos.' })[aba])
+        .then(()=>{ state.monTemplateAberto = false; state.monTemplateSel = null; renderApp(); });
+      return true;
+    }
+  }
+  return false;
+}
+function onTemplateCampoMon(el){
+  const id = el.getAttribute('data-mtpl-campo'); if(!id || !state.monTemplateSel) return false;
+  const aba = state.monTemplateAba || 'card', atual = new Set(state.monTemplateSel[aba]);
+  el.checked ? atual.add(id) : atual.delete(id);
+  const ordem = aba==='filtros' ? catalogoFiltrosMon().map(f=>f.id) : MON_CAMPOS.map(c=>c.id);
+  state.monTemplateSel[aba] = ordem.filter(x=>atual.has(x));
+  renderApp(); return true;
+}
+
+/* --- Lista e Cards (a edição fica nas Janelas) --- */
+function valorCampoMon(campo, m){
+  const v = campo.valor(m);
+  if(!v) return '<span class="vazio">—</span>';
+  if(campo.badge){ const c = monCalcular(m, hojeLocalISO()); return `<span class="badge ${MON_SITUACOES[c.situacao].classe}">${esc(v)}</span>`; }
+  return esc(v);
+}
+function acoesMonHtml(m){
+  return `<div class="ci-actions">
+    <button class="icon-btn" title="Abrir a janela para editar" data-action="mon-abrir:${esc(m.id)}">${ICONS.open}</button>
+    <button class="icon-btn" title="Rastrear pela API" data-action="mon-rastrear:${esc(m.id)}">${ICONS.ship}</button>
+    ${deleteBtnHtml('mon', m.id, 'mon-excluir:'+m.id)}
+  </div>`;
+}
+function renderMonLista(lista, prefs){
+  const campos = prefs.lista.filter(id=>id!=='container').map(id=>MON_CAMPO[id]);
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Container</th>${campos.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th>Ações</th></tr></thead>
+    <tbody>${lista.map(m=>`<tr>
+      <td><span class="stamp">${esc(m.container) || 'sem número'}</span></td>
+      ${campos.map(c=>`<td>${valorCampoMon(c, m)}</td>`).join('')}
+      <td>${acoesMonHtml(m)}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function renderMonKanban(lista, prefs){
+  const campos = prefs.card.filter(id=>id!=='container' && id!=='situacao').map(id=>MON_CAMPO[id]);
+  const hoje = hojeLocalISO(), sit = m => monCalcular(m, hoje).situacao;
+  const colunas = Object.entries(MON_SITUACOES).filter(([k])=>lista.some(m=>sit(m)===k));
+  return `<div class="kanban-scroll"><div class="kanban-board proc-board" style="grid-template-columns:repeat(${colunas.length||1}, 250px);">
+    ${colunas.map(([k, s])=>{
+      const doGrupo = lista.filter(m=>sit(m)===k);
+      return `<div class="kanban-column">
+        <div class="kanban-column-header"><span class="badge ${s.classe}">${esc(s.rotulo)}</span><span class="kanban-count">${doGrupo.length}</span></div>
+        <div class="kanban-column-body">
+          ${doGrupo.map(m=>`
+          <div class="kanban-card" data-action="mon-abrir:${esc(m.id)}" title="Clique para abrir a janela deste container">
+            <div class="kanban-card-top"><span class="stamp">${esc(m.container) || 'sem número'}</span><span class="kanban-card-acoes">${acoesMonHtml(m)}</span></div>
+            <div class="kanban-card-campos">${campos.map(c=>`<div class="kc-linha" title="${esc(c.label)}"><span class="kc-rot">${esc(c.label)}</span><span class="kc-val">${valorCampoMon(c, m)}</span></div>`).join('')}</div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+  </div></div>
+  <p class="hint" style="color:var(--ink-soft); font-size:12px; margin-top:12px;">Os cards ficam agrupados pela situação do free time. Clique num card para abrir a janela e editar o container.</p>`;
+}
+
 function renderMonitoramento(){
-  const hoje = hojeLocalISO(), lista = state.monitoramento;
+  const hoje = hojeLocalISO(), todos = state.monitoramento;
+  const prefs = prefsMonitoramento(), modo = prefs.modo;
+  const lista = aplicarFiltrosTpl('mon', todos);
   const disponiveis = containersDosProcessos().filter(x=>!monJaImportado(x)).length;
-  const ligados = lista.filter(m=>m.origem==='processo').length;
+  const ligados = todos.filter(m=>m.origem==='processo').length;
   let conta = { prazo:0, venc:0, exc:0 }, totalBRL = 0, semCambio = 0;
-  lista.forEach(m=>{ const c = monCalcular(m, hoje);
+  todos.forEach(m=>{ const c = monCalcular(m, hoje);
     if(c.situacao==='no_prazo' || c.situacao==='aguardando') conta.prazo++;
     if(c.situacao==='vencendo') conta.venc++;
     if(c.situacao==='excedido' || c.situacao==='devolvido_excedido') conta.exc++;
     totalBRL += c.custoBRL; if(c.semCambio) semCambio++; });
-  const f = state.monFiltro;
+  let conteudo;
+  if(!todos.length) conteudo = `<div class="empty">${ICONS.cube}<h3>Nenhum container monitorado</h3><p>Use "Adicionar Container" ou "Puxar containers dos Processos".</p></div>`;
+  else if(!lista.length) conteudo = `<div class="empty"><h3>Nenhum container encontrado</h3><p>Ajuste os filtros ou clique em "Limpar".</p></div>`;
+  else if(modo==='lista') conteudo = renderMonLista(lista, prefs);
+  else if(modo==='card') conteudo = renderMonKanban(lista, prefs);
+  else conteudo = lista.map(m=>monCardHtml(m, hoje)).join('');
+  const extras = `
+      <button class="btn btn-primary btn-sm" data-action="mon-add">${ICONS.plus} Adicionar Container</button>
+      <button class="btn btn-ghost btn-sm" data-action="mon-importar" title="Puxa os containers com número cadastrados em Processos → Transporte (com a referência do cliente)">${ICONS.download} Puxar dos Processos${disponiveis ? ' ('+disponiveis+')' : ''}</button>
+      ${ligados ? `<button class="btn btn-ghost btn-sm" data-action="mon-atualizar" title="Atualiza ETD, ETA, portos, free time e a referência do cliente dos containers que vieram de Processos">${ICONS.edit} Atualizar com os Processos</button>` : ''}
+      ${modo==='janela' && lista.length ? `<button class="btn btn-ghost btn-sm" data-action="mon-minimizar-todos" title="Minimiza ou expande todas as janelas de uma vez">${lista.some(m=>!monMinimizado(m)) ? 'Minimizar todas' : 'Expandir todas'}</button>` : ''}
+      <button class="btn btn-ghost btn-sm" data-action="mon-rastrear-todos" ${state.monLote?'disabled':''} title="Consulta na API de rastreamento todos os containers com número válido que ainda não foram devolvidos">${state.monLote ? 'Rastreando ' + state.monLote.feitos + '/' + state.monLote.total + '…' : 'Rastrear todos pela API'}</button>
+      <button class="btn btn-ghost btn-sm" data-action="mon-testar-api" title="Verifica se a função /api/rastreio está publicada e se a chave da Kpler foi encontrada">Testar função de rastreio</button>`;
   return `
   <div class="page-title">Monitoramento de Carga</div>
-  <div class="page-sub">Acompanhe os containers: ETD, ETA, origem e destino, free time e o custo que passa a correr depois dele. Adicione à mão ou puxe os containers cadastrados nos Processos.</div>
+  <div class="page-sub">Acompanhe os containers: ETD, ETA, origem e destino, free time e o custo que passa a correr depois dele. Adicione à mão ou puxe os containers cadastrados nos Processos.${seloFiltroFixado('mon')}</div>
   <hr class="hairline">
 
   <div class="kpi-row" style="margin-bottom:20px;">
-    <div class="kpi"><div class="k-lbl">Containers monitorados</div><div class="k-val" id="mon-kpi-total">${lista.length}</div></div>
+    <div class="kpi"><div class="k-lbl">Containers monitorados</div><div class="k-val" id="mon-kpi-total">${todos.length}</div></div>
     <div class="kpi"><div class="k-lbl">No free time</div><div class="k-val" id="mon-kpi-prazo">${conta.prazo}</div></div>
     <div class="kpi"><div class="k-lbl">Free time vencendo (≤ 2 dias)</div><div class="k-val" id="mon-kpi-venc">${conta.venc}</div></div>
     <div class="kpi"><div class="k-lbl">Excedidos</div><div class="k-val" id="mon-kpi-exc">${conta.exc}</div></div>
@@ -5236,30 +5518,28 @@ function renderMonitoramento(){
     <div class="k-sub" id="mon-kpi-semcambio">${semCambio ? semCambio + ' sem câmbio informado' : 'Soma de todos os containers, em reais'}</div></div>
 
   <div class="lista-painel">
-    <div class="cot-barra" style="margin-bottom:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-      <button class="btn btn-primary btn-sm" data-action="mon-add">${ICONS.plus} Adicionar Container</button>
-      <button class="btn btn-ghost btn-sm" data-action="mon-importar" title="Puxa os containers com número cadastrados em Processos → Transporte">${ICONS.download} Puxar containers dos Processos${disponiveis ? ' ('+disponiveis+')' : ''}</button>
-      ${lista.length ? `<button class="btn btn-ghost btn-sm" data-action="mon-minimizar-todos" title="Minimiza ou expande todas as janelas de uma vez">${lista.some(m=>!monMinimizado(m)) ? 'Minimizar todas' : 'Expandir todas'}</button>` : ''}
-      <button class="btn btn-ghost btn-sm" data-action="mon-testar-api" title="Verifica se a função /api/rastreio está publicada e se a chave da Kpler foi encontrada">Testar função de rastreio</button>
-      <button class="btn btn-ghost btn-sm" data-action="mon-rastrear-todos" ${state.monLote?'disabled':''} title="Consulta na API de rastreamento todos os containers com número válido que ainda não foram devolvidos">${state.monLote ? 'Rastreando ' + state.monLote.feitos + '/' + state.monLote.total + '…' : 'Rastrear todos pela API'}</button>
-      ${ligados ? `<button class="btn btn-ghost btn-sm" data-action="mon-atualizar" title="Atualiza ETD, ETA, portos, free time... dos containers que vieram de Processos">${ICONS.edit} Atualizar com os Processos</button>` : ''}
+    <div class="cot-barra">
+      <div class="view-toggle">
+        <button class="view-toggle-btn ${modo==='lista'?'active':''}" data-action="mon-modo:lista">${ICONS.file} Lista</button>
+        <button class="view-toggle-btn ${modo==='card'?'active':''}" data-action="mon-modo:card">${ICONS.product} Cards</button>
+        <button class="view-toggle-btn ${modo==='janela'?'active':''}" data-action="mon-modo:janela">${ICONS.edit} Janelas</button>
+      </div>
+      <div class="btn-row">${botoesExportarHtml('mon')}<button class="btn btn-ghost btn-sm ${state.monTemplateAberto?'ativo':''}" data-action="mon-template">${ICONS.gear} Template</button></div>
     </div>
+    ${state.monTemplateAberto ? renderMonTemplate() : ''}
     ${state.monDiag ? `<div class="mon-diag ${state.monDiag.ok===true?'ok':state.monDiag.ok===false?'erro':''}">${esc(state.monDiag.texto)}</div>` : ''}
-    <div class="filter-bar" style="margin-bottom:14px;">
-      <div class="field"><label>Buscar</label><input data-mon-filtro="texto" value="${esc(f.texto)}" placeholder="Container, processo, porto, país..."></div>
-      <div class="field"><label>Situação</label>
-        <select data-mon-filtro="sit">
-          <option value="" ${!f.sit?'selected':''}>Todas</option>
-          <option value="_atencao" ${f.sit==='_atencao'?'selected':''}>Pedem atenção (vencendo / excedidos)</option>
-          ${Object.entries(MON_SITUACOES).map(([k,v])=>`<option value="${k}" ${f.sit===k?'selected':''}>${v.rotulo}</option>`).join('')}
-        </select></div>
-    </div>
-    ${lista.length ? lista.map(m=>monCardHtml(m, hoje)).join('') : `<div class="empty">${ICONS.cube}<h3>Nenhum container monitorado</h3><p>Use "Adicionar Container" ou "Puxar containers dos Processos".</p></div>`}
-    <div class="empty" id="mon-vazio-filtro" style="display:none;"><h3>Nada encontrado</h3><p>Ajuste a busca ou a situação.</p></div>
+    ${barraFiltrosTpl('mon', [], extras)}
+    ${conteudo}
     <p class="hint" style="margin:6px 0 0;">Contagem do free time: o dia da chegada (efetiva; sem ela, o ETA) conta como dia 1. Se houver data de devolução, a contagem para nela; sem devolução, vai até hoje.</p>
   </div>`;
 }
+
 function posRenderMonitoramento(){
+  if(state.monFoco){
+    const id = state.monFoco; state.monFoco = null;
+    const el = document.querySelector('.mon-card[data-mon-id="'+id+'"]');
+    if(el){ if(el.scrollIntoView) el.scrollIntoView({ block:'center' }); el.classList.add('mon-destaque'); setTimeout(()=>el.classList.remove('mon-destaque'), 2200); }
+  }
   aplicarFiltroMonitoramento();
   if(!(pode('monitoramento','editar') || pode('monitoramento','criar'))) document.querySelectorAll('[data-mon], [data-mon-filtro="__"]').forEach(e=>{ e.disabled = true; });
 }
@@ -5335,7 +5615,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
-state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.monRastreando = {}; state.monLote = null; state.monDiag = null;
+state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
 state.dash = { cot:{gran:'mes',ano:0,mes:0,comp:[]}, proc:{gran:'mes',ano:0,mes:0,comp:[]}, mon:{gran:'mes',ano:0,mes:0,comp:[],medida:'qtd'}, fin:{gran:'mes',ano:0,mes:0,comp:[],visao:'total'} };
 state.dashSel = { cot:true, proc:true, mon:true, fin:true, cad:true }; state.dashFormato = 'pdf'; state.dashBaixar = { aberto:false };
 state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
@@ -9709,6 +9989,7 @@ function onAppChange(e){
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'change'); return; }
   if(el.hasAttribute('data-dash') || el.hasAttribute('data-dash-sel') || el.hasAttribute('data-dash-fmt')){ onDashInput(el); return; }
+  if(el.hasAttribute('data-mtpl-campo')){ onTemplateCampoMon(el); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
   if(el.hasAttribute('data-cadtpl-campo')){ onCadTemplateCampo(el); return; }
@@ -9886,7 +10167,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.17 · dashboards da Home · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.18 · monitoramento: filtros e templates · build 15/10/2026</span></div>
   `;
 }
 
