@@ -5032,20 +5032,24 @@ async function monTestarApi(){
   }catch(e){ state.monDiag = { ok:false, texto:'Sem conexão com o servidor.' }; }
   renderApp();
 }
-function monRastreioHtml(m){
+function monRastreioHtml(m, sel){
+  sel = sel || new Set(MON_TEMPLATE_PADRAO.janela);
+  const verBotao = sel.has('rastreioBotao'), verResumo = sel.has('rastreioResumo'), verEventos = sel.has('rastreioEventos');
+  if(!verBotao && !verResumo && !verEventos) return '';
   const busy = !!(state.monRastreando && state.monRastreando[m.id]), r = m.rastreio;
   const atraso = r && r.atrasoDias!=null ? (r.atrasoDias>0 ? `<span class="badge badge-danger">Atraso de ${r.atrasoDias} dia${r.atrasoDias===1?'':'s'}</span>` : '<span class="badge badge-ok">Sem atraso</span>') : '';
   const statusTxt = r && r.status ? (MON_ST_PEDIDO[r.status] || r.status) : '';
   const eventos = r && r.eventos && r.eventos.length ? [...r.eventos].reverse() : [];
+  const temDados = !!(r && (r.status || r.situacao));
   return `
     <div class="mon-rastreio">
       <div class="mon-rastreio-topo">
         <div class="mon-ft-titulo" style="margin:0;">Rastreamento por API</div>
-        <label class="mon-scac">Armador (SCAC)<input data-mon="${m.id}.scac" value="${esc(m.scac||'AUTO')}" placeholder="AUTO" maxlength="5" style="text-transform:uppercase;" autocomplete="off" title="AUTO deixa a Kpler descobrir o armador. Ou informe o código (ex.: MAEU, MSCU, HLCU)."></label>
-        <button class="btn btn-ghost btn-sm" data-action="mon-rastrear:${m.id}" ${busy?'disabled':''}>${busy ? 'Consultando…' : (r && r.status ? 'Atualizar rastreio' : 'Rastrear agora')}</button>
+        ${verBotao ? `<label class="mon-scac">Armador (SCAC)<input data-mon="${m.id}.scac" value="${esc(m.scac||'AUTO')}" placeholder="AUTO" maxlength="5" style="text-transform:uppercase;" autocomplete="off" title="AUTO deixa a Kpler descobrir o armador. Ou informe o código (ex.: MAEU, MSCU, HLCU)."></label>
+        <button class="btn btn-ghost btn-sm" data-action="mon-rastrear:${m.id}" ${busy?'disabled':''}>${busy ? 'Consultando…' : (r && r.status ? 'Atualizar rastreio' : 'Rastrear agora')}</button>` : ''}
       </div>
       ${r && r.erro ? `<p class="hint mon-aviso" style="margin:8px 0 0;">${esc(r.erro)}</p>` : ''}
-      ${r && (r.status || r.situacao) ? `
+      ${verResumo && temDados ? `
       <div class="mon-rastreio-fatos">
         ${statusTxt ? `<div><span>Situação do rastreio</span><b>${esc(statusTxt)}${r.falha ? ' · ' + esc(r.falha) : ''}</b></div>` : ''}
         ${r.situacao ? `<div><span>Situação da viagem</span><b>${esc(MON_SIT_VIAGEM[r.situacao] || r.situacao)}</b></div>` : ''}
@@ -5055,11 +5059,12 @@ function monRastreioHtml(m){
         <div><span>Última consulta</span><b>${r.atualizadoEm ? fmtDate(r.atualizadoEm) : '—'}</b></div>
       </div>
       <div class="mon-rastreio-extra">${atraso}${r.link ? `<a class="mon-link" href="${esc(r.link)}" target="_blank" rel="noopener">Ver no MarineTraffic ↗</a>` : ''}</div>
-      ${r.devolucaoSugerida && !m.devolucao ? `<div class="mon-sugestao">Devolução do vazio detectada em <b>${fmtDateOnly(r.devolucaoSugerida)}</b>. <button class="btn btn-ghost btn-sm" data-action="mon-aplicar-devolucao:${m.id}">Usar como devolução</button></div>` : ''}
-      ${eventos.length ? `<details class="mon-eventos"><summary>Eventos do container (${eventos.length})</summary>
+      ${r.devolucaoSugerida && !m.devolucao ? `<div class="mon-sugestao">Devolução do vazio detectada em <b>${fmtDateOnly(r.devolucaoSugerida)}</b>. <button class="btn btn-ghost btn-sm" data-action="mon-aplicar-devolucao:${m.id}">Usar como devolução</button></div>` : ''}` : ''}
+      ${verEventos && eventos.length ? `<details class="mon-eventos"><summary>Eventos do container (${eventos.length})</summary>
         <div class="table-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th>Local</th><th>Navio</th><th></th></tr></thead><tbody>
           ${eventos.map(e=>`<tr><td>${e.data ? fmtDateOnly(e.data) : '—'}</td><td>${esc(MON_EVENTOS[e.tipo] || e.tipo || '')}</td><td>${esc(e.local||'')}</td><td>${esc(e.navio||'')}</td><td><span class="badge ${e.classificador==='actual'?'badge-ok':'badge-navy'}">${e.classificador==='actual'?'Real':'Previsto'}</span></td></tr>`).join('')}
-        </tbody></table></div></details>` : ''}` : `<p class="hint" style="margin:8px 0 0;">Consulta o container na Kpler e atualiza ETD, ETA e chegada efetiva (que alimenta o free time).</p>`}
+        </tbody></table></div></details>` : ''}
+      ${!temDados && (verResumo || verBotao) ? `<p class="hint" style="margin:8px 0 0;">${verBotao ? 'Consulta o container na Kpler e atualiza ETD, ETA e chegada efetiva (que alimenta o free time).' : 'Este container ainda não foi rastreado.'}</p>` : ''}
     </div>`;
 }
 
@@ -5191,9 +5196,47 @@ function monCampo(id, campo, rotulo, valor, opts){
   if(opts.options) return `<div class="field"><label>${rotulo}</label><select data-mon="${id}.${campo}">${opts.options.map(o=>`<option ${valor===o?'selected':''}>${esc(o)}</option>`).join('')}</select></div>`;
   return `<div class="field" ${opts.attr||''}><label>${rotulo}</label><input data-mon="${id}.${campo}" type="${tipo}" ${tipo==='number'?'step="any" min="0"':''} value="${esc(valor)}" ${opts.ph?`placeholder="${esc(opts.ph)}"`:''} ${opts.up?'style="text-transform:uppercase;"':''} autocomplete="off"></div>`;
 }
-function monCardHtml(m, hoje){
+function monCardHtml(m, hoje, selJanela){
   const c = monCalcular(m, hoje), confirmando = state.pendingDelete === 'mon:' + m.id;
   if(monMinimizado(m)) return monCardMinimizadoHtml(m, c);
+  // O que aparece na janela vem do Template (Configurar Janela); o container fica sempre.
+  const sel = selJanela || new Set(prefsMonitoramento().janela);
+  const so = (id, html) => sel.has(id) ? html : '';
+  const linha = (cols, itens, estilo) => { const h = itens.join(''); return h.trim() ? `<div class="field-row grid-${cols}" ${estilo||''}>${h}</div>` : ''; };
+  const geral = linha(4, [
+    so('referencia', monCampo(m.id,'referencia','Referência do processo (Nº)',monRef(m),{ph:'Ex.: PRC-0001'})),
+    so('referenciaCliente', monCampo(m.id,'referenciaCliente','Referência do cliente',m.referenciaCliente||'',{ph: m.origem==='processo' ? 'Vem do processo' : 'Pedido / PO do cliente'})),
+    monCampo(m.id,'container','Container',m.container,{ph:'Ex.: MSKU1234567', up:true}),
+    so('tipo', monCampo(m.id,'tipo','Tipo de container',m.tipo,{options:PROC_CONTAINER_TIPOS})) ]);
+  const origem = linha(3, [
+    so('paisOrigem', monCampo(m.id,'paisOrigem','País de origem',m.paisOrigem,{ph:'Ex.: China'})),
+    so('portoOrigem', monCampo(m.id,'portoOrigem','Porto de origem',m.portoOrigem,{ph:'Ex.: Shanghai'})),
+    so('etd', monCampo(m.id,'etd','ETD (saída estimada)',m.etd,{type:'date'})) ], 'style="margin-top:12px;"');
+  const destino = linha(3, [
+    so('paisDestino', monCampo(m.id,'paisDestino','País de destino',m.paisDestino,{ph:'Ex.: Brasil'})),
+    so('portoDestino', monCampo(m.id,'portoDestino','Porto de destino',m.portoDestino,{ph:'Ex.: Santos'})),
+    so('eta', monCampo(m.id,'eta','ETA (chegada estimada)',m.eta,{type:'date'})) ], 'style="margin-top:12px;"');
+  const rastreio = monRastreioHtml(m, sel);
+  const ftCampos = linha(4, [
+    so('freeTime', monCampo(m.id,'freeTime','Free time (dias)',m.freeTime,{type:'number', ph:'Ex.: 7'})),
+    so('chegada', monCampo(m.id,'chegada','Chegada efetiva',m.chegada,{type:'date'})),
+    so('inicio', monCampo(m.id,'inicio','Início da contagem (opcional)',m.inicio,{type:'date'})),
+    so('devolucao', monCampo(m.id,'devolucao','Devolução do container vazio',m.devolucao,{type:'date'})) ]);
+  const ftCusto = sel.has('custoDiario') ? linha(4, [
+    monCampo(m.id,'custoDiario','Custo diário após o free time',m.custoDiario,{type:'number', ph:'0,00'}),
+    monCampo(m.id,'moeda','Moeda',m.moeda,{options:['USD','EUR','RMB','R$']}),
+    monCampo(m.id,'cambio','Câmbio (R$ por unidade)',m.cambio,{type:'number', ph:'Ex.: 5,40', attr:`data-mon-cambio style="${m.moeda==='R$'?'display:none;':''}"`}) ], 'style="margin-top:12px;"') : '';
+  const tiles = [
+    so('rLimite', `<div><span>Limite do free time</span><b data-mon-calc="limite">${c.limite ? fmtDateOnly(c.limite) : '—'}</b></div>`),
+    so('rUso', `<div><span>Dias de uso</span><b data-mon-calc="uso">${c.ini!=null && c.ft>0 ? c.uso + ' dia' + (c.uso===1?'':'s') : '—'}</b></div>`),
+    so('rExc', `<div><span>Dias excedentes</span><b data-mon-calc="exc">${c.ini!=null && c.ft>0 ? c.excedentes : '—'}</b></div>`),
+    so('rCusto', `<div><span>Custo acumulado</span><b data-mon-calc="custo">${esc(monCustoTxt(m, c))}</b></div>`) ].join('');
+  const ftBloco = (ftCampos || ftCusto || tiles) ? `<div class="mon-ft">
+      <div class="mon-ft-titulo">Free time e custo após o free time</div>
+      ${ftCampos}${ftCusto}
+      ${tiles ? `<div class="mon-resultados">${tiles}</div>` : ''}
+      ${sel.has('rCusto') ? `<p class="hint mon-aviso" data-mon-calc="aviso" style="${c.semCambio?'':'display:none;'}">Informe o câmbio para ver o custo em reais.</p>` : ''}
+    </div>` : '';
   const vinculo = m.origem==='processo'
     ? `<span class="badge badge-navy" data-action="proc-abrir:${esc(m.processoId)}" style="cursor:pointer;" title="Abrir o processo">${esc(m.processoId)}</span>`
     : '<span class="badge badge-amber">Manual</span>';
@@ -5209,44 +5252,9 @@ function monCardHtml(m, hoje){
         <button class="icon-btn ${confirmando?'btn-perigo':''}" title="${confirmando?'Clique de novo para confirmar':'Remover do monitoramento'}" data-action="mon-excluir:${m.id}">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="field-row grid-4">
-      ${monCampo(m.id,'referencia','Referência do processo (Nº)',monRef(m),{ph:'Ex.: PRC-0001'})}
-      ${monCampo(m.id,'referenciaCliente','Referência do cliente',m.referenciaCliente||'',{ph: m.origem==='processo' ? 'Vem do processo' : 'Pedido / PO do cliente'})}
-      ${monCampo(m.id,'container','Container',m.container,{ph:'Ex.: MSKU1234567', up:true})}
-      ${monCampo(m.id,'tipo','Tipo de container',m.tipo,{options:PROC_CONTAINER_TIPOS})}
-    </div>
-    <div class="field-row grid-3" style="margin-top:12px;">
-      ${monCampo(m.id,'paisOrigem','País de origem',m.paisOrigem,{ph:'Ex.: China'})}
-      ${monCampo(m.id,'portoOrigem','Porto de origem',m.portoOrigem,{ph:'Ex.: Shanghai'})}
-      ${monCampo(m.id,'etd','ETD (saída estimada)',m.etd,{type:'date'})}
-    </div>
-    <div class="field-row grid-3" style="margin-top:12px;">
-      ${monCampo(m.id,'paisDestino','País de destino',m.paisDestino,{ph:'Ex.: Brasil'})}
-      ${monCampo(m.id,'portoDestino','Porto de destino',m.portoDestino,{ph:'Ex.: Santos'})}
-      ${monCampo(m.id,'eta','ETA (chegada estimada)',m.eta,{type:'date'})}
-    </div>
-    ${monRastreioHtml(m)}
-    <div class="mon-ft">
-      <div class="mon-ft-titulo">Free time e custo após o free time</div>
-      <div class="field-row grid-4">
-        ${monCampo(m.id,'freeTime','Free time (dias)',m.freeTime,{type:'number', ph:'Ex.: 7'})}
-        ${monCampo(m.id,'chegada','Chegada efetiva',m.chegada,{type:'date'})}
-        ${monCampo(m.id,'inicio','Início da contagem (opcional)',m.inicio,{type:'date'})}
-        ${monCampo(m.id,'devolucao','Devolução do container vazio',m.devolucao,{type:'date'})}
-      </div>
-      <div class="field-row grid-4" style="margin-top:12px;">
-        ${monCampo(m.id,'custoDiario','Custo diário após o free time',m.custoDiario,{type:'number', ph:'0,00'})}
-        ${monCampo(m.id,'moeda','Moeda',m.moeda,{options:['USD','EUR','RMB','R$']})}
-        ${monCampo(m.id,'cambio','Câmbio (R$ por unidade)',m.cambio,{type:'number', ph:'Ex.: 5,40', attr:`data-mon-cambio style="${m.moeda==='R$'?'display:none;':''}"`})}
-      </div>
-      <div class="mon-resultados">
-        <div><span>Limite do free time</span><b data-mon-calc="limite">${c.limite ? fmtDateOnly(c.limite) : '—'}</b></div>
-        <div><span>Dias de uso</span><b data-mon-calc="uso">${c.ini!=null && c.ft>0 ? c.uso + ' dia' + (c.uso===1?'':'s') : '—'}</b></div>
-        <div><span>Dias excedentes</span><b data-mon-calc="exc">${c.ini!=null && c.ft>0 ? c.excedentes : '—'}</b></div>
-        <div><span>Custo acumulado</span><b data-mon-calc="custo">${esc(monCustoTxt(m, c))}</b></div>
-      </div>
-      <p class="hint mon-aviso" data-mon-calc="aviso" style="${c.semCambio?'':'display:none;'}">Informe o câmbio para ver o custo em reais.</p>
-    </div>
+    ${geral}${origem}${destino}
+    ${rastreio}
+    ${ftBloco}
   </div>`;
 }
 /* ============ Monitoramento: campos, filtros e template (mesmo padrão de Cotações e Processos) ============ */
@@ -5296,7 +5304,21 @@ const MON_CAMPOS = (()=>{
   return campos.map(([janela, id, label, valor, extra])=>({ janela, id, label, valor, ...(extra||{}) }));
 })();
 const MON_CAMPO = Object.fromEntries(MON_CAMPOS.map(c=>[c.id, c]));
+// Informações que a pessoa pode escolher para as Janelas. O container, a situação do free time e os botões ficam sempre no topo.
+const MON_JANELA_ITENS = [
+  ['Geral', 'referencia', 'Referência do processo (Nº)'], ['Geral', 'referenciaCliente', 'Referência do cliente'], ['Geral', 'tipo', 'Tipo de container'],
+  ['Rota e embarque', 'paisOrigem', 'País de origem'], ['Rota e embarque', 'portoOrigem', 'Porto de origem'], ['Rota e embarque', 'etd', 'ETD (saída estimada)'],
+  ['Rota e embarque', 'paisDestino', 'País de destino'], ['Rota e embarque', 'portoDestino', 'Porto de destino'], ['Rota e embarque', 'eta', 'ETA (chegada estimada)'],
+  ['Free time e custo', 'freeTime', 'Free time (dias)'], ['Free time e custo', 'chegada', 'Chegada efetiva'], ['Free time e custo', 'inicio', 'Início da contagem (opcional)'],
+  ['Free time e custo', 'devolucao', 'Devolução do container vazio'], ['Free time e custo', 'custoDiario', 'Custo diário após o free time (com moeda e câmbio)'],
+  ['Free time e custo', 'rLimite', 'Resultado: limite do free time'], ['Free time e custo', 'rUso', 'Resultado: dias de uso'],
+  ['Free time e custo', 'rExc', 'Resultado: dias excedentes'], ['Free time e custo', 'rCusto', 'Resultado: custo acumulado'],
+  ['Rastreamento', 'rastreioBotao', 'Armador (SCAC) e botão Rastrear'], ['Rastreamento', 'rastreioResumo', 'Resumo do rastreio (situação, navio, atraso, link)'],
+  ['Rastreamento', 'rastreioEventos', 'Eventos do container'],
+].map(([janela, id, label])=>({ janela, id, label }));
+const MON_JANELA_ITEM = Object.fromEntries(MON_JANELA_ITENS.map(i=>[i.id, i]));
 const MON_TEMPLATE_PADRAO = {
+  janela: MON_JANELA_ITENS.map(i=>i.id),
   filtros: ['busca', 'situacao', 'etd', 'eta'],
   lista: ['referencia', 'referenciaCliente', 'portoOrigem', 'etd', 'portoDestino', 'eta', 'situacao'],
   card: ['referencia', 'referenciaCliente', 'tipo', 'portoOrigem', 'etd', 'portoDestino', 'eta', 'custoBRL'],
@@ -5307,6 +5329,7 @@ function prefsMonitoramento(){
   return { modo: (p.modo==='lista' || p.modo==='card') ? p.modo : 'janela',
     lista: valido(p.lista, MON_CAMPO) || MON_TEMPLATE_PADRAO.lista,
     card: valido(p.card, MON_CAMPO) || MON_TEMPLATE_PADRAO.card,
+    janela: valido(p.janela, MON_JANELA_ITEM) || MON_TEMPLATE_PADRAO.janela,
     filtros: valido(p.filtros, mapaFiltrosTpl('mon')) || MON_TEMPLATE_PADRAO.filtros };
 }
 const salvarPrefsMonitoramento = (alteracao, mensagem) => salvarPreferencias('monitoramento', alteracao, prefsMonitoramento(), mensagem);
@@ -5351,11 +5374,23 @@ function catalogoFiltrosMon(){
 /* --- janela Template: Configurar Card / Lista / Filtros --- */
 function renderMonTemplate(){
   const aba = state.monTemplateAba || 'card';
-  if(!state.monTemplateSel){ const pr = prefsMonitoramento(); state.monTemplateSel = { card:[...pr.card], lista:[...pr.lista], filtros:[...pr.filtros] }; }
+  if(!state.monTemplateSel){ const pr = prefsMonitoramento(); state.monTemplateSel = { janela:[...pr.janela], card:[...pr.card], lista:[...pr.lista], filtros:[...pr.filtros] }; }
   const sel = new Set(state.monTemplateSel[aba]);
   let grupos;
   if(aba==='filtros'){
     grupos = gruposFiltrosTplHtml('mon', MON_JANELAS_TEMPLATE, sel, 'mon-tpl-grupo', 'data-mtpl-campo');
+  }else if(aba==='janela'){
+    grupos = MON_JANELAS_TEMPLATE.map(janela=>{
+      const itens = MON_JANELA_ITENS.filter(i=>i.janela===janela);
+      if(!itens.length) return '';
+      const marcados = itens.filter(i=>sel.has(i.id)).length;
+      return `<div class="tpl-grupo">
+        <div class="tpl-grupo-topo"><b>${esc(janela)}</b>
+          <span class="membro-sub">${marcados} de ${itens.length}</span>
+          <button class="link-btn" data-action="mon-tpl-grupo:${janela}:${marcados===itens.length?'0':'1'}">${marcados===itens.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+        ${itens.map(i=>`<label class="tpl-campo"><input type="checkbox" data-mtpl-campo="${esc(i.id)}" ${sel.has(i.id)?'checked':''}> ${esc(i.label)}</label>`).join('')}
+      </div>`;
+    }).join('');
   }else{
     grupos = MON_JANELAS_TEMPLATE.map(janela=>{
       const campos = MON_CAMPOS.filter(c=>c.janela===janela && c.id!=='container' && !(aba==='card' && c.id==='situacao'));
@@ -5370,6 +5405,7 @@ function renderMonTemplate(){
     }).join('');
   }
   const textos = {
+    janela: 'Escolha as informações que aparecem em cada janela de container. O container, a situação do free time e os botões do topo aparecem sempre. As informações desmarcadas ficam escondidas, mas os dados continuam guardados.',
     card: 'Escolha as informações que aparecem em cada card. O container aparece sempre no topo do card, e os cards ficam agrupados pela situação do free time.',
     lista: 'Escolha as colunas da lista. O container aparece sempre na primeira coluna.',
     filtros: 'Escolha os filtros da tela: todas as informações do container estão disponíveis (texto, lista de opções, período ou faixa de valores). Os filtros valem ao clicar em Filtrar; filtros ocultos deixam de ser aplicados. Valem também para as Janelas.',
@@ -5379,6 +5415,7 @@ function renderMonTemplate(){
     <div class="proc-template-topo">
       <div class="section-title">${ICONS.gear} Template</div>
       <div class="pers-tabs" style="margin:0;">
+        <button class="pers-tab ${aba==='janela'?'active':''}" data-action="mon-tpl-aba:janela">Configurar Janela</button>
         <button class="pers-tab ${aba==='card'?'active':''}" data-action="mon-tpl-aba:card">Configurar Card</button>
         <button class="pers-tab ${aba==='lista'?'active':''}" data-action="mon-tpl-aba:lista">Configurar Lista</button>
         <button class="pers-tab ${aba==='filtros'?'active':''}" data-action="mon-tpl-aba:filtros">Configurar Filtros</button>
@@ -5391,7 +5428,7 @@ function renderMonTemplate(){
       <div class="btn-row">
         <button class="btn btn-ghost" data-action="mon-tpl-padrao">Restaurar padrão</button>
         <button class="btn btn-ghost" data-action="mon-template">Cancelar</button>
-        <button class="btn btn-primary" data-action="mon-tpl-salvar">${ICONS.check} Salvar ${({ card:'card', lista:'lista', filtros:'filtros' })[aba]}</button>
+        <button class="btn btn-primary" data-action="mon-tpl-salvar">${ICONS.check} Salvar ${({ janela:'janela', card:'card', lista:'lista', filtros:'filtros' })[aba]}</button>
       </div>
     </div>
   </div>`;
@@ -5399,15 +5436,16 @@ function renderMonTemplate(){
 function acaoTemplateMon(cmd, a1, a2){
   switch(cmd){
     case 'mon-modo': salvarPrefsMonitoramento({ modo:a1 }); renderApp(); return true;
-    case 'mon-template': state.monTemplateAberto = !state.monTemplateAberto; state.monTemplateSel = null; renderApp(); return true;
+    case 'mon-template': state.monTemplateAberto = !state.monTemplateAberto; state.monTemplateSel = null; if(state.monTemplateAberto) state.monTemplateAba = prefsMonitoramento().modo; renderApp(); return true;
     case 'mon-tpl-aba': state.monTemplateAba = a1; renderApp(); return true;
     case 'mon-tpl-grupo': {
       const aba = state.monTemplateAba || 'card';
-      const ids = aba==='filtros' ? catalogoFiltrosMon().filter(f=>f.janela===a1).map(f=>f.id)
+      const ids = aba==='janela' ? MON_JANELA_ITENS.filter(i=>i.janela===a1).map(i=>i.id)
+        : aba==='filtros' ? catalogoFiltrosMon().filter(f=>f.janela===a1).map(f=>f.id)
         : MON_CAMPOS.filter(c=>c.janela===a1 && c.id!=='container' && !(aba==='card' && c.id==='situacao')).map(c=>c.id);
       const atual = new Set(state.monTemplateSel[aba]);
       ids.forEach(id=> a2==='1' ? atual.add(id) : atual.delete(id));
-      state.monTemplateSel[aba] = (aba==='filtros' ? catalogoFiltrosMon().map(f=>f.id) : MON_CAMPOS.map(c=>c.id)).filter(id=>atual.has(id));
+      state.monTemplateSel[aba] = (aba==='janela' ? MON_JANELA_ITENS.map(i=>i.id) : aba==='filtros' ? catalogoFiltrosMon().map(f=>f.id) : MON_CAMPOS.map(c=>c.id)).filter(id=>atual.has(id));
       renderApp(); return true;
     }
     case 'mon-tpl-padrao': { const aba = state.monTemplateAba || 'card'; state.monTemplateSel[aba] = [...MON_TEMPLATE_PADRAO[aba]]; renderApp(); return true; }
@@ -5416,7 +5454,7 @@ function acaoTemplateMon(cmd, a1, a2){
       if(aba!=='filtros' && !escolhidos.length) return toast('Selecione pelo menos uma informação.'), true;
       const alteracao = { [aba]: [...escolhidos] };
       if(aba!=='filtros') alteracao.modo = aba; else limparFiltrosOcultosTpl('mon', escolhidos);
-      salvarPrefsMonitoramento(alteracao, ({ card:'Template do card salvo.', lista:'Template da lista salvo.', filtros:'Filtros da tela salvos.' })[aba])
+      salvarPrefsMonitoramento(alteracao, ({ janela:'Template da janela salvo.', card:'Template do card salvo.', lista:'Template da lista salvo.', filtros:'Filtros da tela salvos.' })[aba])
         .then(()=>{ state.monTemplateAberto = false; state.monTemplateSel = null; renderApp(); });
       return true;
     }
@@ -5427,7 +5465,7 @@ function onTemplateCampoMon(el){
   const id = el.getAttribute('data-mtpl-campo'); if(!id || !state.monTemplateSel) return false;
   const aba = state.monTemplateAba || 'card', atual = new Set(state.monTemplateSel[aba]);
   el.checked ? atual.add(id) : atual.delete(id);
-  const ordem = aba==='filtros' ? catalogoFiltrosMon().map(f=>f.id) : MON_CAMPOS.map(c=>c.id);
+  const ordem = aba==='janela' ? MON_JANELA_ITENS.map(i=>i.id) : aba==='filtros' ? catalogoFiltrosMon().map(f=>f.id) : MON_CAMPOS.map(c=>c.id);
   state.monTemplateSel[aba] = ordem.filter(x=>atual.has(x));
   renderApp(); return true;
 }
@@ -5495,7 +5533,7 @@ function renderMonitoramento(){
   else if(!lista.length) conteudo = `<div class="empty"><h3>Nenhum container encontrado</h3><p>Ajuste os filtros ou clique em "Limpar".</p></div>`;
   else if(modo==='lista') conteudo = renderMonLista(lista, prefs);
   else if(modo==='card') conteudo = renderMonKanban(lista, prefs);
-  else conteudo = lista.map(m=>monCardHtml(m, hoje)).join('');
+  else { const selJanela = new Set(prefs.janela); conteudo = lista.map(m=>monCardHtml(m, hoje, selJanela)).join(''); }
   const extras = `
       <button class="btn btn-primary btn-sm" data-action="mon-add">${ICONS.plus} Adicionar Container</button>
       <button class="btn btn-ghost btn-sm" data-action="mon-importar" title="Puxa os containers com número cadastrados em Processos → Transporte (com a referência do cliente)">${ICONS.download} Puxar dos Processos${disponiveis ? ' ('+disponiveis+')' : ''}</button>
@@ -10167,7 +10205,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.18 · monitoramento: filtros e templates · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.19 · template das janelas · build 15/10/2026</span></div>
   `;
 }
 
