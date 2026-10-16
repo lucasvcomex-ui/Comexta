@@ -799,7 +799,7 @@ tbody tr:hover{background:#F9FAFD;}
 
 .mon-toggle{flex-shrink:0;} .mon-toggle svg{transition:transform .15s ease;} .mon-toggle.aberto svg{transform:rotate(90deg);}
 .mon-card.mon-min{display:flex; align-items:center; gap:12px; padding:10px 14px; margin-bottom:10px;}
-.mon-min-grid{flex:1; min-width:0; display:grid; grid-template-columns:1.1fr 1.1fr 1.2fr .8fr 1.2fr .8fr; gap:12px;}
+.mon-min-grid{flex:1; min-width:0; display:grid; grid-template-columns:1fr 1.1fr 1.1fr 1.2fr .8fr 1.2fr .8fr; gap:12px;}
 .mon-min-grid > div{min-width:0; display:flex; flex-direction:column; gap:1px;}
 .mon-min-grid span{font-size:11px; color:var(--ink-soft);}
 .mon-min-grid b{font-size:13.5px; color:var(--navy-deep); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -5083,6 +5083,7 @@ function monCardMinimizadoHtml(m, c){
     <button class="icon-btn mon-toggle" data-action="mon-minimizar:${m.id}" title="Expandir esta janela" aria-expanded="false">${ICON_CHEV}</button>
     <div class="mon-min-grid">
       <div><span>Referência do processo</span><b>${v(monRef(m))}</b></div>
+      <div><span>Referência do cliente</span><b>${v(m.referenciaCliente)}</b></div>
       <div><span>Container</span><b>${v(m.container)}</b></div>
       <div><span>Porto de origem</span><b>${v(m.portoOrigem)}</b></div>
       <div><span>ETD</span><b>${d(m.etd)}</b></div>
@@ -10205,7 +10206,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.19 · template das janelas · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.20 · referência do cliente na janela minimizada · build 15/10/2026</span></div>
   `;
 }
 
