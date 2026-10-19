@@ -2078,9 +2078,21 @@ function normalizarProcesso(p){
   }else r.transporte.containers = trAnt.containers.map(c=>novoContainerProcesso(c));
   if(!r.transporte.containers.length) r.transporte.containers = [novoContainerProcesso()];
   delete r.transporte.containerTipo;
+  // LCL e Carga solta antigos tinham peso bruto / cubagem digitados no topo (sem container): vão para o 1º container
+  // para o total não zerar quando a lista de containers passar a alimentar esses campos.
+  if(usaContainersProc(r.transporte)){
+    const t0 = r.transporte, cs0 = t0.containers;
+    const vazios = cs0.every(c=>!numProcSimples(c.pesoBruto) && !numProcSimples(c.pesoLiquido) && !numProcSimples(c.cubagem));
+    if(vazios && (numProcSimples(t0.pesoBruto) || numProcSimples(t0.pesoLiquido) || numProcSimples(t0.cubagem))){
+      cs0[0].pesoBruto = t0.pesoBruto || ''; cs0[0].pesoLiquido = t0.pesoLiquido || ''; cs0[0].cubagem = t0.cubagem || '';
+    }
+  }
   sincronizarContainersProc(r);
   return r;
 }
+// A lista de containers vale para toda carga marítima: FCL, LCL e Carga solta / break bulk.
+const PROC_CARGAS_COM_CONTAINER = ['FCL', 'LCL', 'BREAK'];
+function usaContainersProc(t){ return !!t && t.modal==='maritimo' && PROC_CARGAS_COM_CONTAINER.includes(t.tipoCarga); }
 // Totais da lista de containers (quantidade, peso bruto, peso líquido e cubagem).
 function arred3(v){ return Math.round((v + Number.EPSILON) * 1000) / 1000; }
 function totaisContainersProc(t){
@@ -2088,9 +2100,9 @@ function totaisContainersProc(t){
   const soma = k => arred3(cs.reduce((a,c)=>a + numProcSimples(c[k]), 0));
   return { qtd: cs.length, pesoBruto: soma('pesoBruto'), pesoLiquido: soma('pesoLiquido'), cubagem: soma('cubagem') };
 }
-// Em FCL os totais dos containers alimentam os campos gerais do transporte (usados em filtros e relatórios).
+// Na carga marítima (FCL, LCL e Carga solta) os totais dos containers alimentam os campos gerais do transporte (usados em filtros e relatórios).
 function sincronizarContainersProc(p){
-  const t = p && p.transporte; if(!t || !(t.modal==='maritimo' && t.tipoCarga==='FCL')) return;
+  const t = p && p.transporte; if(!usaContainersProc(t)) return;
   const x = totaisContainersProc(t);
   t.containerQtd = String(x.qtd);
   t.pesoBruto = x.pesoBruto ? String(x.pesoBruto) : '';
@@ -2860,7 +2872,7 @@ function procAbaTransporte(){
   const t = state.procDraft.transporte;
   const maritimo = t.modal==='maritimo';
   const aereo = t.modal==='aereo';
-  const fcl = maritimo && t.tipoCarga==='FCL';
+  const fcl = usaContainersProc(t);   // FCL, LCL e Carga solta / break bulk: containers com totais automáticos
   return `<div class="card">
     <div class="section-title" style="margin-bottom:16px;"><span class="num">04</span> Transporte</div>
     <div class="field-row grid-4">
@@ -2886,7 +2898,7 @@ function procAbaTransporte(){
     ${fcl ? procContainersHtml(t) : ''}
   </div>`;
 }
-// Janela Transporte (FCL): uma linha por container, com botão para adicionar e totais automáticos logo abaixo.
+// Janela Transporte (FCL, LCL e Carga solta): uma linha por container, com botão para adicionar e totais automáticos logo abaixo.
 function procContainersHtml(t){
   const cs = t.containers, tot = totaisContainersProc(t);
   const linhas = cs.map((c, n)=>{
@@ -10206,7 +10218,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.20 · referência do cliente na janela minimizada · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.21 · containers em LCL e carga solta · build 15/10/2026</span></div>
   `;
 }
 
