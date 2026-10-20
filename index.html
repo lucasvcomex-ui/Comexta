@@ -881,6 +881,7 @@ tbody tr:hover{background:#F9FAFD;}
 .fin-nada input:disabled{opacity:.35; cursor:not-allowed;}
 .fin-massa-topo{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
 .fin-massa-campos{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;} .fin-massa-campos .field{min-width:150px; margin:0;}
+.proc-destaque{background:var(--amber-100) !important; box-shadow:inset 0 0 0 2px var(--amber); border-radius:6px; transition:background .3s ease, box-shadow .3s ease;}
 </style>
 </head>
 <body>
@@ -1226,7 +1227,7 @@ const PERMISSAO_DA_ACAO = {
   'exportar:cot':['cotacoes','ver'], 'exportar:proc':['processos','ver'], 'exportar:cad-cliente':['cadastros','ver'], 'exportar:cad-produto':['cadastros','ver'],
 
   'toggle-nav:proc':['processos','ver'], 'toggle-module:proc':['processos','ver'], 'go:processos':['processos','ver'],
-  'go:processoForm':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
+  'go:processoForm':['processos','ver'], 'proc-abrir-custo':['processos','ver'], 'proc-abrir':['processos','ver'], 'proc-novo':['processos','criar'],
   'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-numerario-pdf':['processos','ver'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 
@@ -3705,11 +3706,12 @@ function financeiroLinhaHtml(l, editavel){
       { label:trib ? 'Data do pagamento' : 'Vencimento', html:l.vencimento ? fmtDateOnly(l.vencimento) : vazio },
       { label:'Pagamento', html:(editavel ? nada(`<input type="checkbox" data-fin-pago="${esc(l.chave)}" ${l.pago ? 'checked' : ''} title="Marcar como pago">`) : '') + `<span class="badge ${FIN_SIT[l.sit][1]}">${FIN_SIT[l.sit][0]}</span>`, minW:editavel ? 112 : 0 } ];
   }
-  const abrir = `<button class="icon-btn" title="Abrir o processo" data-action="proc-abrir:${esc(l.procId)}">${ICONS.open}</button>`;
+  let podeAbrir = false; try{ podeAbrir = pode('processos', 'ver'); }catch(e){}
+  const abrir = podeAbrir ? `<button class="icon-btn" title="Abrir o processo direto neste custo" data-action="proc-abrir-custo:${esc(l.procId)}:${esc(l.chave)}">${ICONS.open}</button>` : '';
   const acoes = editando
     ? `<div class="ci-actions"><button class="icon-btn" title="Salvar no processo" data-action="fin-salvar:${esc(l.chave)}">${ICONS.check}</button><button class="icon-btn" title="Cancelar" data-action="fin-cancelar">${ICONS.x || '×'}</button></div>`
     : `<div class="ci-actions">${editavel ? `<button class="icon-btn" title="Editar valor, vencimento, taxa e moeda" data-action="fin-editar:${esc(l.chave)}">${ICONS.edit}</button>` : ''}${abrir}</div>`;
-  return { acao: editando ? '' : `proc-abrir:${esc(l.procId)}`, idHtml, idW:(massa ? 24 : 0) + String(l.procId).length*7.6, campos, acoes };
+  return { acao: (editando || !podeAbrir) ? '' : `proc-abrir-custo:${esc(l.procId)}:${esc(l.chave)}`, idHtml, idW:(massa ? 24 : 0) + String(l.procId).length*7.6, campos, acoes };
 }
 function financeiroPainelMassaHtml(sel, linhas){
   const procId = finProcSelecionado();
@@ -4114,6 +4116,27 @@ async function salvarProcesso(){
 }
 async function persistProcessosIndex(){ return storeSet('processos:index', state.processosIndex); }
 
+// Abre o processo direto na janela do custo clicado (usado pelo Financeiro): aba certa, janela do câmbio/transporte e a linha em destaque
+function abrirProcessoNoCusto(procId, chave){
+  const l = financeiroLinhasTodas().find(x=>x.chave===chave);
+  abrirProcesso(procId);
+  const p = state.procDraft; if(!l || !p || state.currentProcessoId!==procId) return;
+  const f = l.fonte; let tab = 'cliente', modal = null, foco = null;
+  if(f.kind==='cambio'){ tab = 'produto'; modal = { tipo:'cambio', id:f.foId }; foco = { lin:f.id }; }
+  else if(f.kind==='linha'){ const t = todosTransportesProc(p)[f.tIdx]; tab = 'transporte'; modal = { tipo:'transporte', id: f.tIdx===0 ? 'principal' : (t ? t.id : 'principal') }; foco = { lin:f.id }; }
+  else if(f.kind==='arm'){ tab = 'armazenagem'; foco = { lin:f.id }; }
+  else if(f.kind==='outra'){ tab = 'financeiro'; foco = { lin:f.id }; }
+  else if(f.kind==='trib'){ tab = 'desembaraco'; foco = { id:'proc-imp-tot-' + f.k }; }
+  state.procTab = tab; state.procModal = modal; state.procFoco = foco;
+  saveDraftProcesso(); renderApp();
+}
+function procAplicarFoco(){
+  const f = state.procFoco; if(!f) return; state.procFoco = null;
+  let el = null;
+  if(f.lin){ const c = document.querySelector(`[data-pm-calc="lin:${f.lin}"]`); el = c ? (c.closest('tr') || c) : null; }
+  else if(f.id){ const c = document.getElementById(f.id); el = c ? (c.closest('.field') || c) : null; }
+  if(el){ if(el.scrollIntoView) el.scrollIntoView({ block:'center' }); el.classList.add('proc-destaque'); setTimeout(()=>el.classList.remove('proc-destaque'), 2800); }
+}
 function abrirProcesso(id){
   const p = (state.processosIndex||[]).find(x=>x.id===id);
   if(!p) return toast('Processo não encontrado.');
@@ -4161,6 +4184,7 @@ function acaoProcesso(cmd, a1, a2){
       state.procDraft = novoProcesso(); state.currentProcessoId = null; state.procTab = 'cliente';
       saveDraftProcesso(); navigate('processoForm'); return true;
     case 'proc-abrir': abrirProcesso(a1); return true;
+    case 'proc-abrir-custo': abrirProcessoNoCusto(a1, a2); return true;
     case 'proc-excluir': excluirProcesso(a1); return true;
     case 'proc-duplicar': duplicarProcesso(a1); return true;
     case 'proc-aba': state.procModal = null; state.procTab = a1; saveDraftProcesso(); renderApp(); window.scrollTo({ top:0, behavior:'instant' }); return true;
@@ -6513,7 +6537,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
-state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.finSel = {}; state.finEdit = null; state.finMassa = false; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
+state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.finSel = {}; state.finEdit = null; state.finMassa = false; state.procFoco = null; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
 state.dash = { cot:{gran:'mes',ano:0,mes:0,comp:[]}, proc:{gran:'mes',ano:0,mes:0,comp:[]}, mon:{gran:'mes',ano:0,mes:0,comp:[],medida:'qtd'}, fin:{gran:'mes',ano:0,mes:0,comp:[],visao:'total'} };
 state.dashSel = { cot:true, proc:true, mon:true, fin:true, cad:true }; state.dashFormato = 'pdf'; state.dashBaixar = { aberto:false };
 state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
@@ -6674,7 +6698,7 @@ function renderApp(){
   if(state.route==='simResultado') initResultado3D();
   if(state.lightbox3D) initLightbox3D();
   aplicarPermissoesNaTela();
-  if(state.route==='processoForm'){ aplicarLeituraProcesso(); aplicarLeituraModalProcesso(); }
+  if(state.route==='processoForm'){ aplicarLeituraProcesso(); aplicarLeituraModalProcesso(); procAplicarFoco(); }
   if(state.route==='home') renderHomeCharts();
 }
 
@@ -11060,7 +11084,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.31 · alteração em massa no Financeiro (mesmo processo) · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.32 · financeiro abre o processo no custo · build 15/10/2026</span></div>
   `;
 }
 
