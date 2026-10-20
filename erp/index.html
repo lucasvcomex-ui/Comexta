@@ -6363,15 +6363,11 @@ function acoesMonHtml(m){
     ${deleteBtnHtml('mon', m.id, 'mon-excluir:'+m.id)}
   </div>`;
 }
+// Lista compacta (mesmo desenho de Cotações, Processos e Financeiro): container, informações do template e ações
 function renderMonLista(lista, prefs){
   const campos = prefs.lista.filter(id=>id!=='container').map(id=>MON_CAMPO[id]);
-  return `<div class="table-wrap"><table>
-    <thead><tr><th>Container</th>${campos.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th>Ações</th></tr></thead>
-    <tbody>${lista.map(m=>`<tr>
-      <td><span class="stamp">${esc(m.container) || 'sem número'}</span></td>
-      ${campos.map(c=>`<td>${valorCampoMon(c, m)}</td>`).join('')}
-      <td>${acoesMonHtml(m)}</td>
-    </tr>`).join('')}</tbody></table></div>`;
+  return listaModernaHtml(lista.map(m=>({ acao:`mon-abrir:${esc(m.id)}`, idHtml:`<span class="lm-ref">${esc(m.container) || 'sem número'}</span>`,
+    campos:campos.map(c=>({ label:c.label, html:valorCampoMon(c, m) })), acoes:acoesMonHtml(m) })));
 }
 function renderMonKanban(lista, prefs){
   const campos = prefs.card.filter(id=>id!=='container' && id!=='situacao').map(id=>MON_CAMPO[id]);
@@ -11083,7 +11079,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.34 · pago só no modo Editar · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.35 · lista de containers compacta · build 15/10/2026</span></div>
   `;
 }
 
