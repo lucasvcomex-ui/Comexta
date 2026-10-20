@@ -11484,7 +11484,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.37 · relatórios: visual e informações · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.38 · dashboards em PDF sem distorção · build 15/10/2026</span></div>
   `;
 }
 
@@ -11810,13 +11810,15 @@ async function dashPdf(ids){
   if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){ toast('Não foi possível carregar a biblioteca de PDF. Verifique sua conexão e recarregue a página.'); return; }
   const doc = novoPdfDoc('dashboards');
   if(typeof doc.autoTable!=='function'){ toast('Não foi possível carregar o plugin de tabelas do PDF.'); return; }
-  const imagem = chave => { try{ const ch = homeCharts[chave]; return ch ? ch.toBase64Image('image/png', 1) : null; }catch(e){ return null; } };
+  // Gráfico como imagem, com as proporções reais do gráfico (sem esticar): cabe na caixa e fica centralizado
+  const imagem = chave => { try{ const ch = homeCharts[chave]; if(!ch) return null; const cv = ch.canvas || {}; return { uri:ch.toBase64Image('image/png', 1), w:cv.width || ch.width || 1, h:cv.height || ch.height || 1 }; }catch(e){ return null; } };
+  const colocar = (img, x, y, caixaW, caixaH) => { const k = Math.min(caixaW/img.w, caixaH/img.h), w = img.w*k, h = img.h*k; doc.addImage(img.uri, 'PNG', x + (caixaW - w)/2, y + (caixaH - h)/2, w, h); };
   ids.forEach((id, n)=>{
     if(n>0) doc.addPage();
     if(id==='cad'){
       pdfHeader(doc, 'Dashboard — ' + DASH_TITULOS.cad, 'Situação atual dos cadastros', fmtDate(new Date().toISOString()));
       const img = imagem('cadastros'); let y = 80;
-      if(img && relBloco(doc,'graficos')){ doc.addImage(img, 'PNG', 28, y, 480, 220); y += 236; }
+      if(img && relBloco(doc,'graficos')){ colocar(img, 28, y, 480, 220); y += 236; }
       if(relBloco(doc,'tabela')) doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[['Cadastro','Quantidade']], body:dashSnapshotCadastros().map(([r,v])=>[r, String(v)]), theme:'grid', styles:{fontSize:9, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf()} });
       return;
     }
@@ -11829,8 +11831,8 @@ async function dashPdf(ids){
     }
     const im1 = relBloco(doc,'graficos') ? imagem('dash-'+id+'-main') : null, im2 = relBloco(doc,'graficos') ? imagem('dash-'+id+'-pizza') : null;
     const larguraUtil = doc.internal.pageSize.getWidth() - 56, retrato = larguraUtil < 700, w1 = retrato ? Math.round(larguraUtil*0.58) : 500, w2 = retrato ? Math.round(larguraUtil*0.40) : 270, x2 = retrato ? 28 + w1 + 10 : 540;
-    if(im1){ doc.addImage(im1, 'PNG', 28, y, w1, 210); }
-    if(im2){ doc.addImage(im2, 'PNG', x2, y, w2, 210); }
+    if(im1){ colocar(im1, 28, y, w1, 210); }
+    if(im2){ colocar(im2, x2, y, w2, 210); }
     if(im1 || im2) y += 224;
     const eixoRot = D.cfg.gran==='dia' ? 'Dia' : D.cfg.gran==='semana' ? 'Semana' : D.cfg.gran==='mes' ? 'Mês' : 'Ano';
     // comparando anos: uma coluna por ano; senão: uma coluna por categoria + total
