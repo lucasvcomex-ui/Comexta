@@ -885,6 +885,33 @@ tbody tr:hover{background:#F9FAFD;}
 .main.wide-lista{max-width:2200px; margin:0; padding-left:28px; padding-right:28px;}
 @media (min-width:1500px){ .main.wide-lista{padding-left:36px; padding-right:36px;} }
 @media (max-width:760px){ .main.wide-lista{padding-left:16px; padding-right:16px;} }
+.rel-layout{display:grid; grid-template-columns:250px 1fr; gap:20px; align-items:start;}
+.rel-lista{display:flex; flex-direction:column; gap:14px; position:sticky; top:84px;}
+.rel-sessao-t{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:0 0 5px 4px;}
+.rel-doc{display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; text-align:left; background:#fff; border:1px solid var(--line); border-radius:9px; padding:8px 10px; margin-bottom:4px; font-size:12.5px; font-weight:600; color:var(--navy-deep); cursor:pointer;}
+.rel-doc:hover{border-color:#C9D5E8;} .rel-doc.ativo{background:var(--navy); color:#fff; border-color:var(--navy);}
+.rel-ponto{width:8px; height:8px; border-radius:50%; background:var(--amber); flex-shrink:0;}
+.rel-topo{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px;}
+.rel-previa{display:flex; gap:18px; align-items:center; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:14px 18px;}
+.rel-previa-pg .rel-pg{transform:scale(1.5); transform-origin:left center; margin-right:70px;} .rel-previa-pg.retr .rel-pg{transform-origin:left top; margin-bottom:60px;}
+.rel-previa-info{min-width:0; display:flex; flex-direction:column; gap:4px;} .rel-chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:6px;}
+.rel-chip{font-size:11px; padding:3px 9px; border-radius:999px; background:#fff; border:1px solid var(--line); color:var(--navy-deep); font-weight:600;} .rel-chip.vazio{color:var(--ink-soft); font-weight:400;}
+.rel-galeria{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px;}
+.rel-modelo{position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:4px; text-align:left; background:#fff; border:2px solid var(--line); border-radius:12px; padding:12px; cursor:pointer; transition:border-color .15s, box-shadow .15s;}
+.rel-modelo:hover{border-color:#C9D5E8; box-shadow:var(--shadow);} .rel-modelo.atual{border-color:var(--amber); box-shadow:0 0 0 3px rgba(201,162,39,.18);}
+.rel-modelo b{font-size:13.5px; color:var(--navy-deep); margin-top:6px;} .rel-modelo small{font-size:11.5px; color:var(--ink-soft); line-height:1.35;}
+.rel-tag{position:absolute; top:8px; right:8px; font-size:10px; font-weight:700; background:var(--amber); color:#fff; padding:2px 7px; border-radius:999px;}
+.rel-checks{display:flex; flex-wrap:wrap; gap:6px 22px; margin-top:12px;}
+.rel-escolha{width:min(980px,100%);}
+.rel-pg{position:relative; flex:0 0 auto; border:1px solid #D5D9E2; border-radius:3px; overflow:hidden; box-shadow:0 1px 3px rgba(23,58,94,.12); display:flex; flex-direction:column;} .rel-pg.pais{width:150px; height:106px;} .rel-pg.retr{width:106px; height:150px;}
+.rp-cab{display:flex; align-items:center; gap:5px; padding:0 6px; font-size:6px; font-weight:700; flex:0 0 auto;} .rp-logo{width:16px; height:7px; background:#fff; border-radius:1.5px; opacity:.95;}
+.rp-cab-t{padding:6px 7px 0; flex:0 0 auto;} .rp-cab-t span{display:block; font-size:7px; font-weight:700; color:#1d2733; margin-bottom:3px;} .rp-cab-t i{display:block; height:1.2px; width:100%;}
+.rp-corpo{padding:6px 7px 0; flex:1; min-height:0; display:flex; flex-direction:column; gap:2px;} .rp-kpis{display:flex; gap:3px; margin-bottom:3px;}
+.rp-kpi{flex:1; height:11px; border:.6px solid #DCD4C2; background:#F6F3EC; padding:2px 3px;} .rp-kpi.f{background:transparent; border:0; padding-top:2px;} .rp-kpi b{display:block; height:2px; width:55%; background:#4B5A68; opacity:.55;}
+.rp-th,.rp-tr{display:flex; gap:3px; padding:2px 3px;} .rp-th i,.rp-tr i{flex:1; height:2.4px; background:currentColor; opacity:.7; border-radius:1px;} .rp-tr i{background:#9aa5b1; opacity:.8;}
+.rp-tr.grid{border:.5px solid #cfd5de; border-top:0;} .rp-tr.plain{border-bottom:.5px solid #e4e7ec;}
+.rp-rod{padding:0 7px 4px; display:flex; justify-content:space-between; flex:0 0 auto;} .rp-rod i{display:block; height:1.8px; width:30%; background:#b6bdc7; border-radius:1px;}
+@media (max-width:980px){ .rel-layout{grid-template-columns:1fr;} .rel-lista{position:static; flex-direction:row; flex-wrap:wrap;} .rel-previa{flex-direction:column; align-items:flex-start;} .rel-previa-pg .rel-pg{transform:none; margin:0;} }
 </style>
 </head>
 <body>
@@ -1828,11 +1855,11 @@ function campoPessoaHtml(tipo, valor){
 // --------- Tela (Configurações → Personalização) ---------
 function renderConfigPersonalizacao(){
   const sub = state.cfgPersTab || 'cotacoes';
-  const abas = [['cotacoes','Cotações'], ['responsaveis','Responsáveis'], ['vendedores','Vendedor']];
+  const abas = [['cotacoes','Cotações'], ['relatorios','Relatórios'], ['responsaveis','Responsáveis'], ['vendedores','Vendedor']];
   return `<div class="pers-tabs">
     ${abas.map(([id, rot])=>`<button class="pers-tab ${sub===id?'active':''}" data-action="cfg-pers-aba:${id}">${rot}</button>`).join('')}
   </div>
-  ${sub==='cotacoes' ? renderPersCotacao() : renderPersPessoas(sub)}`;
+  ${sub==='cotacoes' ? renderPersCotacao() : sub==='relatorios' ? renderPersRelatorios() : renderPersPessoas(sub)}`;
 }
 
 function renderPersCotacao(){
@@ -3954,9 +3981,7 @@ async function baixarNumerarioProcessoPdf(){
   const nm = computeNumerarioProcesso(state.procDraft), p = nm.p;
   if(!nm.linhas.length){ toast('Preencha ao menos um item na janela Produto antes de exportar.'); return; }
   if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){ toast('Não foi possível carregar o gerador de PDF. Recarregue a página.'); return; }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
-  prepararFundoPdf(doc);
+  const doc = novoPdfDoc('numerarioProc');
   const numero = state.currentProcessoId || 'Processo não salvo';
   pdfHeader(doc, 'Numerário do Processo', `${numero}${p.cliente.nome ? ' · ' + p.cliente.nome : ''}`, fmtDate(new Date().toISOString()));
   const cab = { fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf() };
@@ -3969,18 +3994,23 @@ async function baixarNumerarioProcessoPdf(){
     p.desembaraco.numeroDeclaracao && `${p.desembaraco.tipoDeclaracao}: ${p.desembaraco.numeroDeclaracao}`].filter(Boolean).join('   ·   ');
   const infoLinhas = doc.splitTextToSize(info, doc.internal.pageSize.getWidth() - 56);
   doc.text(infoLinhas, 28, y); y += infoLinhas.length*11 + 2;
-  y = pdfKpiCards(doc, y, [
+  if(relBloco(doc,'kpis')) y = pdfKpiCards(doc, y, [
     { label:'Valor aduaneiro', value:fmtBRL(nm.valorAduaneiro) }, { label:'Tributos', value:fmtBRL(nm.impostosTotal) },
     { label:'Frete, armazenagem e outras', value:fmtBRL(nm.despesasTotal) }, { label:'Custo total', value:fmtBRL(nm.custoSemCredito) } ]) + 14;
+  if(relBloco(doc,'resumo')){
   doc.autoTable({ startY:y, head:[['Despesa','Moeda ext.','Moeda R$','Taxa']], body:resumoRowsPdf(resumoNumerarioProc(nm)), foot:[['CUSTO TOTAL DA IMPORTAÇÃO (s/ créditos)','',fmtBRL(nm.custoSemCredito),'']],
     theme:'grid', margin:{ left:28, right:28 }, styles:{ fontSize:8, cellPadding:3 }, headStyles:cab, footStyles:cab,
     columnStyles:{ 1:{ halign:'right', cellWidth:100 }, 2:{ halign:'right', cellWidth:100 }, 3:{ halign:'right', cellWidth:70 } } });
   y = doc.lastAutoTable.finalY + 18;
+  }
+  if(relBloco(doc,'bases')){
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(75,90,104);
   doc.text('Bases do Desembaraço (informativo — Invoice pela taxa do dia; não somam no custo)', 28, y); y += 8;
   doc.autoTable({ startY:y, head:[['Base','Moeda estrangeira','Valor R$']], body:basesNumerarioProc(nm).map(([r,e,v])=>[r, e, fmtBRL(v)]),
     theme:'grid', margin:{ left:28, right:28 }, tableWidth:560, styles:{ fontSize:8, cellPadding:3 }, headStyles:cab, columnStyles:{ 1:{ halign:'right', cellWidth:110 }, 2:{ halign:'right', cellWidth:100 } } });
   y = doc.lastAutoTable.finalY + 18;
+  }
+  if(relBloco(doc,'rateio')){
   const T = nm.totais, impostos = PROC_TRIBUTOS_IMPOSTOS.map(k=>PROC_TRIBUTOS.find(([x])=>x===k)[1]);
   doc.autoTable({ startY:y,
     head:[['Fornecedor','Produto','NCM','Qtd.','Vlr unit.','Vlr total ext.','Vlr total R$','Rateio frete','Rat. acrésc.','Vlr aduaneiro','Armazenagem','Outras desp.',...impostos,'Custo s/ crédito','Unit. s/ crédito','Custo c/ crédito','Unit. c/ crédito']],
@@ -3990,11 +4020,13 @@ async function baixarNumerarioProcessoPdf(){
       ...PROC_TRIBUTOS_IMPOSTOS.map(k=>fmtBRL(T[k])),fmtBRL(T.custoSemCredito),'',fmtBRL(T.custoComCredito),'']],
     theme:'grid', margin:{ left:28, right:28 }, styles:{ fontSize:5.8, cellPadding:2 }, headStyles:{ ...cab, fontSize:5.8 }, footStyles:{ ...cab, fontSize:5.8 },
     columnStyles:{ 18:{ fontStyle:'bold' }, 20:{ fontStyle:'bold' } },
-    didDrawPage:(info)=>{ doc.setFontSize(7.5); doc.setTextColor(120,130,140);
-      doc.text(`Página ${info.pageNumber}`, doc.internal.pageSize.getWidth() - 28, doc.internal.pageSize.getHeight() - 14, { align:'right' }); } });
+    });
   y = doc.lastAutoTable.finalY + 12;
+  }
+  if(relBloco(doc,'nota')){
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(75,90,104);
   doc.text(doc.splitTextToSize('Mesma regra de rateio da cotação Formal: frete (internacional + taxas de origem e de destino) pelo peso líquido; armazenagem, outras despesas e tributos pelo valor da mercadoria em reais. Com crédito (Lucro Real): IPI, PIS, COFINS e ICMS saem do custo.', doc.internal.pageSize.getWidth()-56), 28, y);
+  }
   await downloadPdfBlob(doc, `numerario-${String(numero).toLowerCase().replace(/\s+/g,'-')}.pdf`);
 }
 
@@ -4960,22 +4992,19 @@ async function exportarTela(tela, formato){
       return;
     }
     if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){ toast('Não foi possível carregar o gerador de PDF. Recarregue a página.'); return; }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
-    prepararFundoPdf(doc);
+    const doc = novoPdfDoc(REL_TELA_DOC(tela));
     pdfHeader(doc, d.titulo, `${empresa} · ${d.linhas.length} registro${d.linhas.length===1?'':'s'}`, fmtDate(new Date().toISOString()));
     let y = 74;
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(75,90,104);
     const filtrosTxt = doc.splitTextToSize((d.filtros.length ? 'Filtros: ' + d.filtros.join(' · ') : 'Sem filtros aplicados').replace(/→/g, '->'), doc.internal.pageSize.getWidth() - 56);
-    doc.text(filtrosTxt, 28, y); y += filtrosTxt.length * 11 + 6;
+    if(relBloco(doc,'filtros')){ doc.text(filtrosTxt, 28, y); y += filtrosTxt.length * 11 + 6; }
     const fonte = d.colunas.length > 12 ? 6 : d.colunas.length > 8 ? 7 : 8;
     // as fontes padrão do PDF não têm a seta "→" (sairia "!’")
     const semSeta = x => String(x ?? '').replace(/→/g, '->');
     doc.autoTable({ startY:y, head:[d.colunas.map(semSeta)], body:d.linhas.map(l=>l.map(semSeta)), theme:'grid', margin:{ left:28, right:28 },
       styles:{ fontSize:fonte, cellPadding:3, overflow:'linebreak', valign:'top' },
       headStyles:{ fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:fonte },
-      didDrawPage:(info)=>{ doc.setFontSize(7.5); doc.setTextColor(120,130,140);
-        doc.text(`Página ${info.pageNumber}`, doc.internal.pageSize.getWidth() - 28, doc.internal.pageSize.getHeight() - 14, { align:'right' }); } });
+      });
     await downloadPdfBlob(doc, nome);
   }catch(err){
     console.error('Falha ao exportar:', err);
@@ -6685,7 +6714,7 @@ function renderApp(){
   </div>` : '';
   const classesLayout = `layout ${state.sideCollapsed ? 'side-collapsed' : ''} ${state.sideMobile ? 'side-open' : ''}`;
   app.innerHTML = `<div class="${classesLayout}">${sideNavHtml()}<div class="side-backdrop" data-action="toggle-sidebar"></div>
-    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d;
+    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d + relEscolhaHtml();
   if(state.route==='dados') patchComputedDados();
   if(state.route==='dadosFormal') patchComputedDadosFormal();
   if(state.route==='simCarga') patchComputedSimCarga();
@@ -8830,9 +8859,7 @@ async function gerarRelatorioSimulacaoPDF(id){
       toast('Não foi possível carregar a biblioteca 3D para montar as imagens do relatório.');
       return;
     }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
-    prepararFundoPdf(doc);
+    const doc = novoPdfDoc('simulacao');
     const sim = normalizeSimulacao(item.dados);
 
     const offscreen = document.createElement('div');
@@ -9616,44 +9643,320 @@ function renderAnexosBlock(d, suffix){
 }
 
 /* --------------------------------- PDF -------------------------------------- */
+/* ====================== Relatórios (PDF): modelos e personalização por documento ======================
+   O administrador escolhe, em Configurações → Personalização → Relatórios, como cada documento em PDF é gerado:
+   modelo (visual), orientação, papel, textos, rodapé, blocos que aparecem e tamanho de letra/densidade. */
+const REL_SESSOES = [['imp','Importação'], ['proc','Processos'], ['fin','Financeiro'], ['mon','Monitoramento de Carga'], ['cad','Cadastros'], ['sim','Simulador de Carga'], ['home','Início (dashboards)']];
+const REL_DOCS = {
+  cotSimplificada: { sessao:'imp', nome:'Cotação Simplificada — Numerário', titulo:'Numerário e Rateio de Custo', orient:'landscape',
+    blocos:[['cliente','Dados do cliente'], ['custos','Resumo dos custos (quadros)'], ['resumo','Resumo das despesas'], ['produtos','Informações do produto'], ['rateio','Rateio dos custos por produto'], ['dashboard','Dashboard de custos'], ['observacoes','Observações']] },
+  cotFormal: { sessao:'imp', nome:'Cotação Formal — Numerário', titulo:'Numerário Formal — Rateio de Custo', orient:'landscape',
+    blocos:[['cliente','Dados do cliente'], ['resumo','Resumo das despesas'], ['produtos','Informações do produto'], ['custos','Resumo dos custos (quadros)'], ['rateio','Rateio dos custos por produto'], ['dashboard','Dashboard de custos'], ['observacoes','Observações']] },
+  listaCotacoes: { sessao:'imp', nome:'Cotações Salvas — lista exportada', titulo:'Cotações Salvas', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
+  numerarioProc: { sessao:'proc', nome:'Processo — Numerário', titulo:'Numerário do Processo', orient:'landscape',
+    blocos:[['kpis','Quadros de resumo'], ['resumo','Resumo das despesas'], ['bases','Bases do Desembaraço'], ['rateio','Rateio dos custos por produto'], ['nota','Nota sobre o rateio']] },
+  listaProcessos: { sessao:'proc', nome:'Processos Cadastrados — lista exportada', titulo:'Processos Cadastrados', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
+  listaFinanceiro: { sessao:'fin', nome:'Financeiro — lista exportada', titulo:'Financeiro', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
+  listaMonitoramento: { sessao:'mon', nome:'Monitoramento de Carga — lista exportada', titulo:'Monitoramento de Carga', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
+  listaCadastros: { sessao:'cad', nome:'Clientes, empresas e produtos — lista exportada', titulo:'Cadastros', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
+  simulacao: { sessao:'sim', nome:'Relatório de Simulação de Carga', titulo:'Relatório de Simulação de Carga', orient:'landscape', blocos:[] },
+  dashboards: { sessao:'home', nome:'Dashboards da Início (PDF)', titulo:'Dashboards', orient:'landscape', blocos:[['kpis','Indicadores'], ['graficos','Gráficos'], ['tabela','Tabela de dados']] },
+};
+// Qual documento gera cada tela de exportação
+const REL_TELA_DOC = (tela)=>{ const t = String(tela||''); return t==='cot' ? 'listaCotacoes' : t==='proc' ? 'listaProcessos' : t==='fin' ? 'listaFinanceiro' : t==='mon' ? 'listaMonitoramento' : t.startsWith('cad') ? 'listaCadastros' : 'listaProcessos'; };
+// Modelos de visual (cada um tem uma prévia na tela de escolha)
+const REL_MODELOS = {
+  classico:    { nome:'Clássico', desc:'Faixa colorida no topo e tabelas com grade. É o visual atual do ERP.', cab:'faixa', cabAltura:58, fonteTit:'helvetica', tema:'grid', cabTabela:'cor', kpi:'cartao', margem:28, escala:1, pad:1, fundo:true },
+  moderno:     { nome:'Moderno', desc:'Faixa fina, linhas alternadas nas tabelas e quadros arredondados.', cab:'fina', cabAltura:46, fonteTit:'helvetica', tema:'striped', cabTabela:'cor', kpi:'cartao', margem:28, escala:1, pad:1.05, fundo:true },
+  executivo:   { nome:'Executivo', desc:'Cabeçalho alto com título em serifa e filetes: ótimo para enviar a clientes.', cab:'faixa', cabAltura:62, fonteTit:'times', tema:'plain', cabTabela:'cor', kpi:'filete', margem:30, escala:1, pad:1.1, fundo:true },
+  minimalista: { nome:'Minimalista', desc:'Sem faixa de cor: título em texto, tabelas leves e muito espaço em branco.', cab:'texto', cabAltura:54, fonteTit:'helvetica', tema:'plain', cabTabela:'cinza', kpi:'filete', margem:30, escala:1, pad:1.1, fundo:false },
+  compacto:    { nome:'Compacto', desc:'Faixa baixa, letras menores e margens estreitas: cabe mais colunas por página.', cab:'fina', cabAltura:40, fonteTit:'helvetica', tema:'grid', cabTabela:'cor', kpi:'cartao', margem:20, escala:.9, pad:.7, fundo:true },
+  economico:   { nome:'Econômico (P&B)', desc:'Sem cores de fundo: ideal para imprimir e economizar tinta.', cab:'texto', cabAltura:54, fonteTit:'helvetica', tema:'grid', cabTabela:'cinza', kpi:'filete', margem:28, escala:1, pad:1, fundo:false, pb:true },
+};
+const REL_PADRAO = { modelo:'classico', orientacao:'landscape', papel:'a4', titulo:'', subtitulo:'', rodape:'', numeroPagina:true, mostrarData:true, mostrarLogo:true, tamanhoFonte:'normal', densidade:'normal', escolherAoBaixar:false, blocos:{} };
+function relCfgSalva(docId){ const d = REL_DOCS[docId] || {}, s = ((personalizacao().relatorios||{})[docId]) || {};
+  const cfg = { ...REL_PADRAO, orientacao:d.orient || 'landscape', ...s, blocos:{ ...(s.blocos||{}) } };
+  if(!REL_MODELOS[cfg.modelo]) cfg.modelo = 'classico'; return cfg; }
+// Configuração efetiva: a salva + o modelo escolhido na hora de baixar (uso único)
+function relCfg(docId){
+  const cfg = relCfgSalva(docId), t = state.relTemp && state.relTemp[docId];
+  if(t && REL_MODELOS[t]){ cfg.modelo = t; delete state.relTemp[docId]; }
+  return cfg;
+}
+const relBloco = (doc, id) => { const r = doc && doc.__rel; return !r || r.cfg.blocos[id]!==false; };
+// Cria o PDF já com orientação, papel, modelo e ajustes de tabela do documento
+function novoPdfDoc(docId, cfgForcada){
+  const { jsPDF } = window.jspdf, cfg = cfgForcada || relCfg(docId), m = REL_MODELOS[cfg.modelo] || REL_MODELOS.classico;
+  const doc = new jsPDF({ orientation:cfg.orientacao==='portrait' ? 'portrait' : 'landscape', unit:'pt', format:cfg.papel==='letter' ? 'letter' : 'a4' });
+  doc.__rel = { docId, cfg, m };
+  if(m.fundo!==false) prepararFundoPdf(doc);
+  if(typeof doc.autoTable==='function'){ const orig = doc.autoTable; doc.autoTable = function(o){ return orig.call(doc, relAjustaTabela(doc, o)); }; }
+  return doc;
+}
+const relEscala = cfg => ({ pequena:.9, normal:1, grande:1.12 })[cfg.tamanhoFonte] || 1;
+const relPad = cfg => ({ compacta:.7, normal:1, confortavel:1.35 })[cfg.densidade] || 1;
+// Aplica o modelo às tabelas de qualquer relatório (fonte, espaçamento, grade/linhas alternadas e cor do cabeçalho)
+function relAjustaTabela(doc, o){
+  const r = doc.__rel; if(!r || !o) return o;
+  const { cfg, m } = r, esc = m.escala*relEscala(cfg), pad = m.pad*relPad(cfg), arred = v => Math.round(v*10)/10;
+  const out = { ...o }, st = { ...(o.styles||{}) }, hs = { ...(o.headStyles||{}) }, fs = { ...(o.footStyles||{}) };
+  if(typeof st.fontSize==='number') st.fontSize = arred(st.fontSize*esc);
+  if(typeof hs.fontSize==='number') hs.fontSize = arred(hs.fontSize*esc);
+  if(typeof st.cellPadding==='number') st.cellPadding = arred(st.cellPadding*pad);
+  else if(st.cellPadding && typeof st.cellPadding==='object'){ const cp = {}; Object.entries(st.cellPadding).forEach(([k, v])=>{ cp[k] = typeof v==='number' ? arred(v*pad) : v; }); st.cellPadding = cp; }
+  if(o.theme==='grid' || o.theme===undefined){   // tabelas de dados seguem o tema do modelo; as "plain" (ficha de cliente) ficam como são
+    const tema = m.tema==='striped' ? 'striped' : m.tema==='plain' ? 'plain' : 'grid';
+    out.theme = tema;
+    if(tema==='striped') out.alternateRowStyles = { fillColor:[244,246,250], ...(o.alternateRowStyles||{}) };
+    if(tema==='plain'){ st.lineWidth = 0; }
+  }
+  if(m.cabTabela==='cinza'){ hs.fillColor = [232,232,232]; hs.textColor = [20,30,40]; fs.fillColor = [240,240,240]; fs.textColor = [20,30,40]; }
+  if(m.pb){ st.lineColor = [150,150,150]; st.textColor = st.textColor || [20,20,20]; fs.fillColor = [240,240,240]; }
+  out.styles = st; out.headStyles = hs; out.footStyles = fs;
+  return out;
+}
+// Rodapé (texto, data de emissão e nº da página) em todas as páginas, antes de salvar
+function relFinalizarPdf(doc){
+  const r = doc && doc.__rel; if(!r || doc.__relFim || !doc.internal || !doc.internal.getNumberOfPages) return;
+  doc.__relFim = true;
+  const c = r.cfg, n = doc.internal.getNumberOfPages(), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), mg = r.m.margem || 28;
+  for(let i=1; i<=n; i++){
+    doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(110,120,135);
+    if(c.rodape) doc.text(String(c.rodape).slice(0, 160), mg, H-14);
+    const dir = [c.mostrarData ? 'Emitido em ' + fmtDate(new Date().toISOString()) : '', c.numeroPagina ? `Página ${i} de ${n}` : ''].filter(Boolean).join('  ·  ');
+    if(dir) doc.text(dir, W-mg, H-14, { align:'right' });
+  }
+}
+
+/* ====================== Relatórios: escolha de modelo ao baixar, prévias e tela de personalização ====================== */
+const REL_ACAO_DOC = { 'download-pdf-numerario':'cotSimplificada', 'baixar-cotacao-pdf':'cotSimplificada', 'download-pdf-numerario-formal':'cotFormal', 'baixar-cotacao-formal-pdf':'cotFormal', 'proc-numerario-pdf':'numerarioProc', 'gerar-pdf-simulacao':'simulacao' };
+function relDocDaAcao(action){
+  const [cmd, a1, a2] = String(action||'').split(':');
+  if(REL_ACAO_DOC[cmd]) return REL_ACAO_DOC[cmd];
+  if(cmd==='exportar' && a2==='pdf') return REL_TELA_DOC(a1);
+  if(cmd==='dash-baixar' && state.dashFormato==='pdf') return 'dashboards';
+  return null;
+}
+// Miniatura de uma página no estilo do modelo (com as cores da empresa)
+function relMiniPrevia(modeloId, cfg){
+  const m = REL_MODELOS[modeloId] || REL_MODELOS.classico, c = cfg || REL_PADRAO, e = estiloCotacao();
+  const cab = m.pb ? '#555' : e.corCabecalho, [r, g, b] = corTextoSobre(hexParaRgb(cab)), paisagem = c.orientacao!=='portrait';
+  const fundo = m.fundo===false ? '#ffffff' : e.corFundo, titFam = m.fonteTit==='times' ? 'Georgia, Times New Roman, serif' : 'inherit';
+  const faixaH = Math.round(m.cabAltura/58*15);
+  const cabecalho = (m.cab==='faixa' || m.cab==='fina')
+    ? `<div class="rp-cab" style="height:${faixaH}px; background:${cab}; color:rgb(${r},${g},${b}); ${m.kpi==='filete' ? 'border-bottom:2px solid #C9A227;' : ''}"><i class="rp-logo"></i><span style="font-family:${titFam};">Título do documento</span></div>`
+    : `<div class="rp-cab-t"><span style="font-family:${titFam};">Título do documento</span><i style="background:${m.pb ? '#777' : cab};"></i></div>`;
+  const kpi = [1,2,3].map(()=> m.kpi==='filete' ? `<div class="rp-kpi f" style="border-top:2px solid ${m.pb ? '#555' : cab};"><b></b></div>` : `<div class="rp-kpi" style="border-radius:${m.cab==='fina' ? 4 : 1.5}px;"><b></b></div>`).join('');
+  const thBg = m.cabTabela==='cinza' ? '#e6e6e6' : cab, thFg = m.cabTabela==='cinza' ? '#222' : `rgb(${r},${g},${b})`;
+  const linhas = [0,1,2,3].map(i=>`<div class="rp-tr ${m.tema}" style="${m.tema==='striped' && i%2 ? 'background:#f1f4f9;' : ''}"><i></i><i></i><i></i></div>`).join('');
+  return `<div class="rel-pg ${paisagem ? 'pais' : 'retr'} ${m.tema}" style="background:${fundo};">
+    ${cabecalho}<div class="rp-corpo"><div class="rp-kpis">${kpi}</div>
+    <div class="rp-th" style="background:${thBg}; color:${thFg};"><i></i><i></i><i></i></div>${linhas}</div><div class="rp-rod"><i></i><i></i></div></div>`;
+}
+// Janela para escolher o modelo na hora de baixar (quando o administrador ativou "perguntar ao baixar")
+function relEscolhaHtml(){
+  const e = state.relEscolha; if(!e || !REL_DOCS[e.docId]) return '';
+  const d = REL_DOCS[e.docId], cfg = relCfgSalva(e.docId);
+  return `<div class="proc-modal-fundo" data-action="rel-escolha-fechar"><div class="proc-modal rel-escolha" data-action="proc-modal-nada" role="dialog" aria-modal="true">
+    <div class="proc-modal-topo"><div class="proc-modal-titulo">Escolha o modelo do PDF — ${esc(d.nome)}</div><button class="btn btn-ghost btn-sm" data-action="rel-escolha-fechar">Cancelar</button></div>
+    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Escolha o visual para este download. O modelo padrão deste documento é <b>${esc(REL_MODELOS[cfg.modelo].nome)}</b>.</p>
+    <div class="rel-galeria">${Object.entries(REL_MODELOS).map(([id, m])=>`<button class="rel-modelo ${id===cfg.modelo ? 'atual' : ''}" data-action="rel-escolher:${id}">${relMiniPrevia(id, cfg)}<b>${esc(m.nome)}</b><small>${esc(m.desc)}</small>${id===cfg.modelo ? '<span class="rel-tag">padrão</span>' : ''}</button>`).join('')}</div>
+  </div></div>`;
+}
+function acaoRel(cmd, a1){
+  if(cmd==='rel-escolha-fechar'){ state.relEscolha = null; renderApp(); return true; }
+  if(cmd==='rel-escolher'){
+    const e = state.relEscolha; if(!e || !REL_MODELOS[a1]) return true;
+    state.relTemp = state.relTemp || {}; state.relTemp[e.docId] = a1;
+    const acao = e.action; state.relEscolha = null; state.relPular = true; renderApp();
+    onAppClick({ target:{ closest:()=>({ getAttribute:()=>acao }) } });
+    return true;
+  }
+  if(!souAdmin()){ toast('Somente o administrador da empresa personaliza os relatórios.'); return true; }
+  if(cmd==='rel-doc'){
+    if(state.cfgRelSujo && !window.confirm('Há alterações não salvas neste documento. Descartar e trocar de documento?')) return true;
+    state.cfgRelDoc = a1; state.cfgRel = null; state.cfgRelSujo = false; renderApp(); return true;
+  }
+  if(cmd==='rel-modelo'){ if(state.cfgRel && REL_MODELOS[a1]){ state.cfgRel.modelo = a1; state.cfgRelSujo = true; renderApp(); } return true; }
+  if(cmd==='rel-blocos-todos'){ if(state.cfgRel){ const d = REL_DOCS[state.cfgRel.__doc]; d.blocos.forEach(([id])=>{ state.cfgRel.blocos[id] = a1==='1'; }); state.cfgRelSujo = true; renderApp(); } return true; }
+  if(cmd==='rel-salvar'){ relSalvar(); return true; }
+  if(cmd==='rel-padrao'){ relRestaurar(); return true; }
+  if(cmd==='rel-aplicar-todos'){ relAplicarModeloATodos(); return true; }
+  if(cmd==='rel-amostra'){ relGerarAmostra(); return true; }
+  return false;
+}
+function onRelInput(el){
+  if(!souAdmin() || !state.cfgRel) return;
+  const c = state.cfgRel;
+  if(el.hasAttribute('data-rel-bloco')) c.blocos[el.getAttribute('data-rel-bloco')] = !!el.checked;
+  else c[el.getAttribute('data-rel')] = el.type==='checkbox' ? !!el.checked : el.value;
+  state.cfgRelSujo = true; relAtualizarPrevia();
+}
+function relAtualizarPrevia(){
+  const el = document.getElementById('rel-previa'); if(!el || !state.cfgRel) return;
+  el.innerHTML = relPreviaGrandeHtml(state.cfgRel);
+}
+// Prévia maior: página com o modelo, o título/rodapé escolhidos e os blocos ativos
+function relPreviaGrandeHtml(c){
+  const d = REL_DOCS[c.__doc] || {}, paisagem = c.orientacao!=='portrait';
+  const blocos = (d.blocos||[]).filter(([id])=>c.blocos[id]!==false).map(([, rot])=>`<span class="rel-chip">${esc(rot)}</span>`).join('') || (d.blocos && d.blocos.length ? '<span class="rel-chip vazio">Nenhum bloco ativo</span>' : '');
+  const e = estiloCotacao(), m = REL_MODELOS[c.modelo] || REL_MODELOS.classico;
+  return `<div class="rel-previa-pg ${paisagem ? 'pais' : 'retr'}">${relMiniPrevia(c.modelo, c)}</div>
+    <div class="rel-previa-info"><b>${esc(c.titulo || d.titulo || '')}</b>${c.subtitulo ? `<div>${esc(c.subtitulo)}</div>` : ''}
+      <div class="membro-sub">${esc(m.nome)} · ${paisagem ? 'Paisagem' : 'Retrato'} · ${c.papel==='letter' ? 'Carta' : 'A4'}${c.rodape ? ' · rodapé: ' + esc(c.rodape) : ''}${c.numeroPagina ? ' · nº da página' : ''}${c.mostrarData ? ' · data de emissão' : ''}</div>
+      <div class="rel-chips">${blocos}</div></div>`;
+}
+function renderPersRelatorios(){
+  const sel = REL_DOCS[state.cfgRelDoc] ? state.cfgRelDoc : 'cotFormal';
+  if(!state.cfgRel || state.cfgRel.__doc!==sel){ const s0 = relCfgSalva(sel); state.cfgRel = { ...s0, blocos:{ ...s0.blocos }, __doc:sel }; state.cfgRelSujo = false; }
+  const c = state.cfgRel, d = REL_DOCS[sel], salvos = personalizacao().relatorios || {};
+  const op = (v, l, atual) => `<option value="${v}" ${atual===v ? 'selected' : ''}>${l}</option>`;
+  const lista = REL_SESSOES.map(([sid, srot])=>{
+    const docs = Object.entries(REL_DOCS).filter(([, x])=>x.sessao===sid); if(!docs.length) return '';
+    return `<div class="rel-sessao"><div class="rel-sessao-t">${esc(srot)}</div>${docs.map(([id, x])=>`<button class="rel-doc ${id===sel ? 'ativo' : ''}" data-action="rel-doc:${id}">${esc(x.nome)}${salvos[id] ? '<i class="rel-ponto" title="Personalizado"></i>' : ''}</button>`).join('')}</div>`;
+  }).join('');
+  const sessaoNome = (REL_SESSOES.find(([sid])=>sid===d.sessao) || [])[1] || '';
+  return `<div class="card">
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">01</span> Relatórios em PDF</div>
+    <p class="page-sub" style="margin:0 0 16px;">Personalize como cada documento em PDF é gerado. Cada documento de cada sessão tem a sua configuração: modelo, página, textos, rodapé e os blocos que aparecem. Vale para toda a equipe.</p>
+    <div class="rel-layout">
+      <aside class="rel-lista">${lista}</aside>
+      <section class="rel-painel">
+        <div class="rel-topo"><div><b style="font-size:16px; color:var(--navy-deep);">${esc(d.nome)}</b><div class="membro-sub">${esc(sessaoNome)}${salvos[sel] ? ' · personalizado' : ' · padrão Comexta'}</div></div>${state.cfgRelSujo ? '<span class="badge badge-amber">alterações não salvas</span>' : ''}</div>
+        <div class="rel-previa" id="rel-previa">${relPreviaGrandeHtml(c)}</div>
+        <div class="dash-title" style="margin:18px 0 8px;">1 · Modelo</div>
+        <div class="rel-galeria">${Object.entries(REL_MODELOS).map(([id, m])=>`<button class="rel-modelo ${id===c.modelo ? 'atual' : ''}" data-action="rel-modelo:${id}" aria-pressed="${id===c.modelo}">${relMiniPrevia(id, c)}<b>${esc(m.nome)}</b><small>${esc(m.desc)}</small></button>`).join('')}</div>
+        <div class="dash-title" style="margin:18px 0 8px;">2 · Página e letra</div>
+        <div class="field-row grid-4">
+          <div class="field"><label>Orientação</label><select data-rel="orientacao">${op('landscape','Paisagem (deitada)',c.orientacao)}${op('portrait','Retrato (em pé)',c.orientacao)}</select></div>
+          <div class="field"><label>Papel</label><select data-rel="papel">${op('a4','A4',c.papel)}${op('letter','Carta (Letter)',c.papel)}</select></div>
+          <div class="field"><label>Tamanho da letra</label><select data-rel="tamanhoFonte">${op('pequena','Pequena',c.tamanhoFonte)}${op('normal','Normal',c.tamanhoFonte)}${op('grande','Grande',c.tamanhoFonte)}</select></div>
+          <div class="field"><label>Espaçamento das tabelas</label><select data-rel="densidade">${op('compacta','Compacto',c.densidade)}${op('normal','Normal',c.densidade)}${op('confortavel','Confortável',c.densidade)}</select></div>
+        </div>
+        <div class="dash-title" style="margin:18px 0 8px;">3 · Textos e rodapé</div>
+        <div class="field-row grid-3">
+          <div class="field"><label>Título do documento</label><input data-rel="titulo" value="${esc(c.titulo)}" placeholder="${esc(d.titulo)}" maxlength="80"><span class="hint">Vazio = título padrão.</span></div>
+          <div class="field"><label>Subtítulo</label><input data-rel="subtitulo" value="${esc(c.subtitulo)}" placeholder="Ex.: Proposta comercial" maxlength="80"></div>
+          <div class="field"><label>Texto do rodapé</label><input data-rel="rodape" value="${esc(c.rodape)}" placeholder="Ex.: Comexta — Documento confidencial" maxlength="160"></div>
+        </div>
+        <div class="rel-checks">
+          <label class="tpl-campo"><input type="checkbox" data-rel="mostrarLogo" ${c.mostrarLogo ? 'checked' : ''}> Mostrar o logo</label>
+          <label class="tpl-campo"><input type="checkbox" data-rel="mostrarData" ${c.mostrarData ? 'checked' : ''}> Mostrar a data de emissão</label>
+          <label class="tpl-campo"><input type="checkbox" data-rel="numeroPagina" ${c.numeroPagina ? 'checked' : ''}> Numerar as páginas</label>
+        </div>
+        ${d.blocos.length ? `<div class="dash-title" style="margin:18px 0 8px;">4 · O que aparece no PDF</div>
+        <div class="rel-checks">${d.blocos.map(([id, rot])=>`<label class="tpl-campo"><input type="checkbox" data-rel-bloco="${id}" ${c.blocos[id]!==false ? 'checked' : ''}> ${esc(rot)}</label>`).join('')}</div>
+        <div class="btn-row" style="margin-top:6px;"><button class="btn btn-ghost btn-sm" data-action="rel-blocos-todos:1">Marcar todos</button><button class="btn btn-ghost btn-sm" data-action="rel-blocos-todos:0">Desmarcar todos</button></div>` : ''}
+        <div class="dash-title" style="margin:18px 0 8px;">${d.blocos.length ? '5' : '4'} · Na hora de baixar</div>
+        <label class="tpl-campo"><input type="checkbox" data-rel="escolherAoBaixar" ${c.escolherAoBaixar ? 'checked' : ''}> Perguntar o modelo toda vez que alguém baixar este PDF (cada pessoa escolhe o que serve melhor no momento)</label>
+        <div class="btn-row" style="margin-top:20px;">
+          <button class="btn btn-primary" data-action="rel-salvar">Salvar este documento</button>
+          <button class="btn btn-ghost" data-action="rel-amostra">Gerar PDF de exemplo</button>
+          <button class="btn btn-ghost" data-action="rel-aplicar-todos" title="Usa o modelo escolhido em todos os documentos, mantendo o resto de cada configuração">Aplicar este modelo a todos os documentos</button>
+          <button class="btn btn-danger btn-sm" data-action="rel-padrao">Restaurar padrão</button>
+        </div>
+      </section>
+    </div>
+  </div>`;
+}
+async function relSalvar(){
+  if(!state.cfgRel) return;
+  const { __doc, ...cfg } = state.cfgRel, nova = { ...(personalizacao().relatorios||{}) };
+  nova[__doc] = cfg;
+  const ok = await salvarPersonalizacao({ relatorios:nova }, 'Relatório salvo.');
+  if(ok!==false){ state.cfgRelSujo = false; renderApp(); }
+}
+async function relRestaurar(){
+  if(!state.cfgRel) return;
+  if(!window.confirm('Voltar este documento ao padrão Comexta?')) return;
+  const nova = { ...(personalizacao().relatorios||{}) }; delete nova[state.cfgRel.__doc];
+  const ok = await salvarPersonalizacao({ relatorios:nova }, 'Documento restaurado ao padrão.');
+  if(ok!==false){ state.cfgRel = null; state.cfgRelSujo = false; renderApp(); }
+}
+async function relAplicarModeloATodos(){
+  if(!state.cfgRel) return;
+  if(!window.confirm(`Usar o modelo ${REL_MODELOS[state.cfgRel.modelo].nome} em TODOS os documentos?`)) return;
+  const nova = {}; Object.keys(REL_DOCS).forEach(id=>{ const s0 = (personalizacao().relatorios||{})[id] || {}; nova[id] = { ...s0, modelo:state.cfgRel.modelo }; });
+  const ok = await salvarPersonalizacao({ relatorios:nova }, 'Modelo aplicado a todos os documentos.');
+  if(ok!==false){ state.cfgRel = null; state.cfgRelSujo = false; renderApp(); }
+}
+// PDF de exemplo com a configuração que está na tela (mesmo sem salvar)
+async function relGerarAmostra(){
+  if(!state.cfgRel) return;
+  if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){ toast('Não foi possível carregar o gerador de PDF. Recarregue a página.'); return; }
+  const { __doc, ...cfg } = state.cfgRel, def = REL_DOCS[__doc];
+  const doc = novoPdfDoc(__doc, { ...REL_PADRAO, ...cfg, blocos:{ ...cfg.blocos } });
+  if(typeof doc.autoTable!=='function'){ toast('Não foi possível carregar o plugin de tabelas do PDF.'); return; }
+  pdfHeader(doc, def.titulo, 'PDF de exemplo — dados fictícios', fmtDate(new Date().toISOString()));
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(); let y = 80;
+  const tabela = ()=>{ doc.autoTable({ startY:y, margin:{ left:28, right:28 }, head:[['Item','Qtd','Valor R$','Total R$']], body:[['Produto A','100','10,00','1.000,00'],['Produto B','250','4,50','1.125,00'],['Produto C','40','32,90','1.316,00']], foot:[['TOTAL','390','','3.441,00']], theme:'grid', styles:{ fontSize:8, cellPadding:4 }, headStyles:{ fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf() }, footStyles:{ fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold' } }); y = doc.lastAutoTable.finalY + 20; };
+  const blocos = def.blocos.length ? def.blocos : [['conteudo','Conteúdo do documento']];
+  blocos.forEach(([id, rot])=>{
+    if(!relBloco(doc, id)) return;
+    if(y > H-150){ doc.addPage(); y = 40; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(75,90,104); doc.text(rot, 28, y); y += 8;
+    if(id==='custos' || id==='kpis') y = pdfKpiCards(doc, y, [{ label:'Valor aduaneiro', value:'R$ 12.345,67' }, { label:'Tributos', value:'R$ 4.321,00' }, { label:'Frete e despesas', value:'R$ 2.100,00' }, { label:'Custo total', value:'R$ 18.766,67' }]) + 18;
+    else if(id==='dashboard' || id==='graficos') y = pdfDashboardBars(doc, y+4, [{ label:'Invoice', value:9000, color:[23,58,94] }, { label:'Frete', value:2100, color:[192,122,37] }, { label:'Tributos', value:4321, color:[178,58,50] }]) + 10;
+    else if(id==='observacoes' || id==='nota' || id==='filtros'){ doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(60,70,80); const t = doc.splitTextToSize('Texto de exemplo: aqui aparecem as observações, as notas ou o resumo dos filtros do documento real. ' .repeat(2), W-56); doc.text(t, 28, y+10); y += t.length*11 + 24; }
+    else tabela();
+  });
+  await downloadPdfBlob(doc, `exemplo-${__doc}.pdf`);
+}
+
 function pdfHeader(doc, titulo, subtitulo, meta){
-  const pageW = doc.internal.pageSize.getWidth();
-  const estilo = estiloCotacao();
+  const r = doc.__rel, m = r ? r.m : REL_MODELOS.classico, cfg = r ? r.cfg : REL_PADRAO;
+  const pageW = doc.internal.pageSize.getWidth(), estilo = estiloCotacao();
   const cab = hexParaRgb(estilo.corCabecalho), txt = corTextoSobre(cab);
-  doc.setFillColor(cab[0], cab[1], cab[2]);
-  doc.rect(0,0,pageW,58,'F');
-  // Logo da empresa (Personalização) ou, sem ele, o da Comexta. Altura fixa, largura pela proporção.
-  const logoH = 34;
-  let logoW = logoH*(378/144);
-  try{
-    const logo = estilo.logo || COMEXTA_LOGO_URI;
-    if(typeof logo==='string' && logo.indexOf('data:image')===0){
-      if(estilo.logo && estilo.logoLargura && estilo.logoAltura) logoW = Math.min(170, logoH*estilo.logoLargura/estilo.logoAltura);
-      const formato = /^data:image\/png/.test(logo) ? 'PNG' : 'JPEG';
-      doc.setFillColor(255,255,255);
-      doc.roundedRect(20, 12, logoW+14, logoH+10, 4, 4, 'F');
-      doc.addImage(logo, formato, 27, 17, logoW, logoH);
-    }
-  }catch(e){ console.error('Falha ao inserir logo no PDF:', e); }
-  const textX = 20 + logoW + 14 + 14;
-  doc.setTextColor(txt[0], txt[1], txt[2]);
-  doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text(titulo, textX, 27);
-  doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
-  doc.text(subtitulo, textX, 42);
-  doc.setFont('helvetica','normal'); doc.setFontSize(9);
-  doc.text(meta, pageW-24, 33, {align:'right'});
-  doc.setTextColor(20,30,40);
+  const tit = cfg.titulo || titulo, sub = cfg.subtitulo ? cfg.subtitulo + (subtitulo ? ' — ' + subtitulo : '') : subtitulo, dataTxt = cfg.mostrarData===false ? '' : meta;
+  const logoSrc = estilo.logo || COMEXTA_LOGO_URI, mostrarLogo = cfg.mostrarLogo!==false;
+  // Logo (Personalização) ou, sem ele, o da Comexta. Altura fixa, largura pela proporção. Retorna a largura usada.
+  const logo = (x, y, h, caixa)=>{
+    let w = h*(378/144);
+    try{
+      if(typeof logoSrc==='string' && logoSrc.indexOf('data:image')===0){
+        if(estilo.logo && estilo.logoLargura && estilo.logoAltura) w = Math.min(170, h*estilo.logoLargura/estilo.logoAltura);
+        const formato = /^data:image\/png/.test(logoSrc) ? 'PNG' : 'JPEG';
+        if(caixa){ doc.setFillColor(255,255,255); doc.roundedRect(x-7, y-5, w+14, h+10, 4, 4, 'F'); }
+        doc.addImage(logoSrc, formato, x, y, w, h);
+      }
+    }catch(e){ console.error('Falha ao inserir logo no PDF:', e); }
+    return w;
+  };
+  const H = m.cabAltura, fam = m.fonteTit || 'helvetica';
+  if(m.cab==='faixa' || m.cab==='fina'){
+    doc.setFillColor(cab[0], cab[1], cab[2]); doc.rect(0, 0, pageW, H, 'F');
+    const logoH = m.cab==='fina' ? Math.round(H*0.56) : 34, logoY = Math.round((H - logoH)/2);
+    const logoW = mostrarLogo ? logo(27, logoY, logoH, true) : 0;
+    const textX = mostrarLogo ? 20 + logoW + 28 : 24, tam = m.cab==='fina' ? 13 : 15;
+    doc.setTextColor(txt[0], txt[1], txt[2]);
+    doc.setFont(fam, 'bold'); doc.setFontSize(tam); doc.text(tit, textX, Math.round(H*27/58));
+    doc.setFont(fam, 'normal'); doc.setFontSize(9.5); doc.text(sub, textX, Math.round(H*42/58));
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); if(dataTxt) doc.text(dataTxt, pageW-24, Math.round(H*33/58), { align:'right' });
+    if(m.kpi==='filete'){ doc.setDrawColor(201,162,39); doc.setLineWidth(1.6); doc.line(0, H, pageW, H); doc.setLineWidth(0.2); }   // filete dourado do modelo executivo
+  }else{   // 'texto': sem faixa de cor
+    const mg = 28, tinta = [20,30,40], cinza = [105,115,128], linhaCor = m.pb ? [120,120,120] : cab;
+    const logoH = 26, logoW = mostrarLogo ? logo(mg, 10, logoH, false) : 0, textX = mostrarLogo ? mg + logoW + 14 : mg;
+    doc.setTextColor(tinta[0], tinta[1], tinta[2]); doc.setFont(fam, 'bold'); doc.setFontSize(16); doc.text(tit, textX, 26);
+    doc.setTextColor(cinza[0], cinza[1], cinza[2]); doc.setFont(fam, 'normal'); doc.setFontSize(9.5); doc.text(sub, textX, 40);
+    doc.setFontSize(9); if(dataTxt) doc.text(dataTxt, pageW-mg, 26, { align:'right' });
+    doc.setDrawColor(linhaCor[0], linhaCor[1], linhaCor[2]); doc.setLineWidth(1); doc.line(mg, H-8, pageW-mg, H-8); doc.setLineWidth(0.2);
+  }
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(20,30,40);
 }
 function pdfKpiCards(doc, y, items){
+  const r = doc.__rel, m = r ? r.m : REL_MODELOS.classico, estilo = estiloCotacao(), cor = m.pb ? [90,90,90] : hexParaRgb(estilo.corCabecalho);
   const marginX = 28, gap = 10, w = (doc.internal.pageSize.getWidth()-marginX*2-gap*(items.length-1))/items.length;
   items.forEach((it,i)=>{
     const x = marginX + i*(w+gap);
-    doc.setDrawColor(220,212,194); doc.setFillColor(246,243,236);
-    doc.roundedRect(x,y,w,40,3,3,'FD');
+    if(m.kpi==='filete'){   // sem caixa: filete colorido em cima de cada indicador
+      doc.setDrawColor(cor[0], cor[1], cor[2]); doc.setLineWidth(1.2); doc.line(x, y+2, x+w, y+2); doc.setLineWidth(0.2);
+    }else{
+      doc.setDrawColor(220,212,194); doc.setFillColor(246,243,236);
+      doc.roundedRect(x,y,w,40,m.cab==='fina' ? 6 : 3,m.cab==='fina' ? 6 : 3,'FD');
+    }
     doc.setTextColor(75,90,104); doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
     doc.text(it.label.toUpperCase(), x+8, y+13);
-    doc.setTextColor(14,39,64); doc.setFont('helvetica','bold'); doc.setFontSize(11.5);
+    doc.setTextColor(14,39,64); doc.setFont(m.kpi==='filete' ? (m.fonteTit || 'helvetica') : 'helvetica','bold'); doc.setFontSize(11.5);
     doc.text(it.value, x+8, y+29);
   });
   return y+40;
@@ -9689,9 +9992,7 @@ async function gerarDashboardPDF(dados, meta){
       console.error('gerarDashboardPDF: window.jspdf indisponível — script jspdf.umd.min.js não carregou.');
       return;
     }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
-    prepararFundoPdf(doc);
+    const doc = novoPdfDoc('cotSimplificada');
     if(typeof doc.autoTable!=='function'){
       toast('Não foi possível carregar o plugin de tabelas do PDF. Verifique sua conexão e recarregue a página.');
       console.error('gerarDashboardPDF: doc.autoTable indisponível — script jspdf.plugin.autotable.min.js não carregou.');
@@ -9816,7 +10117,7 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
   if(clienteFields.length % 2 !== 0) clienteFields.push(['','']);
   const hasClienteInfo = dados.cliente || dados.clienteCnpjCpf || dados.referenciaCliente || dados.dataCotacao || dados.validadeCotacao || dados.vendedor ||
     dados.paisOrigem || dados.portoOrigem || dados.portoDestino || dados.cidadeOrigem || dados.cidadeDestino || dados.etd || dados.eta;
-  if(hasClienteInfo){
+  if(hasClienteInfo && relBloco(doc,'cliente')){
     doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
     doc.text('Cliente', 28, y); y += 8;
     const rows = [];
@@ -9838,6 +10139,7 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
     doc.setFont('helvetica','normal');
   }
 
+  if(relBloco(doc,'custos')){
   doc.setFontSize(10); doc.setTextColor(75,90,104);
   doc.text('Resumo dos Custos', 28, y); y += 8;
   y = pdfKpiCards(doc, y, [
@@ -9848,8 +10150,9 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
     {label:'Custo Total (Simples)', value:fmtBRL(r.totais.custoTotalSimples)},
     {label:'Custo Total (Lucro Real)', value:fmtBRL(r.totais.custoTotalLucroReal)},
   ]);
-
   y += 18;
+  }
+  if(relBloco(doc,'resumo')){
   doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(75,90,104);
   doc.text('Resumo das Despesas', 28, y); y += 8;
   doc.autoTable({
@@ -9860,12 +10163,16 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
     columnStyles:{1:{halign:'right', cellWidth:100},2:{halign:'right', cellWidth:100},3:{halign:'right', cellWidth:70}},
   });
   doc.setFont('helvetica','normal');
+  y = doc.lastAutoTable.finalY;
+  }
   // Impostos por produto (modelo "Informações do Produto"), entre o Resumo das Despesas e o Rateio de Custos
-  const yImp = pdfTabelaInformacoesProduto(doc, doc.lastAutoTable.finalY + 22,
+  let yImp = y;
+  if(relBloco(doc,'produtos')) yImp = pdfTabelaInformacoesProduto(doc, y + 22,
     ['Fornecedor','Produto','I.I','ICMS'],
     r.linhas.map(l=>[l.fornecedor||'—', l.produto||'—', fmtPct2(dados.ii), fmtPct2(dados.icms)]));
 
-  let y2 = yImp + 22;
+  let y2 = yImp + 22, yEnd = y2;
+  if(relBloco(doc,'rateio')){
   if(y2 > doc.internal.pageSize.getHeight()-90){ doc.addPage(); y2 = 48; }
   doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(75,90,104);
   doc.text('Rateio dos Custos por Produto', 28, y2-8);
@@ -9886,12 +10193,13 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
     footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
   });
 
-  const yEnd = doc.lastAutoTable.finalY + 20;
+  yEnd = doc.lastAutoTable.finalY + 20;
   const statusTxt = c.limiteExcedido
     ? `Atenção: Custo+Frete+Seguro = ${fmtUSD(c.limiteUSD)} — acima de US$ 3.000. Enquadrar como Importação Formal.`
     : `Dentro do limite da Importação Simplificada: Custo+Frete+Seguro = ${fmtUSD(c.limiteUSD)} (limite US$ 3.000).`;
   doc.setFontSize(8.5); doc.setTextColor(c.limiteExcedido?178:47, c.limiteExcedido?58:107, c.limiteExcedido?50:79);
   doc.text(statusTxt, 28, yEnd);
+  }
 
   const pageW0 = doc.internal.pageSize.getWidth(), pageH0 = doc.internal.pageSize.getHeight();
   const dashItems = [
@@ -9902,14 +10210,17 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
     {label:'Seguro', value:c.seguroBRL, color:[47,107,79]},
     {label:'Despesas Extras', value:c.despExtraTotal, color:[178,58,50]},
   ];
+  let yAfterDash = yEnd;
+  if(relBloco(doc,'dashboard')){
   let yDash = yEnd + 26;
   const dashHeight = 18 + dashItems.length*21;
   if(yDash + dashHeight > pageH0-24){ doc.addPage(); yDash = 30; }
   doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,30,40);
   doc.text('Dashboard — Principais Custos da Importação', 28, yDash);
-  const yAfterDash = pdfDashboardBars(doc, yDash+14, dashItems);
+  yAfterDash = pdfDashboardBars(doc, yDash+14, dashItems);
+  }
 
-  if(dados.observacoes && dados.observacoes.trim()){
+  if(relBloco(doc,'observacoes') && dados.observacoes && dados.observacoes.trim()){
     const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
     const lines = doc.splitTextToSize(dados.observacoes.trim(), pageW-56);
     let yObs = yAfterDash + 16;
@@ -9965,9 +10276,10 @@ async function appendAnexosToPdf(doc, anexos){
     throw new Error('pdf-lib indisponível — script pdf-lib.min.js não carregou.');
   }
   const { PDFDocument } = window.PDFLib;
+  relFinalizarPdf(doc);
   const mainBytes = doc.output('arraybuffer');
   const merged = await PDFDocument.load(mainBytes);
-  const PW = 841.89, PH = 595.28; // A4 paisagem em pt, mesmo formato do relatório principal
+  const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight(); // mesmo formato do relatório principal (orientação e papel escolhidos)
 
   for(const anexo of anexos){
     try{
@@ -10046,6 +10358,7 @@ async function downloadBytesAsPdf(bytes, filename){
   await saveArtifactFile(filename, blob);
 }
 async function downloadPdfBlob(doc, filename){
+  relFinalizarPdf(doc);
   let blob;
   try{ blob = doc.output('blob'); }
   catch(err){
@@ -10063,9 +10376,7 @@ async function gerarDashboardPDFFormal(dados, meta){
       toast('Não foi possível carregar a biblioteca de PDF. Verifique sua conexão com a internet e recarregue a página.');
       return;
     }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
-    prepararFundoPdf(doc);
+    const doc = novoPdfDoc('cotFormal');
     if(typeof doc.autoTable!=='function'){
       toast('Não foi possível carregar o plugin de tabelas do PDF. Verifique sua conexão e recarregue a página.');
       return;
@@ -10088,7 +10399,7 @@ async function gerarDashboardPDFFormal(dados, meta){
     if(clienteFields.length % 2 !== 0) clienteFields.push(['','']);
     const hasClienteInfo = dados.cliente || dados.clienteCnpjCpf || dados.referenciaCliente || dados.vendedor || dados.paisOrigem || dados.portoOrigem || dados.portoDestino ||
       dados.freteOrigem || dados.freteDestino || dados.freteEtd || dados.freteEta;
-    if(hasClienteInfo){
+    if(hasClienteInfo && relBloco(doc,'cliente')){
       doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
       doc.text('Cliente', 28, y); y += 8;
       const rowsCli = [];
@@ -10103,6 +10414,7 @@ async function gerarDashboardPDFFormal(dados, meta){
       doc.setFont('helvetica','normal');
     }
 
+    if(relBloco(doc,'resumo')){
     doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
     doc.text('Resumo das Despesas', 28, y); y += 8;
     doc.autoTable({
@@ -10115,11 +10427,14 @@ async function gerarDashboardPDFFormal(dados, meta){
       columnStyles:{1:{halign:'right', cellWidth:100}, 2:{halign:'right', cellWidth:100}, 3:{halign:'right', cellWidth:70}},
     });
     doc.setFont('helvetica','normal');
+    y = doc.lastAutoTable.finalY + 22;
+    }
     // Impostos por produto (modelo "Informações do Produto"), entre o Resumo das Despesas e o Rateio de Custos
-    y = pdfTabelaInformacoesProduto(doc, doc.lastAutoTable.finalY + 22,
+    if(relBloco(doc,'produtos')) y = pdfTabelaInformacoesProduto(doc, y,
       ['Fornecedor','Produto','NCM','I.I','I.P.I','PIS','COFINS','ICMS'],
       r.linhas.map(l=>[l.fornecedor||'—', l.produto||'—', l.ncm||'—', fmtPct2(l.iiPct), fmtPct2(l.ipiPct), fmtPct2(l.pisPct), fmtPct2(l.cofinsPct), fmtPct2(l.icmsPct)])) + 20;
 
+    if(relBloco(doc,'custos')){
     doc.setFontSize(10); doc.setTextColor(75,90,104);
     doc.text('Resumo dos Custos', 28, y); y += 8;
     y = pdfKpiCards(doc, y, [
@@ -10130,8 +10445,10 @@ async function gerarDashboardPDFFormal(dados, meta){
       {label:'ICMS', value:fmtBRL(r.totais.icms)},
       {label:'Custo Total (s/créd.)', value:fmtBRL(r.totais.custoTotalSemCredito)},
     ]);
-
     y += 18;
+    }
+    let yEnd = y;
+    if(relBloco(doc,'rateio')){
     doc.autoTable({
       startY:y, margin:{left:28,right:28},
       head:[['Produto','NCM','Qtd','Total US$','Total R$','Rat. Frete','Rat. Acrésc.','V.A.','Armazenagem','Outras Despesas',
@@ -10151,7 +10468,8 @@ async function gerarDashboardPDFFormal(dados, meta){
       footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
     });
 
-    const yEnd = doc.lastAutoTable.finalY + 26;
+    yEnd = doc.lastAutoTable.finalY + 26;
+    }
     const dashItems = [
       {label:'Invoice', value:c.sumTotalBRL, color:[23,58,94]},
       {label:'Frete (Marít.+Orig.+Dest.)', value:c.freteTotalBRL, color:[192,122,37]},
@@ -10163,14 +10481,17 @@ async function gerarDashboardPDFFormal(dados, meta){
       {label:'ICMS', value:r.totais.icms, color:[178,58,50]},
     ];
     const pageH0 = doc.internal.pageSize.getHeight();
+    let yAfterDash = yEnd;
+    if(relBloco(doc,'dashboard')){
     let yDash = yEnd;
     const dashHeight = 18 + dashItems.length*21;
     if(yDash + dashHeight > pageH0-24){ doc.addPage(); yDash = 30; }
     doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,30,40);
     doc.text('Dashboard — Principais Custos da Importação', 28, yDash);
-    const yAfterDash = pdfDashboardBars(doc, yDash+14, dashItems);
+    yAfterDash = pdfDashboardBars(doc, yDash+14, dashItems);
+    }
 
-    if(dados.observacoes && dados.observacoes.trim()){
+    if(relBloco(doc,'observacoes') && dados.observacoes && dados.observacoes.trim()){
       const pageW = doc.internal.pageSize.getWidth();
       const lines = doc.splitTextToSize(dados.observacoes.trim(), pageW-56);
       let yObs = yAfterDash + 16;
@@ -10680,7 +11001,11 @@ function onAppClick(e){
   if(!t) return;
   const action = t.getAttribute('data-action');
   if(!acaoPermitida(action)){ avisoSemPermissao(action); return; }
+  // PDFs com "perguntar o modelo ao baixar": abre a escolha antes de gerar
+  if(!state.relPular){ const docEsc = relDocDaAcao(action); if(docEsc && relCfgSalva(docEsc).escolherAoBaixar){ state.relEscolha = { docId:docEsc, action }; renderApp(); return; } }
+  state.relPular = false;
   const [cmd, a1, a2] = action.split(':');
+  if(cmd.startsWith('rel-') && acaoRel(cmd, a1)) return;
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1, a2))) return;
   if(cmd.startsWith('mon-') && acaoMonitoramento(cmd, a1, a2)) return;
@@ -10852,6 +11177,7 @@ function onAppClick(e){
 
 function onAppInput(e){
   const el = e.target;
+  if(el.hasAttribute && (el.hasAttribute('data-rel') || el.hasAttribute('data-rel-bloco'))){ onRelInput(el); return; }
   if(onConfigInput(el)) return;
   if(el.hasAttribute('data-proc')){ if(el.type!=='checkbox' && el.tagName!=='SELECT') onProcessoInput(el, 'input'); return; }
   if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'input'); return; }
@@ -10896,6 +11222,7 @@ function onAppInput(e){
 }
 function onAppChange(e){
   const el = e.target;
+  if(el.hasAttribute && (el.hasAttribute('data-rel') || el.hasAttribute('data-rel-bloco'))){ onRelInput(el); return; }
   if(onConfigChange(el)) return;
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'change'); return; }
@@ -11079,7 +11406,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.35 · lista de containers compacta · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.36 · relatórios em PDF personalizáveis · build 15/10/2026</span></div>
   `;
 }
 
@@ -11403,8 +11730,7 @@ function dashBaixarArquivo(blob, nome){
 }
 async function dashPdf(ids){
   if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){ toast('Não foi possível carregar a biblioteca de PDF. Verifique sua conexão e recarregue a página.'); return; }
-  const doc = new window.jspdf.jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
-  prepararFundoPdf(doc);
+  const doc = novoPdfDoc('dashboards');
   if(typeof doc.autoTable!=='function'){ toast('Não foi possível carregar o plugin de tabelas do PDF.'); return; }
   const imagem = chave => { try{ const ch = homeCharts[chave]; return ch ? ch.toBase64Image('image/png', 1) : null; }catch(e){ return null; } };
   ids.forEach((id, n)=>{
@@ -11412,25 +11738,28 @@ async function dashPdf(ids){
     if(id==='cad'){
       pdfHeader(doc, 'Dashboard — ' + DASH_TITULOS.cad, 'Situação atual dos cadastros', fmtDate(new Date().toISOString()));
       const img = imagem('cadastros'); let y = 80;
-      if(img){ doc.addImage(img, 'PNG', 28, y, 480, 220); y += 236; }
-      doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[['Cadastro','Quantidade']], body:dashSnapshotCadastros().map(([r,v])=>[r, String(v)]), theme:'grid', styles:{fontSize:9, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf()} });
+      if(img && relBloco(doc,'graficos')){ doc.addImage(img, 'PNG', 28, y, 480, 220); y += 236; }
+      if(relBloco(doc,'tabela')) doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[['Cadastro','Quantidade']], body:dashSnapshotCadastros().map(([r,v])=>[r, String(v)]), theme:'grid', styles:{fontSize:9, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf()} });
       return;
     }
     const D = dashDados(id);
     pdfHeader(doc, 'Dashboard — ' + D.titulo, D.periodo + (D.comparar ? ' · comparando com ' + D.cfg.comp.join(', ') : '') + (id==='fin' ? ' · filtro: ' + ({total:'custos totais',pago:'pagos',aberto:'em aberto',vencido:'vencidos'})[state.dash.fin.visao] : '') + (id==='mon' ? ' · medida: ' + (state.dash.mon.medida==='custo'?'custo (R$)':'containers') : ''), fmtDate(new Date().toISOString()));
     let y = 78;
+    if(relBloco(doc,'kpis')){
     doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[D.kpis.map(k=>k.rot)], body:[D.kpis.map(k=>k.val)], theme:'grid', styles:{fontSize:9, cellPadding:5, halign:'center'}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), fontSize:8} });
     y = doc.lastAutoTable.finalY + 14;
-    const im1 = imagem('dash-'+id+'-main'), im2 = imagem('dash-'+id+'-pizza');
-    if(im1){ doc.addImage(im1, 'PNG', 28, y, 500, 210); }
-    if(im2){ doc.addImage(im2, 'PNG', 540, y, 270, 210); }
+    }
+    const im1 = relBloco(doc,'graficos') ? imagem('dash-'+id+'-main') : null, im2 = relBloco(doc,'graficos') ? imagem('dash-'+id+'-pizza') : null;
+    const larguraUtil = doc.internal.pageSize.getWidth() - 56, retrato = larguraUtil < 700, w1 = retrato ? Math.round(larguraUtil*0.58) : 500, w2 = retrato ? Math.round(larguraUtil*0.40) : 270, x2 = retrato ? 28 + w1 + 10 : 540;
+    if(im1){ doc.addImage(im1, 'PNG', 28, y, w1, 210); }
+    if(im2){ doc.addImage(im2, 'PNG', x2, y, w2, 210); }
     if(im1 || im2) y += 224;
     const eixoRot = D.cfg.gran==='dia' ? 'Dia' : D.cfg.gran==='semana' ? 'Semana' : D.cfg.gran==='mes' ? 'Mês' : 'Ano';
     // comparando anos: uma coluna por ano; senão: uma coluna por categoria + total
     const colunas = D.comparar ? D.series : [...D.cats.filter(c=>c.valores.some(v=>v>0)), { nome:'Total', valores:D.series[0].valores }];
     const cab = [eixoRot, ...colunas.map(c=>c.nome)];
     const corpo = D.eixo.labels.map((rot, i)=>[rot, ...colunas.map(c=>D.mod.fmt(c.valores[i]))]);
-    doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[cab], body:corpo, theme:'grid', styles:{fontSize:7.5, cellPadding:3, halign:'right'}, columnStyles:{0:{halign:'left'}}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), halign:'center'} });
+    if(relBloco(doc,'tabela')) doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[cab], body:corpo, theme:'grid', styles:{fontSize:7.5, cellPadding:3, halign:'right'}, columnStyles:{0:{halign:'left'}}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf(), halign:'center'} });
   });
   await downloadPdfBlob(doc, 'comexta-dashboards-' + hojeLocalISO() + '.pdf');
 }
