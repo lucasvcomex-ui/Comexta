@@ -950,9 +950,9 @@ const NUMERACAO_DA_CHAVE = {
   'simulacoes:index':{ prefixo:'SIM-', atual:'currentSimulacaoId' },
   'processos:index':{ prefixo:'PRC-', atual:'currentProcessoId' },
 };
-const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga', processos:'Processos', monitoramento:'Monitoramento de Carga' };
-// Quem ainda não tem a área "Monitoramento de Carga" definida herda a permissão de Processos (como era antes de existir a área própria).
-const comMonitoramentoHerdado = perms => { const p = perms || {}; return p.monitoramento ? p : { ...p, monitoramento: p.processos }; };
+const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga', processos:'Processos', financeiro:'Financeiro', monitoramento:'Monitoramento de Carga' };
+// Quem ainda não tem as áreas "Monitoramento de Carga" e "Financeiro" definidas herda a permissão de Processos (como era antes de existirem as áreas próprias).
+const comMonitoramentoHerdado = perms => { const p = perms || {}; return { ...p, ...(p.monitoramento ? {} : { monitoramento:p.processos }), ...(p.financeiro ? {} : { financeiro:p.processos }) }; };
 
 let usuarioAtual = null; // { id, email, nome, telefone, cargo, foto, papel, permissoes, convidado, empresa_id }
 let empresaAtual = null;
@@ -1013,7 +1013,7 @@ async function storeGetMany(keys){
     try{ const raw = localStorage.getItem(chaveLocal(k)); valores[k] = raw!==null ? JSON.parse(raw) : null; }
     catch(e){ valores[k] = null; }
   }
-  const remotas = keys.filter(k=>!CHAVE_LOCAL.test(k) && pode(SECAO_DA_CHAVE[k], 'ver'));
+  const remotas = keys.filter(k=>!CHAVE_LOCAL.test(k) && podeVerChave(k));
   keys.filter(k=>!CHAVE_LOCAL.test(k)).forEach(k=>{ valores[k] = null; });
   if(remotas.length){
     const { data, error } = await sb.from('dados_empresa').select('chave, valor, versao').in('chave', remotas);
@@ -1149,7 +1149,7 @@ window.addEventListener('beforeunload', (e)=>{
 // Traz alterações feitas por outras pessoas da equipe (ao voltar para a aba e a cada 90 s).
 async function atualizarDaEquipe(){
   if(!usuarioAtual || gravacoesPendentes>0 || document.hidden) return;
-  const visiveis = CHAVES_SERVIDOR.filter(k=>pode(SECAO_DA_CHAVE[k], 'ver'));
+  const visiveis = CHAVES_SERVIDOR.filter(k=>podeVerChave(k));
   if(!visiveis.length) return;
   const { data, error } = await sb.from('dados_empresa').select('chave, versao').in('chave', visiveis);
   if(error || !data) return;
@@ -1222,13 +1222,13 @@ const PERMISSAO_DA_ACAO = {
   'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-numerario-pdf':['processos','ver'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 
-  'go:financeiro':['processos','ver'], 'fin-filtrar':['processos','ver'], 'fin-limpar':['processos','ver'],
+  'go:financeiro':['financeiro','ver'], 'fin-filtrar':['financeiro','ver'], 'fin-limpar':['financeiro','ver'],
   'go:monitoramento':['monitoramento','ver'], 'go:monitoramentoCusto':['monitoramento','ver'],
   'mon-add':['monitoramento','criar'], 'mon-importar':['monitoramento','criar'],
   'mon-atualizar':['monitoramento','editar'], 'mon-atualizar-um':['monitoramento','editar'], 'mon-excluir':['monitoramento','editar'],
   'mon-testar-api':['monitoramento','ver'], 'mon-modo':['monitoramento','ver'], 'mon-template':['monitoramento','ver'], 'mon-tpl-aba':['monitoramento','ver'], 'mon-tpl-grupo':['monitoramento','ver'], 'mon-tpl-padrao':['monitoramento','ver'], 'mon-tpl-salvar':['monitoramento','ver'], 'mon-abrir':['monitoramento','ver'], 'mon-minimizar':['monitoramento','ver'], 'mon-minimizar-todos':['monitoramento','ver'], 'mon-rastrear':['monitoramento','editar'], 'mon-rastrear-todos':['monitoramento','editar'], 'mon-aplicar-devolucao':['monitoramento','editar'],
 };
-const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', fin:'processos', mon:'monitoramento' };
+const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', fin:'financeiro', mon:'monitoramento' };
 
 function permissaoDaAcao(action){
   return PERMISSAO_DA_ACAO[action] || PERMISSAO_DA_ACAO[action.split(':')[0]] || null;
@@ -1308,8 +1308,10 @@ function avatarHtml(perfil, tamanho){
 function nomeEmpresa(){ return (empresaAtual && (empresaAtual.nome_fantasia || empresaAtual.razao_social)) || 'Minha empresa'; }
 function perfilIncompleto(){ return !!usuarioAtual && usuarioAtual.convidado && (!usuarioAtual.telefone || !usuarioAtual.cargo); }
 
+// Os processos também são lidos por quem tem só a área Financeiro (o resumo financeiro vem deles)
+function podeVerChave(k){ return pode(SECAO_DA_CHAVE[k], 'ver') || (k==='processos:index' && pode('financeiro', 'ver')); }
 function permissoesPadraoConvite(){
-  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false}, processos:{ver:true,criar:false,editar:false}, monitoramento:{ver:true,criar:false,editar:false} };
+  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false}, processos:{ver:true,criar:false,editar:false}, financeiro:{ver:true,criar:false,editar:false}, monitoramento:{ver:true,criar:false,editar:false} };
 }
 function matrizPermissoesHtml(prefixo, permissoes, desabilitada){
   const p = comMonitoramentoHerdado(permissoes);
@@ -1408,7 +1410,7 @@ function renderConfigPerfil(){
   <div class="card">
     <div class="section-title" style="margin-bottom:12px;"><span class="num">02</span> Meu acesso</div>
     <p class="page-sub" style="margin:0 0 14px;">Empresa: <b>${esc(nomeEmpresa())}</b> · ${souAdmin() ? 'Administrador (acesso total)' : 'Permissões definidas pelo administrador'}</p>
-    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1}, processos:{ver:1,criar:1,editar:1}, monitoramento:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
+    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1}, processos:{ver:1,criar:1,editar:1}, financeiro:{ver:1,criar:1,editar:1}, monitoramento:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
   </div>`;
 }
 
@@ -10865,7 +10867,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.28 · listas compactas (cadastros) · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.29 · permissão do Financeiro · build 15/10/2026</span></div>
   `;
 }
 
@@ -10875,7 +10877,7 @@ function renderHome(){
    Os dados vêm direto do que está cadastrado; nada é guardado à parte. */
 const DASH_ORDEM = ['cot','proc','mon','fin'];
 const DASH_TITULOS = { cot:'Cotações Salvas', proc:'Processos por Status', mon:'Monitoramento de Carga', fin:'Financeiro dos Processos', cad:'Cadastros Ativos' };
-const DASH_SECAO = { cot:'cotacoes', proc:'processos', mon:'monitoramento', fin:'processos' };
+const DASH_SECAO = { cot:'cotacoes', proc:'processos', mon:'monitoramento', fin:'financeiro' };
 const dashVisivel = id => { try{ return pode(DASH_SECAO[id], 'ver'); }catch(e){ return true; } };
 const DASH_MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const DASH_MESES_LONGOS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
