@@ -858,7 +858,9 @@ tbody tr:hover{background:#F9FAFD;}
 .lm-lista{display:flex; flex-direction:column; gap:5px;}
 .lm-linha{display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:6px 12px; box-shadow:0 1px 2px rgba(23,58,94,.04); cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease;}
 .lm-linha:hover{border-color:#C9D5E8; box-shadow:var(--shadow);}
-.lm-id{flex:0 0 auto;}
+.lm-id{flex:0 0 auto; min-width:0; overflow:hidden;}
+.lm-id .cad-cel-nome{min-width:0; gap:8px;} .lm-id .cad-cel-nome b{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;}
+.lm-id .cad-avatar{width:28px; height:28px; font-size:11px; flex-shrink:0;} .lm-id .cad-avatar-lg{width:34px; height:34px;}
 .lm-ref{font-family:var(--font-mono); font-size:12.5px; font-weight:700; color:var(--navy); white-space:nowrap;}
 .lm-campos{flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:4px 16px; align-items:flex-start;}
 .lm-campo{flex:0 0 auto; min-width:0; display:flex; flex-direction:column; gap:0;}
@@ -3489,7 +3491,7 @@ function listaModernaHtml(linhas, rodape){
     linhas.forEach(l=>{ const c = l.campos[i]; if(!c) return; w = Math.max(w, txt(c.html).length*(c.num ? 7.9 : 7.4) + (/badge/.test(String(c.html)) ? 22 : 0), String(c.label).length*5.8); });
     return Math.round(Math.min(Math.max(w + 4, 54), 230));
   });
-  const idW = Math.round(Math.max(48, linhas.reduce((m, l)=>Math.max(m, txt(l.idHtml).length*7.6), 0) + 4));
+  const idW = Math.round(Math.max(48, linhas.reduce((m, l)=>Math.max(m, l.idW || txt(l.idHtml).length*7.6), 0) + 4));
   return `<div class="lm-lista">${linhas.map(l=>`
     <div class="lm-linha" ${l.acao ? `data-action="${l.acao}"` : ''}>
       <div class="lm-id" style="width:${idW}px">${l.idHtml}</div>
@@ -4490,13 +4492,11 @@ function renderCadastroListaTpl(tipo, lista){
     </div>`).join('')}</div>`;
   }
   const campos = prefs.lista.map(id=>t.mapa[id]).filter(c=>!(tipo==='produto' && c.id==='nome') && !(tipo==='cliente' && c.id==='nomeFantasia'));
-  return `<div class="table-wrap"><table>
-    <thead><tr><th>${tipo==='produto' ? 'Produto' : 'Nome'}</th>${campos.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead>
-    <tbody>${lista.map(item=>`<tr>
-      <td><div class="cad-cel-nome">${fotoCadHtml(tipo, item)}<b>${esc(t.nome(item))}</b></div></td>
-      ${campos.map(c=>`<td>${valorCampoCadHtml(c, item)}</td>`).join('')}
-      <td style="text-align:right; white-space:nowrap;"><div class="ci-actions">${acoesCadHtml(tipo, item)}</div></td>
-    </tr>`).join('')}</tbody></table></div>`;
+  // Lista compacta (mesmo desenho de Cotações, Processos e Financeiro): foto + nome, informações justas e ações à direita
+  const larguraNome = Math.min(260, Math.max(130, lista.reduce((m, item)=>Math.max(m, String(t.nome(item)||'').length*7.6), 0) + 44));
+  return listaModernaHtml(lista.map(item=>({ acao:`cad-view:${tipo}:${item.id}`, idW:larguraNome,
+    idHtml:`<div class="cad-cel-nome">${fotoCadHtml(tipo, item)}<b>${esc(t.nome(item))}</b></div>`,
+    campos:campos.map(c=>({ label:c.label, html:valorCampoCadHtml(c, item) })), acoes:`<div class="ci-actions">${acoesCadHtml(tipo, item)}</div>` })));
 }
 function barraCadastroTpl(tipo, total, filtrados){
   const t = CAD_TEMPLATE[tipo], prefs = prefsCadastro(tipo);
@@ -10865,7 +10865,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.27 · listas compactas · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.28 · listas compactas (cadastros) · build 15/10/2026</span></div>
   `;
 }
 
