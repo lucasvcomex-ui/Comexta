@@ -873,6 +873,12 @@ tbody tr:hover{background:#F9FAFD;}
 .lm-total{display:flex; justify-content:flex-end; align-items:baseline; gap:12px; padding:8px 14px; margin-top:4px; background:var(--paper); border:1px solid var(--line); border-radius:10px; font-size:12.5px; color:var(--ink-soft);}
 .lm-total b{font-size:16px; color:var(--navy-deep); font-family:var(--font-mono);}
 @media (max-width:760px){ .lm-linha{flex-wrap:wrap;} .lm-acoes{margin-left:0;} }
+.fin-nada{display:inline-flex; align-items:center; cursor:default; margin-right:6px;} .fin-nada input{margin:0;}
+.lm-val input, .lm-val select{width:100%; padding:3px 6px; font-size:12.5px; height:26px; border:1px solid #DFE3EC; border-radius:6px; background:#fff;}
+.lm-val .tpl-campo{margin:0; font-weight:700;}
+.fin-massa{background:#fff; border:1px solid #C9D5E8; border-left:4px solid var(--amber); border-radius:12px; padding:12px 16px; margin:0 0 12px;}
+.fin-massa-topo{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
+.fin-massa-campos{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;} .fin-massa-campos .field{min-width:150px; margin:0;}
 </style>
 </head>
 <body>
@@ -1127,7 +1133,7 @@ async function storeSet(key, value){
     catch(e){ console.error('storage set failed', key, e); return false; }
   }
   const secao = SECAO_DA_CHAVE[key];
-  if(!(pode(secao, 'criar') || pode(secao, 'editar'))){
+  if(!(pode(secao, 'criar') || pode(secao, 'editar') || (key==='processos:index' && pode('financeiro', 'editar')))){
     toast('Você não tem permissão para salvar em ' + SECOES[secao] + '.');
     return false;
   }
@@ -1222,7 +1228,7 @@ const PERMISSAO_DA_ACAO = {
   'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-numerario-pdf':['processos','ver'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 
-  'go:financeiro':['financeiro','ver'], 'fin-filtrar':['financeiro','ver'], 'fin-limpar':['financeiro','ver'],
+  'go:financeiro':['financeiro','ver'], 'fin-filtrar':['financeiro','ver'], 'fin-limpar':['financeiro','ver'], 'fin-editar':['financeiro','editar'], 'fin-salvar':['financeiro','editar'], 'fin-cancelar':['financeiro','ver'], 'fin-massa-aplicar':['financeiro','editar'], 'fin-sel-limpar':['financeiro','ver'],
   'go:monitoramento':['monitoramento','ver'], 'go:monitoramentoCusto':['monitoramento','ver'],
   'mon-add':['monitoramento','criar'], 'mon-importar':['monitoramento','criar'],
   'mon-atualizar':['monitoramento','editar'], 'mon-atualizar-um':['monitoramento','editar'], 'mon-excluir':['monitoramento','editar'],
@@ -2333,33 +2339,33 @@ function moedasTaxaDiaProc(proc){
 // tributos do Desembaraço. Cada um com prestador, moeda, valor, taxa, vencimento e pago. Alimenta a seção Financeiro e o dashboard.
 function lancamentosFinanceirosProc(proc){
   const p = procNorm(proc), out = [];
-  const add = (tipo, descricao, prestador, moeda, valor, taxa, brl, vencimento, pago, extra)=>out.push({ origem:tipo, tipo, descricao, prestador:prestador||'', moeda:moeda||'BRL', valor, taxa, brl, vencimento:vencimento||'', pago:!!pago,
-    rotulo:tipo + (descricao ? ' — ' + descricao : '') + (prestador ? ' · ' + prestador : ''), ...(extra||{}) });
+  const add = (tipo, descricao, prestador, moeda, valor, taxa, brl, vencimento, pago, fonte)=>out.push({ origem:tipo, tipo, descricao, prestador:prestador||'', moeda:moeda||'BRL', valor, taxa, brl, vencimento:vencimento||'', pago:!!pago,
+    rotulo:tipo + (descricao ? ' — ' + descricao : '') + (prestador ? ' · ' + prestador : ''), fonte });
   p.produto.fornecedores.forEach((fo, k)=>(fo.fechamento.parcelas||[]).forEach(pa=>{
     const valor = numProcSimples(pa.valor); if(!(valor>0)) return;
     const moeda = pa.moeda||fo.moeda||'USD', nome = fo.fornecedor || 'Fornecedor ' + (k+1);
-    add('Câmbio', `${pa.descricao || 'Parcela'}${pa.banco ? ' · ' + pa.banco : ''}${pa.contrato ? ' · contrato ' + pa.contrato : ''}`, nome, moeda, valor, numProcSimples(pa.taxa), valor*(moeda==='BRL' ? 1 : numProcSimples(pa.taxa)), pa.vencimento, pa.pago);
+    add('Câmbio', `${pa.descricao || 'Parcela'}${pa.banco ? ' · ' + pa.banco : ''}${pa.contrato ? ' · contrato ' + pa.contrato : ''}`, nome, moeda, valor, numProcSimples(pa.taxa), valor*(moeda==='BRL' ? 1 : numProcSimples(pa.taxa)), pa.vencimento, pa.pago, { kind:'cambio', foId:fo.id, id:pa.id });
   }));
   const ts = todosTransportesProc(p);
   ts.forEach((t, k)=>{
     const pre = ts.length>1 ? `Transporte ${k+1} · ` : '', quem = l => t.agenteCarga || t.armador || l.prestador || '';   // prestador = agente de carga / transportador do transporte
     [['frete', PROC_TIPOS_FRETE[t.modal] || 'Frete internacional'], ['taxasOrigem', 'Taxa de origem'], ['taxasDestino', 'Taxa de destino'], ['seguro', 'Seguro de frete internacional']].forEach(([g, rot])=>(t.custos[g]||[]).forEach(l=>{
       const ext = numProcSimples(l.tarifa)*numProcSimples(l.quantidade); if(!(ext>0)) return;
-      add(pre + rot, l.descricao, quem(l), l.moeda, ext, taxaLinhaProc(l), totalLinhaProc(l), l.vencimento, l.pago);
+      add(pre + rot, l.descricao, quem(l), l.moeda, ext, taxaLinhaProc(l), totalLinhaProc(l), l.vencimento, l.pago, { kind:'linha', tIdx:k, grupo:g, id:l.id });
     }));
   });
   p.armazenagem.lancamentos.forEach(l=>{
     const ext = numProcSimples(l.tarifa)*numProcSimples(l.quantidade); if(!(ext>0)) return;
-    add('Armazenagem', `${l.descricao || 'custo'} · ${nomeContainerProc(p, l.containerId)}`, (p.armazenagem.terminal||{}).nome, l.moeda, ext, taxaLinhaProc(l), totalLinhaProc(l), l.vencimento, l.pago);
+    add('Armazenagem', `${l.descricao || 'custo'} · ${nomeContainerProc(p, l.containerId)}`, (p.armazenagem.terminal||{}).nome, l.moeda, ext, taxaLinhaProc(l), totalLinhaProc(l), l.vencimento, l.pago, { kind:'arm', id:l.id });
   });
   p.outrasDespesas.lancamentos.forEach(d=>{
     if(!(numProcSimples(d.valor)>0)) return;
-    add(`Outras despesas (${d.origem==='internacional' ? 'internacional' : 'nacional'})`, d.descricao, d.prestador, d.moeda, numProcSimples(d.valor), taxaLinhaProc(d), totalDespesaProc(d), d.vencimento, d.pago);
+    add(`Outras despesas (${d.origem==='internacional' ? 'internacional' : 'nacional'})`, d.descricao, d.prestador, d.moeda, numProcSimples(d.valor), taxaLinhaProc(d), totalDespesaProc(d), d.vencimento, d.pago, { kind:'outra', id:d.id });
   });
   const nm = computeNumerarioProcesso(p);
   PROC_TRIBUTOS_IMPOSTOS.forEach(k=>{
     const v = nm.imposto(k); if(!(v>0)) return;
-    add('Tributo', PROC_TRIBUTOS.find(([x])=>x===k)[1], (p.desembaraco||{}).despachante, 'BRL', v, 1, v, (p.desembaraco.datasPagamento||{})[k], (p.desembaraco.pagos||{})[k]);
+    add('Tributo', PROC_TRIBUTOS.find(([x])=>x===k)[1], (p.desembaraco||{}).despachante, 'BRL', v, 1, v, (p.desembaraco.datasPagamento||{})[k], (p.desembaraco.pagos||{})[k], { kind:'trib', k, calculado:nm.usaAliq });
   });
   return out;
 }
@@ -3490,7 +3496,7 @@ function listaModernaHtml(linhas, rodape){
   const ncol = linhas.reduce((m, l)=>Math.max(m, l.campos.length), 0);
   const larg = Array.from({ length:ncol }, (_, i)=>{
     let w = 0;
-    linhas.forEach(l=>{ const c = l.campos[i]; if(!c) return; w = Math.max(w, txt(c.html).length*(c.num ? 7.9 : 7.4) + (/badge/.test(String(c.html)) ? 22 : 0), String(c.label).length*5.8); });
+    linhas.forEach(l=>{ const c = l.campos[i]; if(!c) return; w = Math.max(w, txt(c.html).length*(c.num ? 7.9 : 7.4) + (/badge/.test(String(c.html)) ? 22 : 0), String(c.label).length*5.8, c.minW || 0); });
     return Math.round(Math.min(Math.max(w + 4, 54), 230));
   });
   const idW = Math.round(Math.max(48, linhas.reduce((m, l)=>Math.max(m, l.idW || txt(l.idHtml).length*7.6), 0) + 4));
@@ -3505,13 +3511,14 @@ function listaModernaHtml(linhas, rodape){
 /* =========================== Financeiro (resumo de custos de todos os processos) =========================== */
 const FIN_SIT = { pago:['Pago','badge-green'], aberto:['Em aberto','badge-navy'], vencido:['Vencido','badge-red'] };
 const finSituacao = (l, hoje) => l.pago ? 'pago' : ((l.vencimento && String(l.vencimento).slice(0,10) < hoje) ? 'vencido' : 'aberto');
+const podeEditarFin = () => { try{ return pode('financeiro', 'editar'); }catch(e){ return false; } };
 // Uma linha por custo lançado em TODOS os processos (câmbio, frete, taxas, armazenagem, outras despesas e tributos)
 function financeiroLinhasTodas(){
   const hoje = hojeISO(), out = [];
   (state.processosIndex||[]).forEach(raw=>{
     let p; try{ p = procNorm(raw); }catch(e){ return; }
     const cl = p.cliente || {};
-    lancamentosFinanceirosProc(p).forEach(l=>out.push({ ...l, procId:p.id, refCliente:cl.referenciaCliente||'', cliente:cl.nome||'', sit:finSituacao(l, hoje) }));
+    lancamentosFinanceirosProc(p).forEach(l=>out.push({ ...l, procId:p.id, chave:p.id + '|' + (l.fonte.id || l.fonte.k), refCliente:cl.referenciaCliente||'', cliente:cl.nome||'', sit:finSituacao(l, hoje) }));
   });
   return out.sort((a, b)=>{ const va = a.vencimento || '9999', vb = b.vencimento || '9999'; return va.localeCompare(vb) || String(a.procId).localeCompare(String(b.procId)); });
 }
@@ -3525,36 +3532,188 @@ function financeiroFiltradas(){
     return true;
   });
 }
-function acaoFin(cmd){
+
+/* --- gravação no processo de origem --- */
+const strNumFin = n => String(Math.round(n*1e6)/1e6);
+function finAcharObj(p, f){
+  if(f.kind==='cambio'){ const fo = p.produto.fornecedores.find(x=>x.id===f.foId); return fo ? fo.fechamento.parcelas.find(x=>x.id===f.id) : null; }
+  if(f.kind==='linha'){ const t = todosTransportesProc(p)[f.tIdx]; return t ? (t.custos[f.grupo]||[]).find(x=>x.id===f.id) : null; }
+  if(f.kind==='arm') return p.armazenagem.lancamentos.find(x=>x.id===f.id) || null;
+  if(f.kind==='outra') return p.outrasDespesas.lancamentos.find(x=>x.id===f.id) || null;
+  return null;
+}
+// m: { valor, moeda, taxa, vencimento, pago } (só o que mudou). Retorna true se algo foi alterado.
+function finAplicarNaFonte(p, f, m){
+  let mudou = false; const tem = k => m[k]!==undefined && m[k]!==null;
+  if(f.kind==='trib'){   // tributos: pagamento e data; o valor só muda quando não é calculado pelas alíquotas
+    if(tem('pago')){ p.desembaraco.pagos[f.k] = !!m.pago; mudou = true; if(m.pago && !tem('vencimento') && !(p.desembaraco.datasPagamento||{})[f.k]) p.desembaraco.datasPagamento[f.k] = hojeISO(); }
+    if(tem('vencimento')){ p.desembaraco.datasPagamento[f.k] = m.vencimento; mudou = true; }
+    if(tem('valor') && !computeNumerarioProcesso(p).usaAliq){ p.desembaraco.tributos[f.k] = strNumFin(m.valor); mudou = true; }
+    return mudou;
+  }
+  const o = finAcharObj(p, f); if(!o) return false;
+  if(tem('moeda')){ o.moeda = m.moeda; if(m.moeda==='BRL') o.taxa = ''; mudou = true; }
+  if(tem('taxa') && (o.moeda||'BRL')!=='BRL'){ o.taxa = m.taxa==='' ? '' : strNumFin(m.taxa); mudou = true; }
+  if(tem('valor')){
+    if(f.kind==='linha' || f.kind==='arm'){ const q = numProcSimples(o.quantidade); if(q>0) o.tarifa = strNumFin(m.valor/q); else { o.tarifa = strNumFin(m.valor); o.quantidade = '1'; } }
+    else o.valor = strNumFin(m.valor);
+    mudou = true;
+  }
+  if(tem('vencimento')){ o.vencimento = m.vencimento; mudou = true; }
+  if(tem('pago')){ o.pago = !!m.pago; mudou = true; }
+  return mudou;
+}
+// alteracoes: [{ procId, fonte, mudancas }]  →  grava os processos alterados (uma gravação só). Retorna o nº de custos alterados (ou -1 se falhar).
+async function finSalvar(alteracoes){
+  const porProc = new Map(); alteracoes.forEach(a=>{ if(!porProc.has(a.procId)) porProc.set(a.procId, []); porProc.get(a.procId).push(a); });
+  const backup = new Map(), agora = new Date().toISOString(); let n = 0;
+  for(const [procId, lista] of porProc){
+    const i = state.processosIndex.findIndex(x=>x.id===procId); if(i<0) continue;
+    const orig = state.processosIndex[i], p = normalizarProcesso(JSON.parse(JSON.stringify(orig)));
+    let alterou = false; lista.forEach(a=>{ if(finAplicarNaFonte(p, a.fonte, a.mudancas)){ n++; alterou = true; } });
+    if(!alterou) continue;
+    backup.set(i, orig);
+    state.processosIndex[i] = { ...orig, ...p, id:orig.id, seq:orig.seq, criadoEm:orig.criadoEm, criadoPor:orig.criadoPor, atualizadoEm:agora, atualizadoPor:(usuarioAtual && (usuarioAtual.nome || usuarioAtual.email)) || '' };
+  }
+  if(!backup.size) return 0;
+  const ok = await persistProcessosIndex();
+  if(!ok){ backup.forEach((orig, i)=>{ state.processosIndex[i] = orig; }); return -1; }
+  return n;
+}
+function finLerEdicao(){
+  const m = {}, lerEl = k => document.querySelector(`[data-fin-edit="${k}"]`);
+  const v = lerEl('valor'); if(v && !v.disabled && v.value!=='') m.valor = Number(String(v.value).replace(',', '.'));
+  const mo = lerEl('moeda'); if(mo && !mo.disabled) m.moeda = mo.value;
+  const t = lerEl('taxa'); if(t && !t.disabled) m.taxa = t.value==='' ? '' : Number(String(t.value).replace(',', '.'));
+  const d = lerEl('vencimento'); if(d) m.vencimento = d.value;
+  const pg = lerEl('pago'); if(pg) m.pago = !!pg.checked;
+  return m;
+}
+async function acaoFin(cmd, a1){
+  if(cmd==='fin-nada') return true;
   if(cmd==='fin-filtrar'){
     const v = k => { const el = document.querySelector(`[data-fin-filtro="${k}"]`); return el ? el.value : ''; };
     state.finFiltro = { busca:v('busca'), situacao:v('situacao'), de:v('de'), ate:v('ate') }; renderApp(); return true;
   }
   if(cmd==='fin-limpar'){ state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; renderApp(); return true; }
+  if(cmd==='fin-sel-limpar'){ state.finSel = {}; renderApp(); return true; }
+  if(cmd==='fin-editar'){ if(!podeEditarFin()) return true; state.finEdit = a1; renderApp(); return true; }
+  if(cmd==='fin-cancelar'){ state.finEdit = null; renderApp(); return true; }
+  if(cmd==='fin-salvar'){
+    if(!podeEditarFin()) return true;
+    const l = financeiroLinhasTodas().find(x=>x.chave===a1); if(!l){ state.finEdit = null; renderApp(); return true; }
+    const m = finLerEdicao();
+    if(m.valor!==undefined && !(m.valor>=0)){ toast('Informe um valor válido.'); return true; }
+    if(m.taxa!==undefined && m.taxa!=='' && !(m.taxa>0)){ toast('Informe uma taxa válida (maior que zero).'); return true; }
+    const n = await finSalvar([{ procId:l.procId, fonte:l.fonte, mudancas:m }]);
+    if(n<0) return true;
+    state.finEdit = null; toast(n ? `Custo atualizado no processo ${l.procId}.` : 'Nenhuma alteração.', n ? 'ok' : undefined); renderApp(); return true;
+  }
+  if(cmd==='fin-massa-aplicar'){ finAplicarMassa(); return true; }
   return false;
 }
+// Marcar/desmarcar como pago direto na lista, e seleção de linhas
+async function onFinInput(el){
+  if(el.hasAttribute('data-fin-sel')){ const k = el.getAttribute('data-fin-sel'); if(el.checked) state.finSel[k] = true; else delete state.finSel[k]; renderApp(); return; }
+  if(el.hasAttribute('data-fin-selall')){
+    state.finSel = {}; if(el.checked) financeiroFiltradas().forEach(l=>{ state.finSel[l.chave] = true; }); renderApp(); return;
+  }
+  if(el.hasAttribute('data-fin-pago')){
+    if(!podeEditarFin()) return;
+    const l = financeiroLinhasTodas().find(x=>x.chave===el.getAttribute('data-fin-pago')); if(!l) return;
+    const n = await finSalvar([{ procId:l.procId, fonte:l.fonte, mudancas:{ pago:!!el.checked } }]);
+    if(n>=0) toast(el.checked ? 'Custo marcado como pago.' : 'Custo marcado como em aberto.', 'ok');
+    renderApp();
+  }
+}
+// Alteração em massa: aplica o que foi preenchido a todas as linhas selecionadas
+async function finAplicarMassa(){
+  if(!podeEditarFin()) return;
+  const el = k => document.querySelector(`[data-fin-massa="${k}"]`), val = k => el(k) ? el(k).value : '';
+  const m = {}; const pg = val('pago'); if(pg==='pago') m.pago = true; else if(pg==='aberto') m.pago = false;
+  if(val('vencimento')) m.vencimento = val('vencimento');
+  const adiar = Number(val('adiar')) || 0;
+  if(val('moeda')) m.moeda = val('moeda');
+  if(val('taxa')!==''){ const t = Number(String(val('taxa')).replace(',', '.')); if(!(t>0)) return toast('Informe uma taxa válida (maior que zero).'); m.taxa = t; }
+  if(m.pago===undefined && !m.vencimento && !adiar && !m.moeda && m.taxa===undefined) return toast('Preencha pelo menos um campo para alterar.');
+  const sel = financeiroLinhasTodas().filter(l=>state.finSel[l.chave]);
+  if(!sel.length) return toast('Selecione os custos que serão alterados.');
+  const procs = new Set(sel.map(l=>l.procId));
+  if(!window.confirm(`Aplicar a alteração a ${sel.length} custo${sel.length===1?'':'s'} de ${procs.size} processo${procs.size===1?'':'s'}?`)) return;
+  const alteracoes = sel.map(l=>{
+    const mud = { ...m };
+    if(l.fonte.kind==='trib'){ delete mud.moeda; delete mud.taxa; }
+    if(adiar && !m.vencimento && l.vencimento){ const d = new Date(l.vencimento + 'T12:00:00'); d.setDate(d.getDate() + adiar); mud.vencimento = d.toISOString().slice(0,10); }
+    return { procId:l.procId, fonte:l.fonte, mudancas:mud };
+  });
+  const n = await finSalvar(alteracoes);
+  if(n<0) return;
+  state.finSel = {}; toast(`${n} custo${n===1?'':'s'} atualizado${n===1?'':'s'} em ${procs.size} processo${procs.size===1?'':'s'}.`, 'ok'); renderApp();
+}
+
+/* --- tela --- */
+function financeiroLinhaHtml(l, editavel){
+  const estr = l.moeda!=='BRL', editando = state.finEdit===l.chave, trib = l.fonte.kind==='trib';
+  const vazio = '<span class="vazio">—</span>', nada = h => `<label data-action="fin-nada" class="fin-nada">${h}</label>`;
+  const sel = !!state.finSel[l.chave];
+  const idHtml = (editavel ? nada(`<input type="checkbox" data-fin-sel="${esc(l.chave)}" ${sel ? 'checked' : ''} title="Selecionar para alterar em massa">`) : '') + `<span class="lm-ref">${esc(l.procId)}</span>`;
+  const common = [
+    { label:'Ref. do cliente', html:l.refCliente ? esc(l.refCliente) : vazio },
+    { label:l.tipo, html:l.descricao ? esc(l.descricao) : vazio },
+    { label:'Prestador', html:l.prestador ? esc(l.prestador) : vazio } ];
+  let campos;
+  if(editando){
+    const desValor = trib && l.fonte.calculado ? 'disabled title="Calculado pelas alíquotas do Desembaraço"' : '';
+    const desMoeda = trib ? 'disabled' : '', desTaxa = (trib || !estr) ? 'disabled' : '';
+    campos = [ ...common,
+      { label:'Moeda', html:`<select data-fin-edit="moeda" ${desMoeda}>${PROC_MOEDAS.map(m=>`<option ${m===l.moeda?'selected':''}>${m}</option>`).join('')}</select>`, minW:84 },
+      { label:'Valor', html:`<input data-fin-edit="valor" type="number" step="any" min="0" class="num-mono" value="${esc(String(l.valor))}" ${desValor}>`, minW:104 },
+      { label:'Taxa', html:`<input data-fin-edit="taxa" type="number" step="any" min="0" class="num-mono" value="${l.taxa ? esc(String(l.taxa)) : ''}" ${desTaxa}>`, minW:84 },
+      { label:'Total R$', html:`<b>${fmtBRL(l.brl)}</b>`, num:true },
+      { label:trib ? 'Data do pagamento' : 'Vencimento', html:`<input data-fin-edit="vencimento" type="date" value="${esc(l.vencimento)}">`, minW:134 },
+      { label:'Pagamento', html:`<label class="tpl-campo"><input type="checkbox" data-fin-edit="pago" ${l.pago ? 'checked' : ''}> Pago</label>`, minW:74 } ];
+  }else{
+    campos = [ ...common,
+      { label:'Moeda', html:esc(l.moeda) },
+      { label:'Valor', html:fmtMoeda(l.valor, l.moeda), num:true },
+      { label:'Taxa', html:estr && l.taxa ? fmtNum(l.taxa, 4) : '—', num:true },
+      { label:'Total R$', html:`<b>${fmtBRL(l.brl)}</b>`, num:true },
+      { label:trib ? 'Data do pagamento' : 'Vencimento', html:l.vencimento ? fmtDateOnly(l.vencimento) : vazio },
+      { label:'Pagamento', html:(editavel ? nada(`<input type="checkbox" data-fin-pago="${esc(l.chave)}" ${l.pago ? 'checked' : ''} title="Marcar como pago">`) : '') + `<span class="badge ${FIN_SIT[l.sit][1]}">${FIN_SIT[l.sit][0]}</span>`, minW:editavel ? 112 : 0 } ];
+  }
+  const abrir = `<button class="icon-btn" title="Abrir o processo" data-action="proc-abrir:${esc(l.procId)}">${ICONS.open}</button>`;
+  const acoes = editando
+    ? `<div class="ci-actions"><button class="icon-btn" title="Salvar no processo" data-action="fin-salvar:${esc(l.chave)}">${ICONS.check}</button><button class="icon-btn" title="Cancelar" data-action="fin-cancelar">${ICONS.x || '×'}</button></div>`
+    : `<div class="ci-actions">${editavel ? `<button class="icon-btn" title="Editar valor, vencimento, taxa e moeda" data-action="fin-editar:${esc(l.chave)}">${ICONS.edit}</button>` : ''}${abrir}</div>`;
+  return { acao: editando ? '' : `proc-abrir:${esc(l.procId)}`, idHtml, idW:(editavel ? 24 : 0) + String(l.procId).length*7.6, campos, acoes };
+}
+function financeiroPainelMassaHtml(sel){
+  const procs = new Set(sel.map(l=>l.procId)), semTrib = sel.filter(l=>l.fonte.kind!=='trib').length;
+  return `<div class="fin-massa">
+    <div class="fin-massa-topo"><b>Alterar em massa</b><span class="membro-sub">${sel.length} custo${sel.length===1?'':'s'} selecionado${sel.length===1?'':'s'} em ${procs.size} processo${procs.size===1?'':'s'} · preencha só o que quer alterar</span></div>
+    <div class="fin-massa-campos">
+      <div class="field"><label>Pagamento</label><select data-fin-massa="pago"><option value="">Não alterar</option><option value="pago">Marcar como pago</option><option value="aberto">Marcar como em aberto</option></select></div>
+      <div class="field"><label>Novo vencimento</label><input type="date" data-fin-massa="vencimento"></div>
+      <div class="field"><label>Ou adiar o vencimento em (dias)</label><input type="number" step="1" data-fin-massa="adiar" placeholder="Ex.: 7 ou -3"></div>
+      <div class="field"><label>Moeda</label><select data-fin-massa="moeda"><option value="">Não alterar</option>${PROC_MOEDAS.map(m=>`<option>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Taxa da moeda</label><input type="number" step="any" min="0" data-fin-massa="taxa" placeholder="Ex.: 5,35"></div>
+      <div class="btn-row" style="align-self:flex-end;"><button class="btn btn-primary btn-sm" data-action="fin-massa-aplicar">${ICONS.check} Aplicar às ${sel.length} linhas</button><button class="btn btn-ghost btn-sm" data-action="fin-sel-limpar">Limpar seleção</button></div>
+    </div>
+    <p class="hint" style="margin:8px 0 0;">As alterações são gravadas nos processos de origem. Nos tributos só mudam o pagamento e a data; moeda e taxa valem para os demais custos (${semTrib}). O valor é alterado linha a linha, no lápis.</p>
+  </div>`;
+}
 function renderFinanceiro(){
-  const f = state.finFiltro || {}, todas = financeiroLinhasTodas(), linhas = financeiroFiltradas();
+  const f = state.finFiltro || {}, todas = financeiroLinhasTodas(), linhas = financeiroFiltradas(), editavel = podeEditarFin();
   const soma = sit => linhas.filter(l=>!sit || l.sit===sit).reduce((s,l)=>s + l.brl, 0);
-  const estr = l => l.moeda!=='BRL';
+  const sel = editavel ? todas.filter(l=>state.finSel[l.chave]) : [];
+  const todosSel = editavel && linhas.length>0 && linhas.every(l=>state.finSel[l.chave]);
   const corpo = !todas.length ? `<div class="empty">${ICONS.calc}<h3>Nenhum custo lançado nos processos</h3><p>Os custos lançados em Produto (câmbio), Transporte, Armazenagem, Desembaraço e Outras Despesas aparecem aqui, uma linha por custo.</p></div>`
     : !linhas.length ? `<div class="empty"><h3>Nenhum lançamento encontrado</h3><p>Ajuste os filtros ou clique em "Limpar".</p></div>`
-    : listaModernaHtml(linhas.map(l=>({ acao:`proc-abrir:${esc(l.procId)}`, idHtml:`<span class="lm-ref">${esc(l.procId)}</span>`,
-        campos:[
-          { label:'Ref. do cliente', html:l.refCliente ? esc(l.refCliente) : '<span class="vazio">—</span>' },
-          { label:l.tipo, html:l.descricao ? esc(l.descricao) : '<span class="vazio">—</span>' },
-          { label:'Prestador', html:l.prestador ? esc(l.prestador) : '<span class="vazio">—</span>' },
-          { label:'Moeda', html:esc(l.moeda) },
-          { label:'Valor', html:fmtMoeda(l.valor, l.moeda), num:true },
-          { label:'Taxa', html:estr(l) && l.taxa ? fmtNum(l.taxa, 4) : '—', num:true },
-          { label:'Total R$', html:`<b>${fmtBRL(l.brl)}</b>`, num:true },
-          { label:'Vencimento', html:l.vencimento ? fmtDateOnly(l.vencimento) : '<span class="vazio">—</span>' },
-          { label:'Pagamento', html:`<span class="badge ${FIN_SIT[l.sit][1]}">${FIN_SIT[l.sit][0]}</span>` } ],
-        acoes:`<button class="icon-btn" title="Abrir o processo" data-action="proc-abrir:${esc(l.procId)}">${ICONS.open}</button>` })),
+    : listaModernaHtml(linhas.map(l=>financeiroLinhaHtml(l, editavel)),
       `<div class="lm-total"><span>TOTAL (${linhas.length} lançamento${linhas.length===1 ? '' : 's'})</span><b>${fmtBRL(soma())}</b></div>`);
   return `
   <div class="page-title">Financeiro</div>
-  <div class="page-sub">Resumo de todos os custos lançados nos processos, uma linha por custo: câmbio, frete, taxas, armazenagem, outras despesas e tributos do desembaraço.</div>
+  <div class="page-sub">Resumo de todos os custos lançados nos processos, uma linha por custo: câmbio, frete, taxas, armazenagem, outras despesas e tributos do desembaraço.${editavel ? ' Você pode marcar custos como pagos e alterar valor, vencimento, taxa e moeda aqui: a alteração é gravada no processo de origem.' : ''}</div>
   <hr class="hairline">
   <div class="kpi-row" style="margin-bottom:20px;">
     <div class="kpi"><div class="k-lbl">Custos totais</div><div class="k-val">${fmtBRL(soma())}</div></div>
@@ -3563,7 +3722,7 @@ function renderFinanceiro(){
     <div class="kpi"><div class="k-lbl">Vencidos</div><div class="k-val" style="color:var(--red);">${fmtBRL(soma('vencido'))}</div></div>
   </div>
   <div class="lista-painel">
-    <div class="cot-barra"><span class="membro-sub">Somente leitura: para alterar um custo, abra o processo.</span><div class="btn-row">${botoesExportarHtml('fin')}</div></div>
+    <div class="cot-barra"><span class="membro-sub">${editavel ? `<label class="tpl-campo" data-action="fin-nada"><input type="checkbox" data-fin-selall ${todosSel ? 'checked' : ''}> Selecionar todos os ${linhas.length} filtrados</label>` : 'Somente leitura: para alterar um custo, abra o processo.'}</span><div class="btn-row">${botoesExportarHtml('fin')}</div></div>
     <div class="filter-bar">
       <div class="field" style="min-width:220px;"><label>Buscar</label><input data-fin-filtro="busca" value="${esc(f.busca)}" placeholder="Processo, cliente, prestador, custo…" autocomplete="off"></div>
       <div class="field"><label>Pagamento</label><select data-fin-filtro="situacao"><option value="">Todos</option>${Object.entries(FIN_SIT).map(([k,[r]])=>`<option value="${k}" ${f.situacao===k?'selected':''}>${r}</option>`).join('')}</select></div>
@@ -3571,6 +3730,7 @@ function renderFinanceiro(){
       <div class="field"><label>Vencimento até</label><input type="date" data-fin-filtro="ate" value="${esc(f.ate)}"></div>
       <div class="btn-row" style="align-self:flex-end;"><button class="btn btn-primary btn-sm" data-action="fin-filtrar">Filtrar</button><button class="btn btn-ghost btn-sm" data-action="fin-limpar">Limpar</button></div>
     </div>
+    ${sel.length ? financeiroPainelMassaHtml(sel) : ''}
     ${corpo}
   </div>`;
 }
@@ -6321,7 +6481,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
-state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
+state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.finSel = {}; state.finEdit = null; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
 state.dash = { cot:{gran:'mes',ano:0,mes:0,comp:[]}, proc:{gran:'mes',ano:0,mes:0,comp:[]}, mon:{gran:'mes',ano:0,mes:0,comp:[],medida:'qtd'}, fin:{gran:'mes',ano:0,mes:0,comp:[],visao:'total'} };
 state.dashSel = { cot:true, proc:true, mon:true, fin:true, cad:true }; state.dashFormato = 'pdf'; state.dashBaixar = { aberto:false };
 state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
@@ -10474,7 +10634,7 @@ function onAppClick(e){
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1, a2))) return;
   if(cmd.startsWith('mon-') && acaoMonitoramento(cmd, a1, a2)) return;
   if(cmd.startsWith('dash-') && acaoDash(cmd, a1, a2)) return;
-  if(cmd.startsWith('fin-') && acaoFin(cmd)) return;
+  if(cmd.startsWith('fin-') && acaoFin(cmd, a1)) return;
   if(cmd.startsWith('cot-') && acaoTemplateCotacoes(cmd, a1, a2)) return;
   if(cmd.startsWith('ftpl-') && acaoFiltrosTpl(cmd, a1)) return;
   if(cmd==='exportar'){ exportarTela(a1, a2); return; }
@@ -10689,6 +10849,7 @@ function onAppChange(e){
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'change'); return; }
   if(el.hasAttribute('data-dash') || el.hasAttribute('data-dash-sel') || el.hasAttribute('data-dash-fmt')){ onDashInput(el); return; }
+  if(el.hasAttribute('data-fin-sel') || el.hasAttribute('data-fin-selall') || el.hasAttribute('data-fin-pago')){ onFinInput(el); return; }
   if(el.hasAttribute('data-mtpl-campo')){ onTemplateCampoMon(el); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
@@ -10867,7 +11028,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.29 · permissão do Financeiro · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.30 · edição e alteração em massa no Financeiro · build 15/10/2026</span></div>
   `;
 }
 
