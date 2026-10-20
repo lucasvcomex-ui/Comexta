@@ -855,19 +855,22 @@ tbody tr:hover{background:#F9FAFD;}
 .proc-custos-bar{margin-top:18px; padding-top:14px; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
 .proc-pagodata{display:flex; align-items:center; gap:10px; margin-top:6px; flex-wrap:wrap;} .proc-pagodata input[type=date]{width:150px; padding:5px 8px; font-size:13px;}
 .grid-5{grid-template-columns:repeat(5,1fr);} @media (max-width:980px){ .grid-5{grid-template-columns:1fr 1fr;} }
-.lm-lista{display:flex; flex-direction:column; gap:8px;}
-.lm-linha{display:flex; align-items:center; gap:14px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 14px; box-shadow:0 1px 2px rgba(23,58,94,.04); cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;}
-.lm-linha:hover{border-color:#C9D5E8; box-shadow:var(--shadow); transform:translateY(-1px);}
-.lm-id{flex:0 0 auto; min-width:86px;}
-.lm-campos{flex:1; min-width:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(125px,1fr)); gap:8px 18px; align-items:start;}
-.lm-campo{min-width:0; display:flex; flex-direction:column; gap:1px;}
-.lm-campo > span{font-size:11px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.lm-val{font-size:13.5px; font-weight:700; color:var(--navy-deep); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-height:20px; display:flex; align-items:center;}
+.lm-lista{display:flex; flex-direction:column; gap:5px;}
+.lm-linha{display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:6px 12px; box-shadow:0 1px 2px rgba(23,58,94,.04); cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease;}
+.lm-linha:hover{border-color:#C9D5E8; box-shadow:var(--shadow);}
+.lm-id{flex:0 0 auto;}
+.lm-ref{font-family:var(--font-mono); font-size:12.5px; font-weight:700; color:var(--navy); white-space:nowrap;}
+.lm-campos{flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:4px 16px; align-items:flex-start;}
+.lm-campo{flex:0 0 auto; min-width:0; display:flex; flex-direction:column; gap:0;}
+.lm-campo > span{font-size:10.5px; line-height:1.3; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.lm-val{font-size:13px; line-height:1.35; font-weight:700; color:var(--navy-deep); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center;}
 .lm-val .badge{font-weight:700;} .lm-val .vazio{font-weight:400;}
-.lm-acoes{flex:0 0 auto;}
-.lm-total{display:flex; justify-content:flex-end; align-items:baseline; gap:14px; padding:12px 16px; margin-top:6px; background:var(--paper); border:1px solid var(--line); border-radius:12px; font-size:13px; color:var(--ink-soft);}
-.lm-total b{font-size:18px; color:var(--navy-deep); font-family:var(--font-mono);}
-@media (max-width:760px){ .lm-linha{flex-wrap:wrap;} .lm-campos{grid-template-columns:repeat(2,minmax(0,1fr));} }
+.lm-acoes{flex:0 0 auto; margin-left:auto;}
+.lm-acoes .ci-actions{display:flex; flex-direction:row; gap:1px;}
+.lm-acoes .icon-btn{width:28px; height:28px;} .lm-acoes .icon-btn svg{width:15px; height:15px;}
+.lm-total{display:flex; justify-content:flex-end; align-items:baseline; gap:12px; padding:8px 14px; margin-top:4px; background:var(--paper); border:1px solid var(--line); border-radius:10px; font-size:12.5px; color:var(--ink-soft);}
+.lm-total b{font-size:16px; color:var(--navy-deep); font-family:var(--font-mono);}
+@media (max-width:760px){ .lm-linha{flex-wrap:wrap;} .lm-acoes{margin-left:0;} }
 </style>
 </head>
 <body>
@@ -2786,7 +2789,7 @@ function renderProcessos(){
   else if(!lista.length) conteudo = `<div class="empty"><h3>Nenhum processo encontrado</h3><p>Ajuste os filtros ou clique em "Limpar".</p></div>`;
   else{
     const campos = prefs.lista.filter(id=>id!=='id').map(id=>PROC_CAMPO[id]);
-    conteudo = listaModernaHtml(lista.map(p=>({ acao:`proc-abrir:${esc(p.id)}`, idHtml:`<span class="stamp">${esc(p.id)}</span>`,
+    conteudo = listaModernaHtml(lista.map(p=>({ acao:`proc-abrir:${esc(p.id)}`, idHtml:`<span class="lm-ref">${esc(p.id)}</span>`,
       campos:campos.map(c=>({ label:c.label, html:valorCampoProcesso(c, p) })), acoes:acoesProcessoHtml(p) })));
   }
 
@@ -3477,11 +3480,20 @@ function procAbaDesembaraco(){
 
 /* ============ Lista moderna: linhas compactas (rótulo pequeno sobre o valor), como as janelas minimizadas do Monitoramento ============ */
 // linhas: [{ acao, idHtml, campos:[{ label, html, num }], acoes }]
+// Cada coluna tem a largura justa ao conteúdo (o maior texto entre as linhas), alinhada entre as linhas; a linha só cresce se houver muitas informações.
 function listaModernaHtml(linhas, rodape){
+  const txt = h => String(h==null ? '' : h).replace(/<[^>]*>/g, '').replace(/&[a-z#0-9]+;/gi, 'x');
+  const ncol = linhas.reduce((m, l)=>Math.max(m, l.campos.length), 0);
+  const larg = Array.from({ length:ncol }, (_, i)=>{
+    let w = 0;
+    linhas.forEach(l=>{ const c = l.campos[i]; if(!c) return; w = Math.max(w, txt(c.html).length*(c.num ? 7.9 : 7.4) + (/badge/.test(String(c.html)) ? 22 : 0), String(c.label).length*5.8); });
+    return Math.round(Math.min(Math.max(w + 4, 54), 230));
+  });
+  const idW = Math.round(Math.max(48, linhas.reduce((m, l)=>Math.max(m, txt(l.idHtml).length*7.6), 0) + 4));
   return `<div class="lm-lista">${linhas.map(l=>`
     <div class="lm-linha" ${l.acao ? `data-action="${l.acao}"` : ''}>
-      <div class="lm-id">${l.idHtml}</div>
-      <div class="lm-campos">${l.campos.map(c=>`<div class="lm-campo"><span>${esc(c.label)}</span><div class="lm-val ${c.num ? 'num-mono' : ''}">${c.html}</div></div>`).join('')}</div>
+      <div class="lm-id" style="width:${idW}px">${l.idHtml}</div>
+      <div class="lm-campos">${l.campos.map((c, i)=>`<div class="lm-campo" style="width:${larg[i]}px"><span>${esc(c.label)}</span><div class="lm-val ${c.num ? 'num-mono' : ''}">${c.html}</div></div>`).join('')}</div>
       <div class="lm-acoes">${l.acoes || ''}</div>
     </div>`).join('')}</div>${rodape || ''}`;
 }
@@ -3523,7 +3535,7 @@ function renderFinanceiro(){
   const estr = l => l.moeda!=='BRL';
   const corpo = !todas.length ? `<div class="empty">${ICONS.calc}<h3>Nenhum custo lançado nos processos</h3><p>Os custos lançados em Produto (câmbio), Transporte, Armazenagem, Desembaraço e Outras Despesas aparecem aqui, uma linha por custo.</p></div>`
     : !linhas.length ? `<div class="empty"><h3>Nenhum lançamento encontrado</h3><p>Ajuste os filtros ou clique em "Limpar".</p></div>`
-    : listaModernaHtml(linhas.map(l=>({ acao:`proc-abrir:${esc(l.procId)}`, idHtml:`<span class="stamp">${esc(l.procId)}</span>`,
+    : listaModernaHtml(linhas.map(l=>({ acao:`proc-abrir:${esc(l.procId)}`, idHtml:`<span class="lm-ref">${esc(l.procId)}</span>`,
         campos:[
           { label:'Ref. do cliente', html:l.refCliente ? esc(l.refCliente) : '<span class="vazio">—</span>' },
           { label:l.tipo, html:l.descricao ? esc(l.descricao) : '<span class="vazio">—</span>' },
@@ -7534,7 +7546,7 @@ function renderCotacoesTodas(){
 
   const temCusto = prefs.lista.includes('custoA') || prefs.lista.includes('custoB');
   const corpo = state.cotacoesViewMode==='cards' ? renderCotacoesKanban() : (list.length ? listaModernaHtml(list.map(({tipo, cot})=>({
-      acao:`${tipo==='Simplificada' ? 'abrir-cotacao' : 'abrir-cotacao-formal'}:${cot.id}`, idHtml:`<span class="stamp">${esc(cot.id)}</span>`,
+      acao:`${tipo==='Simplificada' ? 'abrir-cotacao' : 'abrir-cotacao-formal'}:${cot.id}`, idHtml:`<span class="lm-ref">${esc(cot.id)}</span>`,
       campos:colunas.map(c=>({ label:c.label, html:valorCampoCotacao(c, tipo, cot), num:!!c.num })), acoes:acoesCotacaoHtml(tipo, cot, false) })),
     temCusto ? `<p class="hint" style="color:var(--ink-soft); font-size:12px;">Simplificada: Custo A = Simples Nacional, Custo B = Lucro Real. Formal: Custo A = com créditos, Custo B = sem créditos.</p>` : '') : `
   <div class="empty">${ICONS.quote}<h3>Nenhuma cotação encontrada</h3>
@@ -10853,7 +10865,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.26 · listas modernas · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.27 · listas compactas · build 15/10/2026</span></div>
   `;
 }
 
