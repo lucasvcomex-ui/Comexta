@@ -2033,7 +2033,8 @@ const PROC_INCOTERMS = ['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DAP','D
 // Desembaraço: tributos (somam no custo) e bases de cálculo (Siscomex, AFRMM e Acréscimo compõem os tributos; o custo real deles entra em Outras Despesas).
 const PROC_TRIBUTOS = [['ii','II'],['ipi','IPI'],['pis','PIS'],['cofins','COFINS'],['icms','ICMS'],['capatazia','Capatazia'],['siscomex','Taxa Siscomex'],['afrmm','AFRMM'],['acrescimo','Acréscimo']];
 // Itens do Desembaraço com flag de pagamento e data (tributos e custos/bases)
-const PROC_PAGAVEIS_DESEMB = ['ii','ipi','pis','cofins','icms','capatazia','siscomex','afrmm','acrescimo'];
+// Capatazia, Siscomex e AFRMM: só base de cálculo (sem custo, flag ou data)
+const PROC_PAGAVEIS_DESEMB = ['ii','ipi','pis','cofins','icms','acrescimo'];
 
 const hojeISO = () => new Date().toISOString().slice(0,10);
 // Processos salvos antes do campo existir usam a data de criação.
@@ -2048,7 +2049,7 @@ function novaParcelaProcesso(){ return { id:uid(), descricao:'', vencimento:'', 
    Armazenagem: custos por container, com os dados do terminal portuário a pagar. Outras Despesas: custos extras com o prestador a pagar. */
 const PROC_TIPOS_FRETE = { maritimo:'Frete marítimo', aereo:'Frete aéreo', rodoviario:'Frete rodoviário', ferroviario:'Frete ferroviário', multimodal:'Frete multimodal' };
 function novaLinhaCustoProc(base){ return { id:uid(), descricao:'', prestador:'', tarifa:'', moeda:'USD', taxa:'', tipoCalculo:'', quantidade:'1', vencimento:'', pago:false, ...(base||{}) }; }
-const custosVaziosProc = () => ({ frete:[novaLinhaCustoProc({ descricao:'Frete internacional' })], taxasOrigem:[], taxasDestino:[] });
+const custosVaziosProc = () => ({ frete:[novaLinhaCustoProc({ descricao:'Frete internacional' })], taxasOrigem:[], taxasDestino:[], seguro:[] });
 function novaParcelaCambioProc(base){ return { id:uid(), descricao:'', condicao:'', banco:'', contrato:'', moeda:'USD', taxa:'', vencimento:'', valor:'', pago:false, ...(base||{}) }; }
 function novaDespesaProc(base){ return { id:uid(), descricao:'', prestador:'', origem:'nacional', moeda:'BRL', taxa:'', valor:'', vencimento:'', pago:false, ...(base||{}) }; }
 function novaArmazenagemProc(base){ return { id:uid(), containerId:'', descricao:'', tarifa:'', moeda:'BRL', taxa:'', tipoCalculo:'', quantidade:'1', vencimento:'', pago:false, ...(base||{}) }; }
@@ -2142,7 +2143,7 @@ function normalizarProcesso(p){
   return r;
 }
 function normalizarLinhasCustoProc(ls){ return (Array.isArray(ls) ? ls : []).map(l=>novaLinhaCustoProc(l)); }
-function normalizarCustosTransporteProc(c){ const o = c || {}; return { frete:normalizarLinhasCustoProc(o.frete), taxasOrigem:normalizarLinhasCustoProc(o.taxasOrigem), taxasDestino:normalizarLinhasCustoProc(o.taxasDestino) }; }
+function normalizarCustosTransporteProc(c){ const o = c || {}; return { frete:normalizarLinhasCustoProc(o.frete), taxasOrigem:normalizarLinhasCustoProc(o.taxasOrigem), taxasDestino:normalizarLinhasCustoProc(o.taxasDestino), seguro:normalizarLinhasCustoProc(o.seguro) }; }
 // Completa fechamento de câmbio, custos de cada transporte, armazenagem e outras despesas.
 // Processos cadastrados antes são convertidos uma única vez: nada deixa de entrar no custo.
 function migrarCustosProc(r, raw){
@@ -2192,8 +2193,7 @@ function migrarCustosProc(r, raw){
     const freteV = numProcSimples(fin.frete), seguroV = numProcSimples(fin.seguro);
     if(freteV>0) r.transporte.custos.frete.push(novaLinhaCustoProc({ descricao:'Frete internacional', tarifa:fin.frete, moeda:fin.freteMoeda||'USD', taxa:taxaDe(fin.freteMoeda||'USD') }));
     if(seguroV>0){
-      r.transporte.custos.taxasDestino.push(novaLinhaCustoProc({ descricao:'Seguro internacional', tarifa:fin.seguro, moeda:fin.seguroMoeda||'USD', taxa:taxaDe(fin.seguroMoeda||'USD') }));
-      r.desembaraco.seguro = String(fin.seguro); r.desembaraco.seguroMoeda = fin.seguroMoeda || 'USD';
+      r.transporte.custos.seguro.push(novaLinhaCustoProc({ descricao:'Seguro de frete internacional', tarifa:fin.seguro, moeda:fin.seguroMoeda||'USD', taxa:taxaDe(fin.seguroMoeda||'USD') }));
     }
     if(freteV>0 || seguroV>0){ r.financeiro.frete = ''; r.financeiro.seguro = ''; }
     const tribAnt = dsr.tributos || {};
@@ -2273,15 +2273,15 @@ const linhaPreenchidaProc = l => !!(l.descricao || numProcSimples(l.tarifa) || n
 const somaLinhasProc = ls => (ls||[]).reduce((s,l)=>s + totalLinhaProc(l), 0);
 function totaisCustosProc(proc){
   const p = procNorm(proc), ts = todosTransportesProc(p);
-  const frete = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.frete), 0), origem = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.taxasOrigem), 0), destino = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.taxasDestino), 0);
+  const frete = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.frete), 0), origem = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.taxasOrigem), 0), destino = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.taxasDestino), 0), seguro = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.seguro), 0);
   const armazenagem = somaLinhasProc(p.armazenagem.lancamentos), outras = p.outrasDespesas.lancamentos.reduce((s,d)=>s + totalDespesaProc(d), 0);
-  return { frete, origem, destino, transporte:frete + origem + destino, armazenagem, outras };
+  return { frete, origem, destino, seguro, transporte:frete + origem + destino + seguro, armazenagem, outras };
 }
 // Linhas com valor em moeda estrangeira e sem taxa informada
 function linhasSemTaxaProc(proc){
   const p = procNorm(proc), n = [];
   const t = (ls, rot)=>(ls||[]).forEach(l=>{ if((l.moeda||'BRL')!=='BRL' && !numProcSimples(l.taxa) && (numProcSimples(l.tarifa)||numProcSimples(l.valor))) n.push(rot + ' — ' + (l.descricao || 'sem descrição')); });
-  todosTransportesProc(p).forEach((tr, k)=>{ const pre = todosTransportesProc(p).length>1 ? `Transporte ${k+1} · ` : ''; t(tr.custos.frete, pre + 'Frete'); t(tr.custos.taxasOrigem, pre + 'Taxa de origem'); t(tr.custos.taxasDestino, pre + 'Taxa de destino'); });
+  todosTransportesProc(p).forEach((tr, k)=>{ const pre = todosTransportesProc(p).length>1 ? `Transporte ${k+1} · ` : ''; t(tr.custos.frete, pre + 'Frete'); t(tr.custos.taxasOrigem, pre + 'Taxa de origem'); t(tr.custos.taxasDestino, pre + 'Taxa de destino'); t(tr.custos.seguro, pre + 'Seguro de frete'); });
   t(p.armazenagem.lancamentos, 'Armazenagem'); t(p.outrasDespesas.lancamentos, 'Outras despesas');
   p.produto.fornecedores.forEach((fo, k)=>(fo.fechamento.parcelas||[]).forEach(pa=>{ if((pa.moeda||fo.moeda)!=='BRL' && numProcSimples(pa.valor)>0 && !numProcSimples(pa.taxa)) n.push(`Fechamento de câmbio · ${fo.fornecedor || 'Fornecedor ' + (k+1)} · ${pa.descricao || 'parcela'}`); }));
   return n;
@@ -2296,7 +2296,9 @@ function basesAduaneirasProc(proc){
   const p = procNorm(proc), vmleExt = {}, freteExt = {};
   p.produto.fornecedores.forEach(fo=>{ const e = totaisFornecedorExtProc(fo); if(e>0){ const m = fo.moeda||'USD'; vmleExt[m] = (vmleExt[m]||0) + e; } });
   todosTransportesProc(p).forEach(t=>(t.custos.frete||[]).forEach(l=>{ const e = numProcSimples(l.tarifa)*numProcSimples(l.quantidade); if(e>0){ const m = l.moeda||'BRL'; freteExt[m] = (freteExt[m]||0) + e; } }));
-  const d = p.desembaraco, segV = numProcSimples(d.seguro), seguroExt = segV>0 ? { [d.seguroMoeda||'USD']:segV } : {};
+  const d = p.desembaraco, segV = numProcSimples(d.seguro), seguroExt = {};   // seguro do Transporte (moeda estrangeira) + valor digitado no Desembaraço (formato anterior)
+  todosTransportesProc(p).forEach(t=>(t.custos.seguro||[]).forEach(l=>{ const e = numProcSimples(l.tarifa)*numProcSimples(l.quantidade); if(e>0){ const m = l.moeda||'BRL'; seguroExt[m] = (seguroExt[m]||0) + e; } }));
+  if(segV>0){ const m = d.seguroMoeda||'USD'; seguroExt[m] = (seguroExt[m]||0) + segV; }
   const acrV = numProcSimples(d.acrescimo), acrescimoExt = acrV>0 ? { [d.acrescimoMoeda||'USD']:acrV } : {};
   const vmldExt = somaPorMoedaProc(vmleExt, freteExt, seguroExt);
   const faltamTaxaDia = Object.keys(somaPorMoedaProc(vmldExt, acrescimoExt)).filter(m=>m!=='BRL' && !taxaDiaProc(p, m));
@@ -2320,8 +2322,8 @@ function lancamentosFinanceirosProc(proc){
   }));
   const ts = todosTransportesProc(p);
   ts.forEach((t, k)=>{
-    const pre = ts.length>1 ? `Transporte ${k+1} · ` : '', quem = l => l.prestador || t.agenteCarga || t.armador || '';
-    [['frete', PROC_TIPOS_FRETE[t.modal] || 'Frete internacional'], ['taxasOrigem', 'Taxa de origem'], ['taxasDestino', 'Taxa de destino']].forEach(([g, rot])=>(t.custos[g]||[]).forEach(l=>{
+    const pre = ts.length>1 ? `Transporte ${k+1} · ` : '', quem = l => t.agenteCarga || t.armador || l.prestador || '';   // prestador = agente de carga / transportador do transporte
+    [['frete', PROC_TIPOS_FRETE[t.modal] || 'Frete internacional'], ['taxasOrigem', 'Taxa de origem'], ['taxasDestino', 'Taxa de destino'], ['seguro', 'Seguro de frete internacional']].forEach(([g, rot])=>(t.custos[g]||[]).forEach(l=>{
       const ext = numProcSimples(l.tarifa)*numProcSimples(l.quantidade); if(!(ext>0)) return;
       add(pre + rot, l.descricao, quem(l), l.moeda, ext, taxaLinhaProc(l), totalLinhaProc(l), l.vencimento, l.pago);
     }));
@@ -2337,7 +2339,7 @@ function lancamentosFinanceirosProc(proc){
   const nm = computeNumerarioProcesso(p);
   PROC_TRIBUTOS_IMPOSTOS.forEach(k=>{
     const v = nm.imposto(k); if(!(v>0)) return;
-    add('Tributo', PROC_TRIBUTOS.find(([x])=>x===k)[1], 'Receita Federal', 'BRL', v, 1, v, (p.desembaraco.datasPagamento||{})[k], (p.desembaraco.pagos||{})[k]);
+    add('Tributo', PROC_TRIBUTOS.find(([x])=>x===k)[1], (p.desembaraco||{}).despachante, 'BRL', v, 1, v, (p.desembaraco.datasPagamento||{})[k], (p.desembaraco.pagos||{})[k]);
   });
   return out;
 }
@@ -3138,8 +3140,8 @@ function procAbaTransporte(){
     </div>`;
 }
 function resumoTransporteTxt(t){
-  const c = t.custos, frete = somaLinhasProc(c.frete), taxas = somaLinhasProc(c.taxasOrigem) + somaLinhasProc(c.taxasDestino);
-  return (frete || taxas) ? `Frete ${fmtBRL(frete)} · taxas ${fmtBRL(taxas)} · total ${fmtBRL(frete + taxas)}` : 'Nenhum custo lançado';
+  const c = t.custos, frete = somaLinhasProc(c.frete), taxas = somaLinhasProc(c.taxasOrigem) + somaLinhasProc(c.taxasDestino) + somaLinhasProc(c.seguro);
+  return (frete || taxas) ? `Frete ${fmtBRL(frete)} · taxas e seguro ${fmtBRL(taxas)} · total ${fmtBRL(frete + taxas)}` : 'Nenhum custo lançado';
 }
 // Janela Transporte (FCL, LCL e Carga solta): uma linha por container, com botão para adicionar e totais automáticos logo abaixo.
 function procContainersHtml(t, base, chave){
@@ -3247,14 +3249,13 @@ function procCambioModalHtml(fo, k){
 /* --- janela sobre o Transporte: custos de UM transporte (frete internacional, taxas de origem e taxas de destino) --- */
 function procTransporteModalHtml(chave){
   const p = state.procDraft, tt = transporteDaChaveProc(p, chave); if(!tt) return '';
-  const { t, base } = tt, grupos = [['frete', PROC_TIPOS_FRETE[t.modal] ? 'Frete internacional — ' + PROC_TIPOS_FRETE[t.modal].replace('Frete ', '') : 'Frete internacional'], ['taxasOrigem', 'Taxas de Origem'], ['taxasDestino', 'Taxas de Destino']];
+  const { t, base } = tt, grupos = [['frete', PROC_TIPOS_FRETE[t.modal] ? 'Frete internacional — ' + PROC_TIPOS_FRETE[t.modal].replace('Frete ', '') : 'Frete internacional'], ['taxasOrigem', 'Taxas de Origem'], ['taxasDestino', 'Taxas de Destino'], ['seguro', 'Seguro de Frete Internacional']];
   return `
-    ${procDatalistPrestadores()}
-    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Frete internacional, taxas de origem e taxas de destino deste transporte (${esc(PROC_MODAIS[t.modal] || '')}), cada custo com o prestador, o vencimento e o pago.
+    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Frete internacional, taxas de origem e taxas de destino deste transporte (${esc(PROC_MODAIS[t.modal] || '')}), cada custo com o vencimento e o pago. O prestador é o agente de carga / transportador informado na janela do transporte.
       Total = tarifa × quantidade × taxa da moeda (em reais a taxa é 1). Tudo entra no custo e é rateado entre os produtos pelo peso líquido.</p>
     ${grupos.map(([g, rot])=>`
       <div class="proc-forn-itens" style="margin-top:14px;">${esc(rot)}</div>
-      ${procTabelaCustosHtml(t.custos[g].map((l, n)=>[`${base}.custos.${g}.${n}`, l]), `${base}.custos.${g}`, `tr:${chave}:${g}`, 'Nenhuma linha.', { venc:true, prestador:true })}
+      ${procTabelaCustosHtml(t.custos[g].map((l, n)=>[`${base}.custos.${g}.${n}`, l]), `${base}.custos.${g}`, `tr:${chave}:${g}`, 'Nenhuma linha.', { venc:true })}
       <div class="btn-row" style="margin:8px 0 0;"><button class="btn btn-ghost btn-sm" data-action="proc-add-linha:${base}.custos.${g}">${ICONS.plus} Adicionar linha</button></div>`).join('')}
     <div class="proc-total-tributos" style="margin-top:16px;">Total deste transporte: <b data-pm-calc="tr:${chave}:total">—</b></div>`;
 }
@@ -3283,7 +3284,7 @@ function procModalHtml(){
 }
 // Valores calculados que aparecem na tela (atualizados enquanto a pessoa digita)
 function procAcharLinhaPorId(p, id){
-  for(const t of todosTransportesProc(p)) for(const g of ['frete','taxasOrigem','taxasDestino']){ const l = t.custos[g].find(x=>x.id===id); if(l) return { t:'custo', l }; }
+  for(const t of todosTransportesProc(p)) for(const g of ['frete','taxasOrigem','taxasDestino','seguro']){ const l = (t.custos[g]||[]).find(x=>x.id===id); if(l) return { t:'custo', l }; }
   let l = p.armazenagem.lancamentos.find(x=>x.id===id); if(l) return { t:'custo', l };
   l = p.outrasDespesas.lancamentos.find(x=>x.id===id); if(l) return { t:'despesa', l };
   for(const fo of p.produto.fornecedores){ l = (fo.fechamento.parcelas||[]).find(x=>x.id===id); if(l) return { t:'parcela', l, fo }; }
@@ -3292,7 +3293,7 @@ function procAcharLinhaPorId(p, id){
 function procValorCalc(p, key){
   const [t, a, b] = key.split(':');
   if(t==='lin'){ const r = procAcharLinhaPorId(p, a); if(!r) return fmtBRL(0); return fmtBRL(r.t==='custo' ? totalLinhaProc(r.l) : r.t==='despesa' ? totalDespesaProc(r.l) : procParcelaBRL(r.l, r.fo.moeda||'USD')); }
-  if(t==='tr'){ const tt = transporteDaChaveProc(p, a); if(!tt) return fmtBRL(0); const c = tt.t.custos; return fmtBRL(b==='total' ? somaLinhasProc(c.frete)+somaLinhasProc(c.taxasOrigem)+somaLinhasProc(c.taxasDestino) : somaLinhasProc(c[b])); }
+  if(t==='tr'){ const tt = transporteDaChaveProc(p, a); if(!tt) return fmtBRL(0); const c = tt.t.custos; return fmtBRL(b==='total' ? somaLinhasProc(c.frete)+somaLinhasProc(c.taxasOrigem)+somaLinhasProc(c.taxasDestino)+somaLinhasProc(c.seguro) : somaLinhasProc(c[b])); }
   if(t==='trres'){ const tt = transporteDaChaveProc(p, a); return tt ? resumoTransporteTxt(tt.t) : ''; }
   if(t==='arm'){ return fmtBRL(somaLinhasProc(p.armazenagem.lancamentos.filter(l=>grupoArmazenagemProc(p, l)===a))); }
   if(t==='armtot') return fmtBRL(somaLinhasProc(p.armazenagem.lancamentos));
@@ -3431,20 +3432,21 @@ function procAbaDesembaraco(){
         : '<div class="hint" style="font-size:12.5px; color:var(--ink-soft); grid-column:1/-1;">Mercadoria, frete, seguro e acréscimo em reais: não há conversão a informar.</div>'}
     </div>
     <div class="field-row grid-4" style="margin-top:14px;">
-      ${procCampo('desembaraco.seguro', 'Seguro internacional (moeda estrangeira)', { type:'number', step:'any', placeholder:'0,00' })}
-      ${procCampo('desembaraco.seguroMoeda', 'Moeda do seguro', { options: opcoesLista(PROC_MOEDAS) })}
       ${procCampoPagavelHtml('desembaraco.acrescimo', 'Acréscimo (moeda estrangeira)', 'acrescimo')}
       ${procCampo('desembaraco.acrescimoMoeda', 'Moeda do acréscimo', { options: opcoesLista(PROC_MOEDAS) })}
     </div>
-    <p class="hint" style="margin:8px 0 0;">Seguro e Acréscimo são informados em moeda estrangeira e convertidos para reais pela taxa do dia. Frete internacional: vem dos custos de transporte. Seguro em reais: <b id="proc-seguro-brl">${fmtBRL(nm.seguro)}</b></p>
+    ${numProcSimples(d.seguro)>0 ? `<div class="field-row grid-4" style="margin-top:12px;">
+      ${procCampo('desembaraco.seguro', 'Seguro informado aqui (formato anterior)', { type:'number', step:'any', placeholder:'0,00' })}
+      ${procCampo('desembaraco.seguroMoeda', 'Moeda do seguro', { options: opcoesLista(PROC_MOEDAS) })}</div>` : ''}
+    <p class="hint" style="margin:8px 0 0;">Frete e Seguro de Frete Internacional vêm dos custos de transporte (moeda estrangeira) e o Acréscimo é informado aqui; tudo é convertido para reais pela taxa do dia. Seguro em reais: <b id="proc-seguro-brl">${fmtBRL(nm.seguro)}</b></p>
     <div id="proc-bases" style="margin-top:16px;">${procBasesHtml(nm)}</div>
     <hr class="hairline">
     <div class="field-row grid-3" style="margin-top:16px;">
-      ${procCampoPagavelHtml('desembaraco.tributos.capatazia', 'Capatazia (R$)', 'capatazia')}
-      ${procCampoPagavelHtml('desembaraco.tributos.siscomex', 'Siscomex (R$)', 'siscomex')}
-      ${procCampoPagavelHtml('desembaraco.tributos.afrmm', 'AFRMM (R$)', 'afrmm')}
+      ${procCampo('desembaraco.tributos.capatazia', 'Capatazia (R$)', { type:'number', step:'any', placeholder:'0,00' })}
+      ${procCampo('desembaraco.tributos.siscomex', 'Siscomex (R$)', { type:'number', step:'any', placeholder:'0,00' })}
+      ${procCampo('desembaraco.tributos.afrmm', 'AFRMM (R$)', { type:'number', step:'any', placeholder:'0,00' })}
     </div>
-    <p class="hint" style="margin:8px 0 0;">Siscomex e AFRMM entram na base de cálculo do ICMS. Capatazia, Siscomex, AFRMM e Acréscimo compõem as bases dos tributos e não somam no custo: o custo real é lançado em Transporte, Armazenagem ou Outras Despesas.</p>
+    <p class="hint" style="margin:8px 0 0;">Estes valores só compõem a base de cálculo (Siscomex e AFRMM entram na base do ICMS) e não têm custo, flag nem data de pagamento. O custo real é lançado em outras janelas: <b>Capatazia em Transporte</b>; <b>Siscomex e AFRMM em Outras Despesas</b>.</p>
   </div>
   <div class="card">
     <div class="section-title" style="margin-bottom:6px;"><span class="num">08</span> Desembaraço — tributos por produto</div>
@@ -3630,6 +3632,7 @@ function resumoNumerarioProc(nm){
     t.custos.frete.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha(pre + (PROC_TIPOS_FRETE[t.modal] || 'Frete internacional'), l)));
     t.custos.taxasOrigem.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha(pre + 'Taxas de Origem', l)));
     t.custos.taxasDestino.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha(pre + 'Taxas de Destino', l)));
+    (t.custos.seguro||[]).filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha(pre + 'Seguro de Frete Internacional', l)));
   });
   const term = (p.armazenagem.terminal||{}).nome;
   p.armazenagem.lancamentos.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha('Armazenagem · ' + nomeContainerProc(p, l.containerId) + (term ? ' · ' + term : ''), l)));
@@ -3805,7 +3808,7 @@ function atualizarTotaisProcesso(){
 }
 
 // Campos que mudam a estrutura da janela (redesenha) — o resto só guarda o valor.
-const PROC_REDESENHA = /^(transporte\.(modal|tipoCarga)|transportes\.\d+\.(modal|tipoCarga)|desembaraco\.(liNecessaria|tipoDeclaracao|seguroMoeda)|financeiro\.(freteMoeda|seguroMoeda)|produto\.fornecedores\.\d+\.moeda|produto\.fornecedores\.\d+\.fechamento\.parcelas\.\d+\.moeda|(transporte|transportes\.\d+)\.custos\.(frete|taxasOrigem|taxasDestino)\.\d+\.moeda|armazenagem\.lancamentos\.\d+\.moeda|outrasDespesas\.lancamentos\.\d+\.(origem|moeda)|status)$/;
+const PROC_REDESENHA = /^(transporte\.(modal|tipoCarga)|transportes\.\d+\.(modal|tipoCarga)|desembaraco\.(liNecessaria|tipoDeclaracao|seguroMoeda)|financeiro\.(freteMoeda|seguroMoeda)|produto\.fornecedores\.\d+\.moeda|produto\.fornecedores\.\d+\.fechamento\.parcelas\.\d+\.moeda|(transporte|transportes\.\d+)\.custos\.(frete|taxasOrigem|taxasDestino|seguro)\.\d+\.moeda|armazenagem\.lancamentos\.\d+\.moeda|outrasDespesas\.lancamentos\.\d+\.(origem|moeda)|status)$/;
 function onProcessoInput(el, evento){
   const path = el.getAttribute('data-proc');
   if(!path || !state.procDraft) return false;
@@ -10846,7 +10849,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.24 · desembaraço, armazenagem e financeiro · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.25 · seguro de frete, prestador e desembaraço · build 15/10/2026</span></div>
   `;
 }
 
