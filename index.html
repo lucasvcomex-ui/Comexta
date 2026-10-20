@@ -882,6 +882,9 @@ tbody tr:hover{background:#F9FAFD;}
 .fin-massa-topo{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
 .fin-massa-campos{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;} .fin-massa-campos .field{min-width:150px; margin:0;}
 .proc-destaque{background:var(--amber-100) !important; box-shadow:inset 0 0 0 2px var(--amber); border-radius:6px; transition:background .3s ease, box-shadow .3s ease;}
+.main.wide-lista{max-width:2200px; margin:0; padding-left:28px; padding-right:28px;}
+@media (min-width:1500px){ .main.wide-lista{padding-left:36px; padding-right:36px;} }
+@media (max-width:760px){ .main.wide-lista{padding-left:16px; padding-right:16px;} }
 </style>
 </head>
 <body>
@@ -6677,7 +6680,10 @@ function viewFor(route){
 function renderApp(){
   const app = document.getElementById('app');
   if(perfilIncompleto()){ app.innerHTML = renderCompletarPerfil(); return; }
-  const wide = state.route==='home' ? 'wide' : '';
+  // Telas de lista (e o formulário de cadastro) usam toda a largura disponível; as demais mantêm a coluna central
+  const ROTAS_LISTA = ['cotacoesTodas','processos','financeiro','monitoramento','cad-cliente','cad-produto'];
+  const emLista = ROTAS_LISTA.includes(state.route) && !(state.cadView && state.route.startsWith('cad-'));
+  const wide = state.route==='home' ? 'wide' : (emLista ? 'wide-lista' : '');
   const crumbs = state.route==='home' ? '' : `<div class="crumbs">${crumbsHtml()}</div>`;
   const lightbox = state.lightboxSrc ? `<div class="lightbox-overlay" data-action="fechar-lightbox"><img src="${state.lightboxSrc}" alt="" data-action="noop"></div>` : '';
   const lightbox3d = state.lightbox3D ? `
@@ -11084,7 +11090,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.32 · financeiro abre o processo no custo · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.33 · listas em largura total · build 15/10/2026</span></div>
   `;
 }
 
