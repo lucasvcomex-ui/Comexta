@@ -895,7 +895,11 @@ tbody tr:hover{background:#F9FAFD;}
 .rel-previa{display:flex; gap:18px; align-items:center; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:14px 18px;}
 .rel-previa-pg .rel-pg{transform:scale(1.5); transform-origin:left center; margin-right:70px;} .rel-previa-pg.retr .rel-pg{transform-origin:left top; margin-bottom:60px;}
 .rel-previa-info{min-width:0; display:flex; flex-direction:column; gap:4px;} .rel-chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:6px;}
-.rel-chip{font-size:11px; padding:3px 9px; border-radius:999px; background:#fff; border:1px solid var(--line); color:var(--navy-deep); font-weight:600;} .rel-chip.vazio{color:var(--ink-soft); font-weight:400;}
+.rel-chip{font-family:inherit; font-size:11.5px; padding:4px 11px; border-radius:999px; background:#fff; border:1px solid var(--line); color:var(--navy-deep); font-weight:600; cursor:pointer; transition:background .12s, border-color .12s;}
+.rel-chip.on{background:var(--navy); border-color:var(--navy); color:#fff;} .rel-chip.off{border-style:dashed; color:var(--ink-soft); font-weight:500;} .rel-chip:hover{border-color:var(--amber);}
+.rel-info-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:8px;}
+.rel-info{display:flex; gap:9px; align-items:flex-start; background:#fff; border:1px solid var(--line); border-radius:10px; padding:9px 11px; cursor:pointer;} .rel-info.on{border-color:#9FB4D3; background:#F4F7FC;}
+.rel-info input{margin-top:3px;} .rel-info b{display:block; font-size:12.5px; color:var(--navy-deep);} .rel-info small{display:block; font-size:11.5px; color:var(--ink-soft); line-height:1.35;}
 .rel-galeria{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px;}
 .rel-modelo{position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:4px; text-align:left; background:#fff; border:2px solid var(--line); border-radius:12px; padding:12px; cursor:pointer; transition:border-color .15s, box-shadow .15s;}
 .rel-modelo:hover{border-color:#C9D5E8; box-shadow:var(--shadow);} .rel-modelo.atual{border-color:var(--amber); box-shadow:0 0 0 3px rgba(201,162,39,.18);}
@@ -1854,12 +1858,12 @@ function campoPessoaHtml(tipo, valor){
 
 // --------- Tela (Configurações → Personalização) ---------
 function renderConfigPersonalizacao(){
-  const sub = state.cfgPersTab || 'cotacoes';
-  const abas = [['cotacoes','Cotações'], ['relatorios','Relatórios'], ['responsaveis','Responsáveis'], ['vendedores','Vendedor']];
+  const sub = (!state.cfgPersTab || state.cfgPersTab==='cotacoes') ? 'relatorios' : state.cfgPersTab;
+  const abas = [['relatorios','Relatórios'], ['responsaveis','Responsáveis'], ['vendedores','Vendedor']];
   return `<div class="pers-tabs">
     ${abas.map(([id, rot])=>`<button class="pers-tab ${sub===id?'active':''}" data-action="cfg-pers-aba:${id}">${rot}</button>`).join('')}
   </div>
-  ${sub==='cotacoes' ? renderPersCotacao() : sub==='relatorios' ? renderPersRelatorios() : renderPersPessoas(sub)}`;
+  ${sub==='relatorios' ? renderPersCotacao() + renderPersRelatorios() : renderPersPessoas(sub)}`;
 }
 
 function renderPersCotacao(){
@@ -1868,8 +1872,8 @@ function renderPersCotacao(){
   const logo = e.logo || COMEXTA_LOGO_URI;
   const [r,g,b] = corTextoSobre(hexParaRgb(e.corCabecalho));
   return `<div class="card">
-    <div class="section-title" style="margin-bottom:6px;"><span class="num">01</span> Visual da cotação</div>
-    <p class="page-sub" style="margin:0 0 18px;">As cores e o logo são usados nos PDFs gerados pelo ERP (Numerário Simplificado e Formal e Relatório de Simulação), para toda a equipe.</p>
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">01</span> Visual dos relatórios — cores e logo</div>
+    <p class="page-sub" style="margin:0 0 18px;">As cores e o logo valem para todos os relatórios em PDF do ERP (cotações, numerário do processo, listas exportadas, dashboards e simulação), para toda a equipe. O modelo e as informações de cada relatório são escolhidos logo abaixo.</p>
     <div class="pers-grid">
       <div>
         <div class="field-row grid-2">
@@ -1907,7 +1911,7 @@ function renderPersCotacao(){
       </div>
     </div>
     <div class="btn-row" style="margin-top:20px;">
-      <button class="btn btn-primary" data-action="cfg-pers-salvar-estilo">Salvar visual da cotação</button>
+      <button class="btn btn-primary" data-action="cfg-pers-salvar-estilo">Salvar visual dos relatórios</button>
       <button class="btn btn-ghost" data-action="cfg-pers-padrao">Restaurar padrão Comexta</button>
     </div>
   </div>`;
@@ -2007,7 +2011,7 @@ function acaoPersonalizacao(cmd, a1, a2){
     case 'cfg-pers-ir':
       state.configTab = 'personalizacao'; state.cfgPersTab = a1; state.cfgPessoas = null; navigate('config'); return true;
     case 'cfg-pers-aba':
-      if(state.cfgPersTab && state.cfgPersTab!=='cotacoes') lerPessoasDigitadas(state.cfgPersTab);
+      if(state.cfgPersTab && !['cotacoes','relatorios'].includes(state.cfgPersTab)) lerPessoasDigitadas(state.cfgPersTab);
       state.cfgPersTab = a1; renderApp(); return true;
     case 'cfg-pers-salvar-estilo': {
       const e = state.cfgEstilo;
@@ -3994,6 +3998,14 @@ async function baixarNumerarioProcessoPdf(){
     p.desembaraco.numeroDeclaracao && `${p.desembaraco.tipoDeclaracao}: ${p.desembaraco.numeroDeclaracao}`].filter(Boolean).join('   ·   ');
   const infoLinhas = doc.splitTextToSize(info, doc.internal.pageSize.getWidth() - 56);
   doc.text(infoLinhas, 28, y); y += infoLinhas.length*11 + 2;
+  if(relBloco(doc,'processo')){
+    const cl = p.cliente || {}, t0 = p.transporte || {};
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(75,90,104); doc.text('Dados do processo', 28, y); y += 8;
+    doc.autoTable({ startY:y, margin:{ left:28, right:28 }, theme:'plain', styles:{ fontSize:8, cellPadding:{ top:2, bottom:5, left:0, right:8 } },
+      body:[['Processo', numero, 'Cliente', cl.nome||'—'], ['Referência do cliente', cl.referenciaCliente||'—', 'Fornecedores', nomes.join(', ')||'—'], ['Modal', PROC_MODAIS[t0.modal]||'—', 'Rota', `${t0.origem||'—'} -> ${t0.destino||'—'}`], ['ETD', t0.etd ? fmtDateOnly(t0.etd) : '—', 'ETA', t0.eta ? fmtDateOnly(t0.eta) : '—']],
+      columnStyles:{ 0:{ fontStyle:'bold', textColor:[75,90,104], cellWidth:120 }, 1:{ cellWidth:180 }, 2:{ fontStyle:'bold', textColor:[75,90,104], cellWidth:100 } } });
+    y = doc.lastAutoTable.finalY + 14;
+  }
   if(relBloco(doc,'kpis')) y = pdfKpiCards(doc, y, [
     { label:'Valor aduaneiro', value:fmtBRL(nm.valorAduaneiro) }, { label:'Tributos', value:fmtBRL(nm.impostosTotal) },
     { label:'Frete, armazenagem e outras', value:fmtBRL(nm.despesasTotal) }, { label:'Custo total', value:fmtBRL(nm.custoSemCredito) } ]) + 14;
@@ -4009,6 +4021,38 @@ async function baixarNumerarioProcessoPdf(){
   doc.autoTable({ startY:y, head:[['Base','Moeda estrangeira','Valor R$']], body:basesNumerarioProc(nm).map(([r,e,v])=>[r, e, fmtBRL(v)]),
     theme:'grid', margin:{ left:28, right:28 }, tableWidth:560, styles:{ fontSize:8, cellPadding:3 }, headStyles:cab, columnStyles:{ 1:{ halign:'right', cellWidth:110 }, 2:{ halign:'right', cellWidth:100 } } });
   y = doc.lastAutoTable.finalY + 18;
+  }
+  if(relBloco(doc,'cambio')){
+    const linhas = []; p.produto.fornecedores.forEach((fo, k)=>(fo.fechamento.parcelas||[]).forEach(pa=>{ const M = pa.moeda||fo.moeda||'USD', real = M==='BRL';
+      linhas.push([fo.fornecedor||'Fornecedor '+(k+1), pa.descricao||'—', pa.condicao||'—', pa.banco||'—', pa.contrato||'—', M, real ? '—' : fmtNum(numProcSimples(pa.taxa), 4), pa.vencimento ? fmtDateOnly(pa.vencimento) : '—', fmtMoeda(numProcSimples(pa.valor), M), fmtBRL(numProcSimples(pa.valor)*(real ? 1 : numProcSimples(pa.taxa))), pa.pago ? 'Sim' : 'Não']); }));
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(75,90,104); doc.text('Fechamento de câmbio', 28, y); y += 8;
+    doc.autoTable({ startY:y, margin:{ left:28, right:28 }, head:[['Fornecedor','Parcela','Condição de pagamento','Banco','Nº do contrato','Moeda','Taxa','Vencimento','Valor','Total R$','Pago']],
+      body: linhas.length ? linhas : [[{ content:'Nenhuma parcela lançada.', colSpan:11 }]], theme:'grid', styles:{ fontSize:7.5, cellPadding:3 }, headStyles:cab });
+    y = doc.lastAutoTable.finalY + 18;
+  }
+  if(relBloco(doc,'transportes')){
+    const linhas = todosTransportesProc(p).map((t, k)=>{ const c = t.custos, tot = somaLinhasProc(c.frete) + somaLinhasProc(c.taxasOrigem) + somaLinhasProc(c.taxasDestino) + somaLinhasProc(c.seguro);
+      return ['Transporte ' + (k+1), PROC_MODAIS[t.modal]||'—', `${t.origem||'—'} -> ${t.destino||'—'}`, t.agenteCarga||'—', t.etd ? fmtDateOnly(t.etd) : '—', t.eta ? fmtDateOnly(t.eta) : '—', (t.containers||[]).filter(x=>x.numero).map(x=>x.numero).join(', ')||'—', fmtBRL(tot)]; });
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(75,90,104); doc.text('Transportes e rota', 28, y); y += 8;
+    doc.autoTable({ startY:y, margin:{ left:28, right:28 }, head:[['Transporte','Modal','Rota','Agente de carga','ETD','ETA','Containers','Custos R$']], body:linhas, theme:'grid', styles:{ fontSize:7.5, cellPadding:3 }, headStyles:cab, columnStyles:{ 7:{ halign:'right' } } });
+    y = doc.lastAutoTable.finalY + 18;
+  }
+  if(relBloco(doc,'desembaraco')){
+    const d = p.desembaraco, taxas = Object.entries(d.taxasDia||{}).filter(([, v])=>numProcSimples(v)>0).map(([m, v])=>`${m} ${fmtNum(numProcSimples(v), 4)}`).join(' · ') || '—';
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(75,90,104); doc.text('Dados do desembaraço', 28, y); y += 8;
+    doc.autoTable({ startY:y, margin:{ left:28, right:28 }, theme:'plain', styles:{ fontSize:8, cellPadding:{ top:2, bottom:5, left:0, right:8 } },
+      body:[['Declaração', (`${d.tipoDeclaracao||''} ${d.numeroDeclaracao||''}`).trim()||'—', 'Despachante', d.despachante||'—'], ['URF de despacho', d.urf||'—', 'Recinto', d.recinto||'—'],
+        ['Data de registro', d.dataRegistro ? fmtDateOnly(d.dataRegistro) : '—', 'Canal', d.canal||'—'], ['Data do desembaraço', d.dataDesembaraco ? fmtDateOnly(d.dataDesembaraco) : '—', 'Taxa de conversão do dia', taxas]],
+      columnStyles:{ 0:{ fontStyle:'bold', textColor:[75,90,104], cellWidth:120 }, 1:{ cellWidth:180 }, 2:{ fontStyle:'bold', textColor:[75,90,104], cellWidth:130 } } });
+    y = doc.lastAutoTable.finalY + 14;
+  }
+  if(relBloco(doc,'tributos')){
+    const nomesImp = PROC_TRIBUTOS_IMPOSTOS.map(k=>PROC_TRIBUTOS.find(([x])=>x===k)[1]);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(75,90,104); doc.text('Tributos por produto', 28, y); y += 8;
+    doc.autoTable({ startY:y, margin:{ left:28, right:28 }, head:[['Produto','NCM', ...nomesImp.flatMap(n=>[n + ' %', n + ' R$'])]],
+      body:nm.linhas.map(l=>[l.produto||'—', l.ncm||'—', ...PROC_TRIBUTOS_IMPOSTOS.flatMap(k=>[nm.usaAliq ? fmtNum(((l.aliq||{})[k]||0)*100, 2) + '%' : '—', fmtBRL(l[k])])]),
+      foot:[['TOTAL','', ...PROC_TRIBUTOS_IMPOSTOS.flatMap(k=>['', fmtBRL(nm.totais[k])])]], theme:'grid', styles:{ fontSize:7.5, cellPadding:3 }, headStyles:cab, footStyles:cab });
+    y = doc.lastAutoTable.finalY + 18;
   }
   if(relBloco(doc,'rateio')){
   const T = nm.totais, impostos = PROC_TRIBUTOS_IMPOSTOS.map(k=>PROC_TRIBUTOS.find(([x])=>x===k)[1]);
@@ -8884,6 +8928,7 @@ async function gerarRelatorioSimulacaoPDF(id){
     let y = 72;
 
     const calc = computeSimulacao(sim);
+    if(relBloco(doc,'resumo')){
     doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
     doc.text('Resumo da Carga', 28, y); y += 8;
     y = pdfKpiCards(doc, y, [
@@ -8893,14 +8938,15 @@ async function gerarRelatorioSimulacaoPDF(id){
       {label:'Volume Total', value:fmtNum(calc.totalCbm,3)+' m³'},
     ]);
     y += 20;
+    }
 
     const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
     function garantirEspaco(altura){
       if(y+altura > pageH-30){ doc.addPage(); y = 40; }
     }
 
-    const tipos = sim.containerTipos||[];
-    if(sim.tipoCarregamento==='pallets' && tipos.length===0){
+    const tipos = relBloco(doc,'imagens') ? (sim.containerTipos||[]) : [];
+    if(relBloco(doc,'imagens') && sim.tipoCarregamento==='pallets' && tipos.length===0){
       const captura = capturas.find(c=>c.id==='sim3d-pallet-canvas');
       garantirEspaco(260);
       doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,30,40);
@@ -8977,7 +9023,7 @@ async function gerarRelatorioSimulacaoPDF(id){
       }
     });
 
-    if(sim.embalagemObs && sim.embalagemObs.trim()){
+    if(relBloco(doc,'observacoes') && sim.embalagemObs && sim.embalagemObs.trim()){
       garantirEspaco(60);
       doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,30,40);
       doc.text('Observações de Embalagem', 28, y); y += 16;
@@ -9649,18 +9695,26 @@ function renderAnexosBlock(d, suffix){
 const REL_SESSOES = [['imp','Importação'], ['proc','Processos'], ['fin','Financeiro'], ['mon','Monitoramento de Carga'], ['cad','Cadastros'], ['sim','Simulador de Carga'], ['home','Início (dashboards)']];
 const REL_DOCS = {
   cotSimplificada: { sessao:'imp', nome:'Cotação Simplificada — Numerário', titulo:'Numerário e Rateio de Custo', orient:'landscape',
-    blocos:[['cliente','Dados do cliente'], ['custos','Resumo dos custos (quadros)'], ['resumo','Resumo das despesas'], ['produtos','Informações do produto'], ['rateio','Rateio dos custos por produto'], ['dashboard','Dashboard de custos'], ['observacoes','Observações']] },
+    blocos:[['cliente','Dados do cliente',true,'Cliente, CNPJ/CPF, referência, datas, vendedor, rota e prazos'], ['produtosInvoice','Produtos da Invoice',false,'Lista dos produtos: fornecedor, quantidade, valor unitário e totais'], ['custos','Resumo dos custos (quadros)',true,'Valor aduaneiro, I.I., ICMS, despesas extras e custo total'],
+      ['resumo','Resumo das despesas',true,'Cada despesa em moeda estrangeira e em reais, com a taxa'], ['produtos','Informações do produto',true,'Impostos por produto'], ['rateio','Rateio dos custos por produto',true,'Custo total e unitário de cada produto (Simples e Lucro Real)'],
+      ['dashboard','Dashboard de custos',true,'Barras com os principais custos da importação'], ['observacoes','Observações',true,'Texto de observações da cotação']] },
   cotFormal: { sessao:'imp', nome:'Cotação Formal — Numerário', titulo:'Numerário Formal — Rateio de Custo', orient:'landscape',
-    blocos:[['cliente','Dados do cliente'], ['resumo','Resumo das despesas'], ['produtos','Informações do produto'], ['custos','Resumo dos custos (quadros)'], ['rateio','Rateio dos custos por produto'], ['dashboard','Dashboard de custos'], ['observacoes','Observações']] },
-  listaCotacoes: { sessao:'imp', nome:'Cotações Salvas — lista exportada', titulo:'Cotações Salvas', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
+    blocos:[['cliente','Dados do cliente',true,'Cliente, CNPJ/CPF, referência, datas, vendedor, rota e prazos'], ['produtosInvoice','Produtos da Invoice',false,'Lista dos produtos: fornecedor, quantidade, valor unitário e totais'], ['resumo','Resumo das despesas',true,'Cada despesa em moeda estrangeira e em reais, com a taxa'],
+      ['produtos','Informações do produto',true,'Alíquotas de I.I., IPI, PIS, COFINS e ICMS por produto'], ['custos','Resumo dos custos (quadros)',true,'Valor aduaneiro, tributos e custo total'], ['rateio','Rateio dos custos por produto',true,'Custo total e unitário de cada produto (com e sem créditos)'],
+      ['dashboard','Dashboard de custos',true,'Barras com os principais custos da importação'], ['observacoes','Observações',true,'Texto de observações da cotação']] },
+  listaCotacoes: { sessao:'imp', nome:'Cotações Salvas — lista exportada', titulo:'Cotações Salvas', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
   numerarioProc: { sessao:'proc', nome:'Processo — Numerário', titulo:'Numerário do Processo', orient:'landscape',
-    blocos:[['kpis','Quadros de resumo'], ['resumo','Resumo das despesas'], ['bases','Bases do Desembaraço'], ['rateio','Rateio dos custos por produto'], ['nota','Nota sobre o rateio']] },
-  listaProcessos: { sessao:'proc', nome:'Processos Cadastrados — lista exportada', titulo:'Processos Cadastrados', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
-  listaFinanceiro: { sessao:'fin', nome:'Financeiro — lista exportada', titulo:'Financeiro', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
-  listaMonitoramento: { sessao:'mon', nome:'Monitoramento de Carga — lista exportada', titulo:'Monitoramento de Carga', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
-  listaCadastros: { sessao:'cad', nome:'Clientes, empresas e produtos — lista exportada', titulo:'Cadastros', orient:'landscape', blocos:[['filtros','Resumo dos filtros']] },
-  simulacao: { sessao:'sim', nome:'Relatório de Simulação de Carga', titulo:'Relatório de Simulação de Carga', orient:'landscape', blocos:[] },
-  dashboards: { sessao:'home', nome:'Dashboards da Início (PDF)', titulo:'Dashboards', orient:'landscape', blocos:[['kpis','Indicadores'], ['graficos','Gráficos'], ['tabela','Tabela de dados']] },
+    blocos:[['processo','Dados do processo',false,'Cliente, referências, fornecedores, modal, rota, ETD e ETA'], ['kpis','Quadros de resumo',true,'Valor aduaneiro, tributos, frete e despesas e custo total'], ['resumo','Resumo das despesas',true,'Mercadoria (com as parcelas do câmbio), transportes, armazenagem, outras despesas e tributos'],
+      ['bases','Bases do Desembaraço',true,'VMLE, frete, seguro, VMLD, acréscimo e valor aduaneiro'], ['cambio','Fechamento de câmbio',false,'Parcelas por fornecedor: condição, banco, contrato, taxa e vencimento'], ['transportes','Transportes e rota',false,'Modal, rota, ETD/ETA, containers e custo de cada transporte'],
+      ['desembaraco','Dados do desembaraço',false,'Declaração, despachante, datas, canal e taxa do dia'], ['tributos','Tributos por produto',false,'Alíquotas e valores de II, IPI, PIS, COFINS e ICMS'], ['rateio','Rateio dos custos por produto',true,'Custo por produto, com e sem créditos'], ['nota','Nota sobre o rateio',true,'Explicação da regra de rateio']] },
+  listaProcessos: { sessao:'proc', nome:'Processos Cadastrados — lista exportada', titulo:'Processos Cadastrados', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
+  listaFinanceiro: { sessao:'fin', nome:'Financeiro — lista exportada', titulo:'Financeiro', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
+  listaMonitoramento: { sessao:'mon', nome:'Monitoramento de Carga — lista exportada', titulo:'Monitoramento de Carga', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
+  listaCadastros: { sessao:'cad', nome:'Clientes, empresas e produtos — lista exportada', titulo:'Cadastros', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
+  simulacao: { sessao:'sim', nome:'Relatório de Simulação de Carga', titulo:'Relatório de Simulação de Carga', orient:'landscape',
+    blocos:[['resumo','Resumo da carga',true,'Tipos de caixa, unidades, peso e volume totais'], ['imagens','Imagens do carregamento',true,'Vistas 3D do palete e dos containers'], ['observacoes','Observações de embalagem',true,'Texto de observações da simulação']] },
+  dashboards: { sessao:'home', nome:'Dashboards do Início (PDF)', titulo:'Dashboards', orient:'landscape',
+    blocos:[['kpis','Indicadores',true,'Quadros de resumo do dashboard'], ['graficos','Gráficos',true,'Gráfico por período e distribuição'], ['tabela','Tabela de dados',true,'Valores por período e categoria']] },
 };
 // Qual documento gera cada tela de exportação
 const REL_TELA_DOC = (tela)=>{ const t = String(tela||''); return t==='cot' ? 'listaCotacoes' : t==='proc' ? 'listaProcessos' : t==='fin' ? 'listaFinanceiro' : t==='mon' ? 'listaMonitoramento' : t.startsWith('cad') ? 'listaCadastros' : 'listaProcessos'; };
@@ -9683,7 +9737,8 @@ function relCfg(docId){
   if(t && REL_MODELOS[t]){ cfg.modelo = t; delete state.relTemp[docId]; }
   return cfg;
 }
-const relBloco = (doc, id) => { const r = doc && doc.__rel; return !r || r.cfg.blocos[id]!==false; };
+const relBlocoPadrao = (docId, id) => { const b = ((REL_DOCS[docId]||{}).blocos||[]).find(x=>x[0]===id); return !b || b[2]!==false; };
+const relBloco = (doc, id) => { const r = doc && doc.__rel; if(!r) return true; const v = r.cfg.blocos[id]; return v===undefined ? relBlocoPadrao(r.docId, id) : v!==false; };
 // Cria o PDF já com orientação, papel, modelo e ajustes de tabela do documento
 function novoPdfDoc(docId, cfgForcada){
   const { jsPDF } = window.jspdf, cfg = cfgForcada || relCfg(docId), m = REL_MODELOS[cfg.modelo] || REL_MODELOS.classico;
@@ -9763,6 +9818,7 @@ function relEscolhaHtml(){
     <div class="rel-galeria">${Object.entries(REL_MODELOS).map(([id, m])=>`<button class="rel-modelo ${id===cfg.modelo ? 'atual' : ''}" data-action="rel-escolher:${id}">${relMiniPrevia(id, cfg)}<b>${esc(m.nome)}</b><small>${esc(m.desc)}</small>${id===cfg.modelo ? '<span class="rel-tag">padrão</span>' : ''}</button>`).join('')}</div>
   </div></div>`;
 }
+const relBlocoLigado = (c, id) => c.blocos[id]===undefined ? relBlocoPadrao(c.__doc, id) : c.blocos[id]!==false;
 function acaoRel(cmd, a1){
   if(cmd==='rel-escolha-fechar'){ state.relEscolha = null; renderApp(); return true; }
   if(cmd==='rel-escolher'){
@@ -9778,6 +9834,7 @@ function acaoRel(cmd, a1){
     state.cfgRelDoc = a1; state.cfgRel = null; state.cfgRelSujo = false; renderApp(); return true;
   }
   if(cmd==='rel-modelo'){ if(state.cfgRel && REL_MODELOS[a1]){ state.cfgRel.modelo = a1; state.cfgRelSujo = true; renderApp(); } return true; }
+  if(cmd==='rel-bloco-toggle'){ if(state.cfgRel){ state.cfgRel.blocos[a1] = !relBlocoLigado(state.cfgRel, a1); state.cfgRelSujo = true; renderApp(); } return true; }
   if(cmd==='rel-blocos-todos'){ if(state.cfgRel){ const d = REL_DOCS[state.cfgRel.__doc]; d.blocos.forEach(([id])=>{ state.cfgRel.blocos[id] = a1==='1'; }); state.cfgRelSujo = true; renderApp(); } return true; }
   if(cmd==='rel-salvar'){ relSalvar(); return true; }
   if(cmd==='rel-padrao'){ relRestaurar(); return true; }
@@ -9799,7 +9856,7 @@ function relAtualizarPrevia(){
 // Prévia maior: página com o modelo, o título/rodapé escolhidos e os blocos ativos
 function relPreviaGrandeHtml(c){
   const d = REL_DOCS[c.__doc] || {}, paisagem = c.orientacao!=='portrait';
-  const blocos = (d.blocos||[]).filter(([id])=>c.blocos[id]!==false).map(([, rot])=>`<span class="rel-chip">${esc(rot)}</span>`).join('') || (d.blocos && d.blocos.length ? '<span class="rel-chip vazio">Nenhum bloco ativo</span>' : '');
+  const blocos = (d.blocos||[]).map(([id, rot])=>{ const on = relBlocoLigado(c, id); return `<button type="button" class="rel-chip ${on ? 'on' : 'off'}" data-action="rel-bloco-toggle:${id}" aria-pressed="${on}" title="${on ? 'Incluído no PDF — clique para tirar' : 'Não incluído — clique para incluir'}">${on ? '✓ ' : '+ '}${esc(rot)}</button>`; }).join('');
   const e = estiloCotacao(), m = REL_MODELOS[c.modelo] || REL_MODELOS.classico;
   return `<div class="rel-previa-pg ${paisagem ? 'pais' : 'retr'}">${relMiniPrevia(c.modelo, c)}</div>
     <div class="rel-previa-info"><b>${esc(c.titulo || d.titulo || '')}</b>${c.subtitulo ? `<div>${esc(c.subtitulo)}</div>` : ''}
@@ -9817,7 +9874,7 @@ function renderPersRelatorios(){
   }).join('');
   const sessaoNome = (REL_SESSOES.find(([sid])=>sid===d.sessao) || [])[1] || '';
   return `<div class="card">
-    <div class="section-title" style="margin-bottom:6px;"><span class="num">01</span> Relatórios em PDF</div>
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">02</span> Relatórios em PDF — modelo e informações de cada documento</div>
     <p class="page-sub" style="margin:0 0 16px;">Personalize como cada documento em PDF é gerado. Cada documento de cada sessão tem a sua configuração: modelo, página, textos, rodapé e os blocos que aparecem. Vale para toda a equipe.</p>
     <div class="rel-layout">
       <aside class="rel-lista">${lista}</aside>
@@ -9844,9 +9901,10 @@ function renderPersRelatorios(){
           <label class="tpl-campo"><input type="checkbox" data-rel="mostrarData" ${c.mostrarData ? 'checked' : ''}> Mostrar a data de emissão</label>
           <label class="tpl-campo"><input type="checkbox" data-rel="numeroPagina" ${c.numeroPagina ? 'checked' : ''}> Numerar as páginas</label>
         </div>
-        ${d.blocos.length ? `<div class="dash-title" style="margin:18px 0 8px;">4 · O que aparece no PDF</div>
-        <div class="rel-checks">${d.blocos.map(([id, rot])=>`<label class="tpl-campo"><input type="checkbox" data-rel-bloco="${id}" ${c.blocos[id]!==false ? 'checked' : ''}> ${esc(rot)}</label>`).join('')}</div>
-        <div class="btn-row" style="margin-top:6px;"><button class="btn btn-ghost btn-sm" data-action="rel-blocos-todos:1">Marcar todos</button><button class="btn btn-ghost btn-sm" data-action="rel-blocos-todos:0">Desmarcar todos</button></div>` : ''}
+        ${d.blocos.length ? `<div class="dash-title" style="margin:18px 0 4px;">4 · Informações incluídas no PDF</div>
+        <p class="hint" style="margin:0 0 10px; color:var(--ink-soft); font-size:12.5px;">Estas são as informações disponíveis em <b>${esc(sessaoNome)}</b> para este documento. Marque as que devem aparecer (também dá para clicar nas etiquetas da prévia).</p>
+        <div class="rel-info-grid">${d.blocos.map(([id, rot, , desc])=>{ const on = relBlocoLigado(c, id); return `<label class="rel-info ${on ? 'on' : ''}"><input type="checkbox" data-rel-bloco="${id}" ${on ? 'checked' : ''}><span><b>${esc(rot)}</b><small>${esc(desc || '')}</small></span></label>`; }).join('')}</div>
+        <div class="btn-row" style="margin-top:8px;"><button class="btn btn-ghost btn-sm" data-action="rel-blocos-todos:1">Incluir todas</button><button class="btn btn-ghost btn-sm" data-action="rel-blocos-todos:0">Tirar todas</button></div>` : ''}
         <div class="dash-title" style="margin:18px 0 8px;">${d.blocos.length ? '5' : '4'} · Na hora de baixar</div>
         <label class="tpl-campo"><input type="checkbox" data-rel="escolherAoBaixar" ${c.escolherAoBaixar ? 'checked' : ''}> Perguntar o modelo toda vez que alguém baixar este PDF (cada pessoa escolhe o que serve melhor no momento)</label>
         <div class="btn-row" style="margin-top:20px;">
@@ -10139,6 +10197,16 @@ async function _gerarDashboardPDFInner(doc, dados, meta){
     doc.setFont('helvetica','normal');
   }
 
+  if(relBloco(doc,'produtosInvoice')){
+  doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
+  doc.text('Produtos da Invoice', 28, y); y += 8;
+  doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[['Fornecedor','Produto','Qtd','Valor unit. US$','Total US$','Total R$']],
+    body:r.linhas.map(l=>[l.fornecedor||'—', l.produto||'—', fmtNum(l.qty), fmtUSD(l.vu), fmtUSD(l.totalUSD), fmtBRL(l.totalBRL)]),
+    foot:[['TOTAL','', fmtNum(r.totais.qty), '', fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL)]],
+    theme:'grid', styles:{fontSize:8, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf()}, footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
+    columnStyles:{2:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'}} });
+  y = doc.lastAutoTable.finalY + 18;
+  }
   if(relBloco(doc,'custos')){
   doc.setFontSize(10); doc.setTextColor(75,90,104);
   doc.text('Resumo dos Custos', 28, y); y += 8;
@@ -10414,6 +10482,16 @@ async function gerarDashboardPDFFormal(dados, meta){
       doc.setFont('helvetica','normal');
     }
 
+    if(relBloco(doc,'produtosInvoice')){
+    doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
+    doc.text('Produtos da Invoice', 28, y); y += 8;
+    doc.autoTable({ startY:y, margin:{left:28,right:28}, head:[['Fornecedor','Produto','NCM','Qtd','Valor unit. US$','Total US$','Total R$']],
+      body:r.linhas.map(l=>[l.fornecedor||'—', l.produto||'—', l.ncm||'—', fmtNum(l.qty), fmtUSD(l.qty>0 ? l.totalUSD/l.qty : 0), fmtUSD(l.totalUSD), fmtBRL(l.totalBRL)]),
+      foot:[['TOTAL','','', fmtNum(r.totais.qty), '', fmtUSD(r.totais.totalUSD), fmtBRL(r.totais.totalBRL)]],
+      theme:'grid', styles:{fontSize:8, cellPadding:4}, headStyles:{fillColor:corCabecalhoPdf(), textColor:corTextoCabecalhoPdf()}, footStyles:{fillColor:[239,234,224], textColor:[20,30,40], fontStyle:'bold'},
+      columnStyles:{3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'}, 6:{halign:'right'}} });
+    y = doc.lastAutoTable.finalY + 18;
+    }
     if(relBloco(doc,'resumo')){
     doc.setFontSize(10); doc.setTextColor(75,90,104); doc.setFont('helvetica','bold');
     doc.text('Resumo das Despesas', 28, y); y += 8;
@@ -11406,7 +11484,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.36 · relatórios em PDF personalizáveis · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.37 · relatórios: visual e informações · build 15/10/2026</span></div>
   `;
 }
 
