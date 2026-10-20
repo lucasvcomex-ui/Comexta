@@ -3631,7 +3631,7 @@ function finSelecionarProcesso(procId){
   financeiroFiltradas().filter(l=>l.procId===procId).forEach(l=>{ state.finSel[l.chave] = true; });
   finRender();
 }
-// Marcar/desmarcar como pago direto na lista, e seleção de linhas
+// Seleção de linhas (alteração em massa). O pagamento só é alterado com a linha em edição (lápis) ou em massa.
 async function onFinInput(el){
   if(el.hasAttribute('data-fin-sel')){
     if(!podeEditarFin() || !state.finMassa) return;
@@ -3643,13 +3643,6 @@ async function onFinInput(el){
     finRender(); return;
   }
   if(el.hasAttribute('data-fin-proc-sel')){ if(el.value) finSelecionarProcesso(el.value); return; }
-  if(el.hasAttribute('data-fin-pago')){
-    if(!podeEditarFin()) return;
-    const l = financeiroLinhasTodas().find(x=>x.chave===el.getAttribute('data-fin-pago')); if(!l) return;
-    const n = await finSalvar([{ procId:l.procId, fonte:l.fonte, mudancas:{ pago:!!el.checked } }]);
-    if(n>=0) toast(el.checked ? 'Custo marcado como pago.' : 'Custo marcado como em aberto.', 'ok');
-    finRender();
-  }
 }
 // Alteração em massa: aplica o que foi preenchido a todas as linhas selecionadas (do mesmo processo)
 async function finAplicarMassa(){
@@ -3707,13 +3700,13 @@ function financeiroLinhaHtml(l, editavel){
       { label:'Taxa', html:estr && l.taxa ? fmtNum(l.taxa, 4) : '—', num:true },
       { label:'Total R$', html:`<b>${fmtBRL(l.brl)}</b>`, num:true },
       { label:trib ? 'Data do pagamento' : 'Vencimento', html:l.vencimento ? fmtDateOnly(l.vencimento) : vazio },
-      { label:'Pagamento', html:(editavel ? nada(`<input type="checkbox" data-fin-pago="${esc(l.chave)}" ${l.pago ? 'checked' : ''} title="Marcar como pago">`) : '') + `<span class="badge ${FIN_SIT[l.sit][1]}">${FIN_SIT[l.sit][0]}</span>`, minW:editavel ? 112 : 0 } ];
+      { label:'Pagamento', html:(editavel ? nada(`<input type="checkbox" disabled ${l.pago ? 'checked' : ''} title="Clique em Editar para alterar o pagamento">`) : '') + `<span class="badge ${FIN_SIT[l.sit][1]}">${FIN_SIT[l.sit][0]}</span>`, minW:editavel ? 112 : 0 } ];
   }
   let podeAbrir = false; try{ podeAbrir = pode('processos', 'ver'); }catch(e){}
   const abrir = podeAbrir ? `<button class="icon-btn" title="Abrir o processo direto neste custo" data-action="proc-abrir-custo:${esc(l.procId)}:${esc(l.chave)}">${ICONS.open}</button>` : '';
   const acoes = editando
     ? `<div class="ci-actions"><button class="icon-btn" title="Salvar no processo" data-action="fin-salvar:${esc(l.chave)}">${ICONS.check}</button><button class="icon-btn" title="Cancelar" data-action="fin-cancelar">${ICONS.x || '×'}</button></div>`
-    : `<div class="ci-actions">${editavel ? `<button class="icon-btn" title="Editar valor, vencimento, taxa e moeda" data-action="fin-editar:${esc(l.chave)}">${ICONS.edit}</button>` : ''}${abrir}</div>`;
+    : `<div class="ci-actions">${editavel ? `<button class="icon-btn" title="Editar" data-action="fin-editar:${esc(l.chave)}">${ICONS.edit}</button>` : ''}${abrir}</div>`;
   return { acao: (editando || !podeAbrir) ? '' : `proc-abrir-custo:${esc(l.procId)}:${esc(l.chave)}`, idHtml, idW:(massa ? 24 : 0) + String(l.procId).length*7.6, campos, acoes };
 }
 function financeiroPainelMassaHtml(sel, linhas){
@@ -3747,7 +3740,7 @@ function renderFinanceiro(){
       `<div class="lm-total"><span>TOTAL (${linhas.length} lançamento${linhas.length===1 ? '' : 's'})</span><b>${fmtBRL(soma())}</b></div>`);
   return `
   <div class="page-title">Financeiro</div>
-  <div class="page-sub">Resumo de todos os custos lançados nos processos, uma linha por custo: câmbio, frete, taxas, armazenagem, outras despesas e tributos do desembaraço.${editavel ? ' Você pode marcar custos como pagos e alterar valor, vencimento, taxa e moeda aqui: a alteração é gravada no processo de origem.' : ''}</div>
+  <div class="page-sub">Resumo de todos os custos lançados nos processos, uma linha por custo: câmbio, frete, taxas, armazenagem, outras despesas e tributos do desembaraço.${editavel ? ' Use o botão Editar de cada custo para marcar como pago e alterar valor, vencimento, taxa e moeda, ou Alterar em Massa: a alteração é gravada no processo de origem.' : ''}</div>
   <hr class="hairline">
   <div class="kpi-row" style="margin-bottom:20px;">
     <div class="kpi"><div class="k-lbl">Custos totais</div><div class="k-val">${fmtBRL(soma())}</div></div>
@@ -10911,7 +10904,7 @@ function onAppChange(e){
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'change'); return; }
   if(el.hasAttribute('data-dash') || el.hasAttribute('data-dash-sel') || el.hasAttribute('data-dash-fmt')){ onDashInput(el); return; }
-  if(el.hasAttribute('data-fin-sel') || el.hasAttribute('data-fin-proc-sel') || el.hasAttribute('data-fin-pago')){ onFinInput(el); return; }
+  if(el.hasAttribute('data-fin-sel') || el.hasAttribute('data-fin-proc-sel')){ onFinInput(el); return; }
   if(el.hasAttribute('data-mtpl-campo')){ onTemplateCampoMon(el); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
@@ -11090,7 +11083,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.33 · listas em largura total · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.34 · pago só no modo Editar · build 15/10/2026</span></div>
   `;
 }
 
