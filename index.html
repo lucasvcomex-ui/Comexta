@@ -852,6 +852,7 @@ tbody tr:hover{background:#F9FAFD;}
 .proc-leg-campos .field{min-width:200px; flex:1; margin:0;}
 .proc-modal .table-wrap{background:#fff;}
 @media (max-width:760px){ .proc-modal-fundo{padding:10px;} .proc-modal{padding:16px;} }
+.proc-custos-bar{margin-top:18px; padding-top:14px; border-top:1px dashed var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -2036,18 +2037,30 @@ function novoContainerProcesso(base){ return { id:uid(), tipo:"40' HC", numero:'
 function novoItemProcesso(){ return { id:uid(), produto:'', ncm:'', descricao:'', quantidade:'', unidade:'', valorUnit:'', pesoLiquido:'' }; }
 function novaParcelaProcesso(){ return { id:uid(), descricao:'', vencimento:'', valor:'', moeda:'USD', pago:false }; }
 /* ---- Custos do processo ----
-   Produto: cada fornecedor tem o "fechamento de câmbio" (parcelas com moeda, taxa, vencimento, valor e pago).
-   Transporte: custos por transporte (frete internacional + taxas de origem + taxas de destino).
-   Armazenagem: custos por container. Outras Despesas: custos extras, nacionais ou internacionais (cada um com sua taxa). */
-const PROC_TIPOS_FRETE = { maritimo:'Frete marítimo', aereo:'Frete aéreo', rodoviario:'Frete rodoviário internacional' };
+   Produto: cada fornecedor tem o "fechamento de câmbio" (parcelas, cada uma com condição de pagamento, banco, contrato, moeda, taxa, vencimento, valor e pago).
+   Transporte: cada transporte (janela 03) tem os seus custos (frete internacional + taxas de origem + taxas de destino).
+   Armazenagem: custos por container, com os dados do terminal portuário a pagar. Outras Despesas: custos extras com o prestador a pagar. */
+const PROC_TIPOS_FRETE = { maritimo:'Frete marítimo', aereo:'Frete aéreo', rodoviario:'Frete rodoviário', ferroviario:'Frete ferroviário', multimodal:'Frete multimodal' };
 function novaLinhaCustoProc(base){ return { id:uid(), descricao:'', tarifa:'', moeda:'USD', taxa:'', tipoCalculo:'', quantidade:'1', ...(base||{}) }; }
-function novoCustoTransporteProc(base){
-  return { id:uid(), tipo:'maritimo', transportadora:'', frete:[novaLinhaCustoProc({ descricao:'Frete internacional' })], taxasOrigem:[], taxasDestino:[], ...(base||{}) };
+const custosVaziosProc = () => ({ frete:[novaLinhaCustoProc({ descricao:'Frete internacional' })], taxasOrigem:[], taxasDestino:[] });
+function novaParcelaCambioProc(base){ return { id:uid(), descricao:'', condicao:'', banco:'', contrato:'', moeda:'USD', taxa:'', vencimento:'', valor:'', pago:false, ...(base||{}) }; }
+function novaDespesaProc(base){ return { id:uid(), descricao:'', prestador:'', origem:'nacional', moeda:'BRL', taxa:'', valor:'', vencimento:'', pago:false, ...(base||{}) }; }
+function novaArmazenagemProc(base){ return { id:uid(), containerId:'', descricao:'', tarifa:'', moeda:'BRL', taxa:'', tipoCalculo:'', quantidade:'1', vencimento:'', pago:false, ...(base||{}) }; }
+const fechamentoVazioProc = () => ({ parcelas:[] });
+const terminalVazioProc = () => ({ nome:'', cnpj:'', contato:'', email:'', telefone:'' });
+// Transportes adicionais (o 1º é o "transporte" do processo): mesma janela 03, qualquer modal.
+function novoTransporteExtraProc(base){
+  return { id:uid(), modal:'maritimo', tipoCarga:'FCL', containers:[novoContainerProcesso()], containerQtd:'', agenteCarga:'', armador:'', navioVoo:'',
+    booking:'', conhecimentoMaster:'', conhecimentoHouse:'', origem:'', destino:'', etd:'', eta:'', chegada:'', freeTime:'', volumes:'', pesoBruto:'', pesoLiquido:'', cubagem:'',
+    custos:custosVaziosProc(), ...(base||{}) };
 }
-function novaParcelaCambioProc(base){ return { id:uid(), descricao:'', moeda:'USD', taxa:'', vencimento:'', valor:'', pago:false, ...(base||{}) }; }
-function novaDespesaProc(base){ return { id:uid(), descricao:'', origem:'nacional', moeda:'BRL', taxa:'', valor:'', vencimento:'', pago:false, ...(base||{}) }; }
-function novaArmazenagemProc(base){ return { id:uid(), containerId:'', descricao:'', tarifa:'', moeda:'BRL', taxa:'', tipoCalculo:'', quantidade:'1', ...(base||{}) }; }
-const fechamentoVazioProc = () => ({ condicao:'', banco:'', contrato:'', parcelas:[] });
+const todosTransportesProc = p => [p.transporte, ...((p && p.transportes) || [])];
+const chaveTransporteProc = (p, t) => t===p.transporte ? 'principal' : t.id;
+function transporteDaChaveProc(p, chave){
+  if(!chave || chave==='principal') return { t:p.transporte, base:'transporte', n:1, chave:'principal' };
+  const k = (p.transportes||[]).findIndex(x=>x.id===chave);
+  return k<0 ? null : { t:p.transportes[k], base:`transportes.${k}`, n:k+2, chave };
+}
 // Cada fornecedor do processo tem seus dados e os itens que traz.
 function novoFornecedorProcesso(base){
   return { id:uid(), fornecedor:'', paisOrigem:'', incoterm:'FOB', moeda:'USD', proforma:'', invoice:'', itens:[novoItemProcesso()], fechamento:fechamentoVazioProc(), ...(base||{}) };
@@ -2060,13 +2073,13 @@ function novoProcesso(){
     produto:{ fornecedores:[novoFornecedorProcesso()] },
     transporte:{ modal:'maritimo', tipoCarga:'FCL', containers:[novoContainerProcesso()], containerQtd:'', agenteCarga:'', armador:'', navioVoo:'',
                  booking:'', conhecimentoMaster:'', conhecimentoHouse:'', origem:'', destino:'', etd:'', eta:'', chegada:'',
-                 freeTime:'', volumes:'', pesoBruto:'', pesoLiquido:'', cubagem:'' },
+                 freeTime:'', volumes:'', pesoBruto:'', pesoLiquido:'', cubagem:'', custos:custosVaziosProc() },
     // cambios: R$ por unidade de cada moeda estrangeira usada (mercadoria de cada fornecedor, frete e seguro)
     // financeiro: formato antigo (câmbio por moeda, frete, seguro e parcelas) — mantido só para ler processos já cadastrados
     financeiro:{ cambios:{}, frete:'', freteMoeda:'USD', seguro:'', seguroMoeda:'USD', condicaoPagamento:'', banco:'', contratoCambio:'', parcelas:[] },
-    custosTransporte:[], armazenagem:{ lancamentos:[] }, outrasDespesas:{ lancamentos:[] },
+    transportes:[], armazenagem:{ terminal:terminalVazioProc(), lancamentos:[] }, outrasDespesas:{ lancamentos:[] },
     desembaraco:{ despachante:'', recinto:'', urf:'', tipoDeclaracao:'DUIMP', numeroDeclaracao:'', dataRegistro:'', canal:'', dataDesembaraco:'',
-                  liNecessaria:'nao', numeroLi:'', seguro:'', tributos:{ ii:'', ipi:'', pis:'', cofins:'', icms:'', siscomex:'', afrmm:'', acrescimo:'' }, pagos:{}, observacoes:'' },
+                  liNecessaria:'nao', numeroLi:'', seguro:'', seguroMoeda:'USD', taxasDia:{}, tributos:{ ii:'', ipi:'', pis:'', cofins:'', icms:'', siscomex:'', afrmm:'', acrescimo:'' }, pagos:{}, observacoes:'' },
   };
 }
 // Completa campos que faltem (processos salvos antes de algum campo novo existir).
@@ -2117,46 +2130,59 @@ function normalizarProcesso(p){
       cs0[0].pesoBruto = t0.pesoBruto || ''; cs0[0].pesoLiquido = t0.pesoLiquido || ''; cs0[0].cubagem = t0.cubagem || '';
     }
   }
-  sincronizarContainersProc(r);
   migrarCustosProc(r, p);
+  sincronizarContainersProc(r);
   return r;
 }
 function normalizarLinhasCustoProc(ls){ return (Array.isArray(ls) ? ls : []).map(l=>novaLinhaCustoProc(l)); }
-// Completa o fechamento de câmbio de cada fornecedor, os custos de transporte, a armazenagem e as outras despesas.
-// Processos cadastrados antes desta versão são convertidos uma única vez: nada deixa de entrar no custo.
+function normalizarCustosTransporteProc(c){ const o = c || {}; return { frete:normalizarLinhasCustoProc(o.frete), taxasOrigem:normalizarLinhasCustoProc(o.taxasOrigem), taxasDestino:normalizarLinhasCustoProc(o.taxasDestino) }; }
+// Completa fechamento de câmbio, custos de cada transporte, armazenagem e outras despesas.
+// Processos cadastrados antes são convertidos uma única vez: nada deixa de entrar no custo.
 function migrarCustosProc(r, raw){
   raw = raw || {};
-  const legado = Object.keys(raw).length > 0 && !Array.isArray(raw.custosTransporte);
+  const v1 = Object.keys(raw).length > 0 && !Array.isArray(raw.custosTransporte) && !Array.isArray(raw.transportes);
+  // Fechamento de câmbio: condição, banco e contrato passam a ser de cada parcela
   r.produto.fornecedores.forEach(fo=>{
     const f = fo.fechamento || {};
-    fo.fechamento = { ...fechamentoVazioProc(), ...f, parcelas:(Array.isArray(f.parcelas) ? f.parcelas : []).map(x=>novaParcelaCambioProc({ moeda:fo.moeda||'USD', ...x })) };
+    fo.fechamento = { parcelas:(Array.isArray(f.parcelas) ? f.parcelas : []).map(x=>novaParcelaCambioProc({ moeda:fo.moeda||'USD', ...x,
+      condicao:x.condicao || f.condicao || '', banco:x.banco || f.banco || '', contrato:x.contrato || f.contrato || '' })) };
   });
-  r.custosTransporte = (Array.isArray(raw.custosTransporte) ? raw.custosTransporte : []).map(c=>({ ...novoCustoTransporteProc(), ...c,
-    frete:normalizarLinhasCustoProc(c.frete), taxasOrigem:normalizarLinhasCustoProc(c.taxasOrigem), taxasDestino:normalizarLinhasCustoProc(c.taxasDestino) }));
-  const arm = (raw.armazenagem||{}).lancamentos, outras = (raw.outrasDespesas||{}).lancamentos;
-  r.armazenagem = { lancamentos:(Array.isArray(arm) ? arm : []).map(l=>novaArmazenagemProc(l)) };
+  // Transportes: custos do 1º e transportes adicionais
+  r.transporte.custos = normalizarCustosTransporteProc((raw.transporte||{}).custos);
+  r.transportes = (Array.isArray(raw.transportes) ? raw.transportes : []).map(t=>({ ...novoTransporteExtraProc(), ...t,
+    containers:(Array.isArray(t.containers) && t.containers.length ? t.containers : [{}]).map(c=>novoContainerProcesso(c)), custos:normalizarCustosTransporteProc(t.custos) }));
+  if(Array.isArray(raw.custosTransporte)){   // versão anterior: lista de "transportes de custo"
+    raw.custosTransporte.forEach((c, i)=>{
+      const custos = normalizarCustosTransporteProc(c);
+      if(i===0) r.transporte.custos = custos;
+      else r.transportes.push(novoTransporteExtraProc({ modal:PROC_MODAIS[c.tipo] ? c.tipo : 'maritimo', agenteCarga:c.transportadora||'', custos }));
+    });
+  }
+  delete r.custosTransporte;
+  const arm = raw.armazenagem || {}, outras = (raw.outrasDespesas||{}).lancamentos;
+  r.armazenagem = { terminal:{ ...terminalVazioProc(), ...(arm.terminal||{}) }, lancamentos:(Array.isArray(arm.lancamentos) ? arm.lancamentos : []).map(l=>novaArmazenagemProc(l)) };
   r.outrasDespesas = { lancamentos:(Array.isArray(outras) ? outras : []).map(l=>novaDespesaProc(l)) };
-  r.desembaraco.pagos = { ...((raw.desembaraco||{}).pagos||{}) };
-  if(legado){
+  const dsr = raw.desembaraco || {};
+  r.desembaraco.pagos = { ...(dsr.pagos||{}) };
+  r.desembaraco.taxasDia = { ...(dsr.taxasDia||{}) };
+  if(dsr.seguro && !dsr.seguroMoeda) r.desembaraco.seguroMoeda = 'BRL';   // formato anterior: seguro digitado em reais
+  if(v1){
     const fin = raw.financeiro || {}, cambios = (fin.cambios && typeof fin.cambios==='object') ? fin.cambios : (r.financeiro.cambios||{});
     const taxaDe = m => (m && m!=='BRL') ? String(cambios[m] || '') : '';
+    Object.entries(cambios).forEach(([m, v])=>{ if(numProcSimples(v)>0 && !r.desembaraco.taxasDia[m]) r.desembaraco.taxasDia[m] = String(v); });
     const primeiro = r.produto.fornecedores[0];
     if(primeiro){   // pagamento ao exterior do formato antigo → fechamento de câmbio do 1º fornecedor
-      const f0 = primeiro.fechamento;
-      f0.condicao = f0.condicao || fin.condicaoPagamento || ''; f0.banco = f0.banco || fin.banco || ''; f0.contrato = f0.contrato || fin.contratoCambio || '';
-      (Array.isArray(fin.parcelas) ? fin.parcelas : []).forEach(pc=>f0.parcelas.push(novaParcelaCambioProc({ descricao:pc.descricao||'', moeda:pc.moeda||primeiro.moeda||'USD', taxa:taxaDe(pc.moeda), vencimento:pc.vencimento||'', valor:pc.valor||'', pago:!!pc.pago })));
+      (Array.isArray(fin.parcelas) ? fin.parcelas : []).forEach(pc=>primeiro.fechamento.parcelas.push(novaParcelaCambioProc({ descricao:pc.descricao||'', condicao:fin.condicaoPagamento||'', banco:fin.banco||'', contrato:fin.contratoCambio||'',
+        moeda:pc.moeda||primeiro.moeda||'USD', taxa:taxaDe(pc.moeda), vencimento:pc.vencimento||'', valor:pc.valor||'', pago:!!pc.pago })));
     }
     const freteV = numProcSimples(fin.frete), seguroV = numProcSimples(fin.seguro);
-    if(freteV>0 || seguroV>0){   // frete e seguro internacionais → custo de transporte
-      const tipo = ({ aereo:'aereo', rodoviario:'rodoviario' })[(r.transporte||{}).modal] || 'maritimo';
-      r.custosTransporte.push(novoCustoTransporteProc({ tipo,
-        frete: freteV>0 ? [novaLinhaCustoProc({ descricao:'Frete internacional', tarifa:fin.frete, moeda:fin.freteMoeda||'USD', taxa:taxaDe(fin.freteMoeda||'USD') })] : [],
-        taxasDestino: seguroV>0 ? [novaLinhaCustoProc({ descricao:'Seguro internacional', tarifa:fin.seguro, moeda:fin.seguroMoeda||'USD', taxa:taxaDe(fin.seguroMoeda||'USD') })] : [] }));
-      const cs = (fin.seguroMoeda||'USD')==='BRL' ? 1 : numProcSimples(cambios[fin.seguroMoeda||'USD']);
-      if(seguroV>0 && cs>0 && !numProcSimples(r.desembaraco.seguro)) r.desembaraco.seguro = String(Math.round(seguroV*cs*100)/100);
-      r.financeiro.frete = ''; r.financeiro.seguro = '';
+    if(freteV>0) r.transporte.custos.frete.push(novaLinhaCustoProc({ descricao:'Frete internacional', tarifa:fin.frete, moeda:fin.freteMoeda||'USD', taxa:taxaDe(fin.freteMoeda||'USD') }));
+    if(seguroV>0){
+      r.transporte.custos.taxasDestino.push(novaLinhaCustoProc({ descricao:'Seguro internacional', tarifa:fin.seguro, moeda:fin.seguroMoeda||'USD', taxa:taxaDe(fin.seguroMoeda||'USD') }));
+      r.desembaraco.seguro = String(fin.seguro); r.desembaraco.seguroMoeda = fin.seguroMoeda || 'USD';
     }
-    const tribAnt = (raw.desembaraco||{}).tributos || {};
+    if(freteV>0 || seguroV>0){ r.financeiro.frete = ''; r.financeiro.seguro = ''; }
+    const tribAnt = dsr.tributos || {};
     const cont0 = ((r.transporte||{}).containers||[])[0];
     if(numProcSimples(tribAnt.armazenagem)>0) r.armazenagem.lancamentos.push(novaArmazenagemProc({ containerId:cont0 ? cont0.id : '', descricao:'Armazenagem (vinda do Desembaraço)', tarifa:tribAnt.armazenagem }));
     [['siscomex','Taxa Siscomex'], ['afrmm','AFRMM']].forEach(([k, rot])=>{
@@ -2177,12 +2203,15 @@ function totaisContainersProc(t){
 }
 // Na carga marítima (FCL, LCL e Carga solta) os totais dos containers alimentam os campos gerais do transporte (usados em filtros e relatórios).
 function sincronizarContainersProc(p){
-  const t = p && p.transporte; if(!usaContainersProc(t)) return;
-  const x = totaisContainersProc(t);
-  t.containerQtd = String(x.qtd);
-  t.pesoBruto = x.pesoBruto ? String(x.pesoBruto) : '';
-  t.pesoLiquido = x.pesoLiquido ? String(x.pesoLiquido) : '';
-  t.cubagem = x.cubagem ? String(x.cubagem) : '';
+  if(!p || !p.transporte) return;
+  todosTransportesProc(p).forEach(t=>{
+    if(!usaContainersProc(t)) return;
+    const x = totaisContainersProc(t);
+    t.containerQtd = String(x.qtd);
+    t.pesoBruto = x.pesoBruto ? String(x.pesoBruto) : '';
+    t.pesoLiquido = x.pesoLiquido ? String(x.pesoLiquido) : '';
+    t.cubagem = x.cubagem ? String(x.cubagem) : '';
+  });
 }
 
 const numProc = v => { const n = parseFloat(String(v??'').replace(/\./g,'').replace(',','.')); return isFinite(n) ? n : 0; };
@@ -2192,7 +2221,7 @@ function fmtMoeda(v, moeda){
   catch(e){ return (moeda||'') + ' ' + (v||0).toFixed(2); }
 }
 // Processo no formato atual (vários fornecedores, câmbio por moeda); os salvos no formato antigo são convertidos.
-const procNorm = p => (p && p.produto && Array.isArray(p.produto.fornecedores) && p.financeiro && p.financeiro.cambios && Array.isArray(p.custosTransporte) && p.armazenagem && p.outrasDespesas && p.produto.fornecedores.every(fo=>fo.fechamento)) ? p : normalizarProcesso(p);
+const procNorm = p => (p && p.produto && Array.isArray(p.produto.fornecedores) && p.financeiro && p.financeiro.cambios && Array.isArray(p.transportes) && !p.custosTransporte && p.transporte && p.transporte.custos && p.armazenagem && p.armazenagem.terminal && p.outrasDespesas && p.produto.fornecedores.every(fo=>fo.fechamento && !('condicao' in fo.fechamento))) ? p : normalizarProcesso(p);
 const fornecedoresProc = p => procNorm(p).produto.fornecedores;
 const itensProc = p => fornecedoresProc(p).flatMap(fo=>(fo.itens||[]).map(it=>({ ...it, fornecedor:fo.fornecedor, moeda:fo.moeda||'USD' })));
 const moedaPrincipalProc = p => (fornecedoresProc(p)[0]||{}).moeda || 'USD';
@@ -2203,15 +2232,24 @@ function moedasCambioProc(p){
   return unicosProc([...n.produto.fornecedores.map(fo=>fo.moeda||'USD'), n.financeiro.freteMoeda||'USD', n.financeiro.seguroMoeda||'USD']).filter(m=>m!=='BRL');
 }
 const cambioProc = (p, moeda) => moeda==='BRL' ? 1 : numProcSimples((procNorm(p).financeiro.cambios||{})[moeda]);
-// Taxa do fornecedor = média das taxas do fechamento de câmbio, ponderada pelo valor de cada parcela.
-// Sem fechamento, usa a taxa por moeda dos processos cadastrados no formato antigo.
-function cambioFornecedorProc(proc, fo){
-  const M = fo.moeda || 'USD'; if(M==='BRL') return 1;
-  const ps = ((fo.fechamento||{}).parcelas||[]).filter(x=>(x.moeda||M)===M && numProcSimples(x.valor)>0 && numProcSimples(x.taxa)>0);
-  const soma = ps.reduce((a,x)=>a + numProcSimples(x.valor), 0);
-  if(soma>0) return ps.reduce((a,x)=>a + numProcSimples(x.valor)*numProcSimples(x.taxa), 0) / soma;
-  return numProcSimples(((procNorm(proc).financeiro||{}).cambios||{})[M]);
+// Custo da mercadoria de um fornecedor em R$ = parcelas do fechamento de câmbio (valor × taxa) + saldo ainda sem fechamento
+// (pela taxa média). Sem fechamento, usa a taxa por moeda dos processos cadastrados no formato antigo.
+// ATENÇÃO: esse é o CUSTO. A base de cálculo do Desembaraço usa só o valor da Invoice × taxa do dia (veja basesAduaneirasProc).
+const totaisFornecedorExtProc = fo => (fo.itens||[]).reduce((s,i)=>s + numProcSimples(i.quantidade)*numProcSimples(i.valorUnit), 0);
+function custoFornecedorProc(proc, fo){
+  const p = procNorm(proc), M = fo.moeda || 'USD', ext = totaisFornecedorExtProc(fo);
+  if(M==='BRL') return { ext, brl:ext, taxa:ext>0 ? 1 : 0, media:1, parcelas:[], saldoExt:0, saldoBRL:0, excesso:false, legado:false };
+  const ps = (((fo.fechamento||{}).parcelas)||[]).filter(x=>(x.moeda||M)===M && numProcSimples(x.valor)>0 && numProcSimples(x.taxa)>0);
+  const parcExt = ps.reduce((a,x)=>a + numProcSimples(x.valor), 0), parcBRL = ps.reduce((a,x)=>a + numProcSimples(x.valor)*numProcSimples(x.taxa), 0);
+  if(parcExt>0){
+    const media = parcBRL/parcExt, saldoExt = Math.max(0, ext - parcExt), saldoBRL = saldoExt*media, brl = parcBRL + saldoBRL;
+    return { ext, brl, taxa: ext>0 ? brl/ext : media, media, parcelas:ps, saldoExt, saldoBRL, excesso: parcExt > ext + 0.005, legado:false };
+  }
+  const leg = numProcSimples((((p.financeiro||{}).cambios)||{})[M]);
+  return { ext, brl:ext*leg, taxa:leg, media:leg, parcelas:[], saldoExt:0, saldoBRL:0, excesso:false, legado:true };
 }
+// taxa média do fechamento de câmbio
+const cambioFornecedorProc = (proc, fo) => custoFornecedorProc(proc, fo).media || 0;
 // Linhas de custo (R$): tarifa × quantidade × taxa da moeda (reais: taxa 1).
 const taxaLinhaProc = l => (l.moeda||'BRL')==='BRL' ? 1 : numProcSimples(l.taxa);
 const totalLinhaProc = l => numProcSimples(l.tarifa) * numProcSimples(l.quantidade) * taxaLinhaProc(l);
@@ -2219,8 +2257,8 @@ const totalDespesaProc = d => numProcSimples(d.valor) * taxaLinhaProc(d);
 const linhaPreenchidaProc = l => !!(l.descricao || numProcSimples(l.tarifa) || numProcSimples(l.valor));
 const somaLinhasProc = ls => (ls||[]).reduce((s,l)=>s + totalLinhaProc(l), 0);
 function totaisCustosProc(proc){
-  const p = procNorm(proc), legs = p.custosTransporte;
-  const frete = legs.reduce((s,c)=>s + somaLinhasProc(c.frete), 0), origem = legs.reduce((s,c)=>s + somaLinhasProc(c.taxasOrigem), 0), destino = legs.reduce((s,c)=>s + somaLinhasProc(c.taxasDestino), 0);
+  const p = procNorm(proc), ts = todosTransportesProc(p);
+  const frete = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.frete), 0), origem = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.taxasOrigem), 0), destino = ts.reduce((s,t)=>s + somaLinhasProc(t.custos.taxasDestino), 0);
   const armazenagem = somaLinhasProc(p.armazenagem.lancamentos), outras = p.outrasDespesas.lancamentos.reduce((s,d)=>s + totalDespesaProc(d), 0);
   return { frete, origem, destino, transporte:frete + origem + destino, armazenagem, outras };
 }
@@ -2228,24 +2266,50 @@ function totaisCustosProc(proc){
 function linhasSemTaxaProc(proc){
   const p = procNorm(proc), n = [];
   const t = (ls, rot)=>(ls||[]).forEach(l=>{ if((l.moeda||'BRL')!=='BRL' && !numProcSimples(l.taxa) && (numProcSimples(l.tarifa)||numProcSimples(l.valor))) n.push(rot + ' — ' + (l.descricao || 'sem descrição')); });
-  p.custosTransporte.forEach(c=>{ t(c.frete, 'Frete'); t(c.taxasOrigem, 'Taxa de origem'); t(c.taxasDestino, 'Taxa de destino'); });
+  todosTransportesProc(p).forEach((tr, k)=>{ const pre = todosTransportesProc(p).length>1 ? `Transporte ${k+1} · ` : ''; t(tr.custos.frete, pre + 'Frete'); t(tr.custos.taxasOrigem, pre + 'Taxa de origem'); t(tr.custos.taxasDestino, pre + 'Taxa de destino'); });
   t(p.armazenagem.lancamentos, 'Armazenagem'); t(p.outrasDespesas.lancamentos, 'Outras despesas');
+  p.produto.fornecedores.forEach((fo, k)=>(fo.fechamento.parcelas||[]).forEach(pa=>{ if((pa.moeda||fo.moeda)!=='BRL' && numProcSimples(pa.valor)>0 && !numProcSimples(pa.taxa)) n.push(`Fechamento de câmbio · ${fo.fornecedor || 'Fornecedor ' + (k+1)} · ${pa.descricao || 'parcela'}`); }));
   return n;
 }
-// Vencimentos ainda não pagos: parcelas do fechamento de câmbio (valor × taxa) e Outras Despesas.
+// Taxa de conversão do dia (Desembaraço): converte VMLE, frete e seguro para a base de cálculo da importação.
+const taxaDiaProc = (p, m) => (!m || m==='BRL') ? 1 : numProcSimples((((p.desembaraco||{}).taxasDia)||{})[m]);
+const somaPorMoedaProc = (...os) => { const r = {}; os.forEach(o=>Object.entries(o).forEach(([m,v])=>{ r[m] = (r[m]||0) + v; })); return r; };
+const paraBRLProc = (p, o) => Object.entries(o).reduce((s,[m,v])=>s + v*taxaDiaProc(p, m), 0);
+// Bases aduaneiras. VMLE = soma dos produtos da Invoice (moeda estrangeira); VMLD = VMLE + frete + seguro. Tudo em moeda estrangeira e em R$ pela taxa do dia.
+// O fechamento de câmbio NÃO entra aqui: só o valor do produto na Invoice.
+function basesAduaneirasProc(proc){
+  const p = procNorm(proc), vmleExt = {}, freteExt = {};
+  p.produto.fornecedores.forEach(fo=>{ const e = totaisFornecedorExtProc(fo); if(e>0){ const m = fo.moeda||'USD'; vmleExt[m] = (vmleExt[m]||0) + e; } });
+  todosTransportesProc(p).forEach(t=>(t.custos.frete||[]).forEach(l=>{ const e = numProcSimples(l.tarifa)*numProcSimples(l.quantidade); if(e>0){ const m = l.moeda||'BRL'; freteExt[m] = (freteExt[m]||0) + e; } }));
+  const d = p.desembaraco, segV = numProcSimples(d.seguro), seguroExt = segV>0 ? { [d.seguroMoeda||'USD']:segV } : {};
+  const vmldExt = somaPorMoedaProc(vmleExt, freteExt, seguroExt);
+  const faltamTaxaDia = Object.keys(vmldExt).filter(m=>m!=='BRL' && !taxaDiaProc(p, m));
+  return { vmleExt, freteExt, seguroExt, vmldExt, vmle:paraBRLProc(p, vmleExt), freteBRL:paraBRLProc(p, freteExt), seguro:paraBRLProc(p, seguroExt), vmld:paraBRLProc(p, vmldExt), faltamTaxaDia };
+}
+// Moedas estrangeiras do processo que precisam de taxa do dia
+function moedasTaxaDiaProc(proc){
+  const p = procNorm(proc), b = basesAduaneirasProc(p);
+  return unicosProc([...Object.keys(b.vmldExt), (p.desembaraco.seguroMoeda && numProcSimples(p.desembaraco.seguro)>0) ? p.desembaraco.seguroMoeda : '', ...p.produto.fornecedores.map(fo=>fo.moeda||'USD')]).filter(m=>m!=='BRL');
+}
+// Lançamentos financeiros: parcelas do fechamento de câmbio, Outras Despesas e Armazenagem (com vencimento e pago).
 function lancamentosFinanceirosProc(proc){
   const p = procNorm(proc), out = [];
   p.produto.fornecedores.forEach((fo, k)=>(fo.fechamento.parcelas||[]).forEach(pa=>{
     const valor = numProcSimples(pa.valor); if(!(valor>0)) return;
-    out.push({ origem:'cambio', rotulo:`Câmbio — ${fo.fornecedor || 'Fornecedor ' + (k+1)}${pa.descricao ? ' · ' + pa.descricao : ''}`, vencimento:pa.vencimento||'', pago:!!pa.pago, moeda:pa.moeda||fo.moeda||'USD', valor, taxa:numProcSimples(pa.taxa), brl: valor*((pa.moeda||fo.moeda||'USD')==='BRL' ? 1 : numProcSimples(pa.taxa)) });
+    const moeda = pa.moeda||fo.moeda||'USD';
+    out.push({ origem:'cambio', rotulo:`Câmbio — ${fo.fornecedor || 'Fornecedor ' + (k+1)}${pa.descricao ? ' · ' + pa.descricao : ''}`, vencimento:pa.vencimento||'', pago:!!pa.pago, moeda, valor, taxa:numProcSimples(pa.taxa), brl: valor*(moeda==='BRL' ? 1 : numProcSimples(pa.taxa)) });
   }));
   p.outrasDespesas.lancamentos.forEach(d=>{
     if(!(numProcSimples(d.valor)>0)) return;
-    out.push({ origem:'despesa', rotulo:`${d.origem==='internacional' ? 'Internacional' : 'Nacional'} — ${d.descricao || 'Outra despesa'}`, vencimento:d.vencimento||'', pago:!!d.pago, moeda:d.moeda||'BRL', valor:numProcSimples(d.valor), taxa:numProcSimples(d.taxa), brl:totalDespesaProc(d) });
+    out.push({ origem:'despesa', rotulo:`${d.origem==='internacional' ? 'Internacional' : 'Nacional'} — ${d.descricao || 'Outra despesa'}${d.prestador ? ' · ' + d.prestador : ''}`, vencimento:d.vencimento||'', pago:!!d.pago, moeda:d.moeda||'BRL', valor:numProcSimples(d.valor), taxa:numProcSimples(d.taxa), brl:totalDespesaProc(d) });
+  });
+  p.armazenagem.lancamentos.forEach(l=>{
+    if(!(totalLinhaProc(l)>0) && !(numProcSimples(l.tarifa)>0)) return;
+    out.push({ origem:'armazenagem', rotulo:`Armazenagem${(p.armazenagem.terminal||{}).nome ? ' · ' + p.armazenagem.terminal.nome : ''} — ${l.descricao || 'custo'}`, vencimento:l.vencimento||'', pago:!!l.pago, moeda:l.moeda||'BRL', valor:numProcSimples(l.tarifa)*numProcSimples(l.quantidade), taxa:numProcSimples(l.taxa), brl:totalLinhaProc(l) });
   });
   return out;
 }
-const nomeContainerProc = (p, id) => { const c = ((procNorm(p).transporte||{}).containers||[]).find(x=>x.id===id); return c ? (c.numero || c.tipo || 'Container') : 'Carga (sem container)'; };
+const nomeContainerProc = (p, id) => { for(const t of todosTransportesProc(procNorm(p))){ const c = (t.containers||[]).find(x=>x.id===id); if(c) return c.numero || c.tipo || 'Container'; } return 'Carga (sem container)'; };
 function fmtPorMoeda(porMoeda){
   const e = Object.entries(porMoeda).filter(([,v])=>v);
   return e.length ? e.map(([m,v])=>fmtMoeda(v, m)).join(' + ') : fmtMoeda(0, Object.keys(porMoeda)[0] || 'USD');
@@ -2255,11 +2319,9 @@ function totaisProcesso(proc){
   const porMoeda = {}; let pesoLiq = 0, mercadoriaBRL = 0; const faltaCambio = [];
   p.produto.fornecedores.forEach((fo, k)=>{
     const m = fo.moeda || 'USD'; porMoeda[m] = porMoeda[m] || 0;
-    let ext = 0;
-    for(const i of fo.itens||[]){ ext += numProcSimples(i.quantidade)*numProcSimples(i.valorUnit); pesoLiq += numProcSimples(i.pesoLiquido); }
-    porMoeda[m] += ext;
-    const tx = cambioFornecedorProc(p, fo);
-    if(ext>0 && !tx) faltaCambio.push(fo.fornecedor || `Fornecedor ${k+1}`); else mercadoriaBRL += ext*tx;
+    for(const i of fo.itens||[]) pesoLiq += numProcSimples(i.pesoLiquido);
+    const cf = custoFornecedorProc(p, fo); porMoeda[m] += cf.ext;
+    if(cf.ext>0 && !cf.brl) faltaCambio.push(fo.fornecedor || `Fornecedor ${k+1}`); else mercadoriaBRL += cf.brl;
   });
   const moeda = moedaPrincipalProc(p), moedas = Object.keys(porMoeda);
   const fob = moedas.length===1 ? porMoeda[moeda] : null;   // total numa moeda só quando todos os fornecedores usam a mesma
@@ -2995,54 +3057,63 @@ function procFornecedorHtml(fo, k, qtd){
   </div>`;
 }
 
-function procAbaTransporte(){
-  const t = state.procDraft.transporte;
-  const maritimo = t.modal==='maritimo';
-  const aereo = t.modal==='aereo';
-  const fcl = usaContainersProc(t);   // FCL, LCL e Carga solta / break bulk: containers com totais automáticos
-  return `<div class="card">
-    <div class="section-title" style="margin-bottom:16px;"><span class="num">03</span> Transporte</div>
-    <div class="field-row grid-4">
-      ${procCampo('transporte.modal', 'Modal', { options: opcoes(PROC_MODAIS) })}
-      ${maritimo ? procCampo('transporte.tipoCarga', 'Tipo de carga', { options:[['FCL','FCL (container cheio)'],['LCL','LCL (carga consolidada)'],['BREAK','Carga solta / break bulk']] }) : ''}
-      ${procCampoEmpresa('proc-agente', { span:2 })}
-      ${procCampo('transporte.armador', maritimo ? 'Armador' : aereo ? 'Companhia aérea' : 'Transportadora')}
-      ${procCampo('transporte.navioVoo', maritimo ? 'Navio / viagem' : aereo ? 'Voo' : 'Veículo / placa')}
-      ${procCampo('transporte.booking', 'Booking')}
-      ${procCampo('transporte.conhecimentoMaster', maritimo ? 'MBL (master)' : aereo ? 'MAWB (master)' : 'CRT / conhecimento')}
-      ${procCampo('transporte.conhecimentoHouse', maritimo ? 'HBL (house)' : aereo ? 'HAWB (house)' : 'Conhecimento house')}
-      ${procCampo('transporte.freeTime', 'Free time (dias)', { type:'number', step:'1' })}
-      ${procCampo('transporte.origem', maritimo ? 'Porto de origem' : aereo ? 'Aeroporto de origem' : 'Origem', { span:2 })}
-      ${procCampo('transporte.destino', maritimo ? 'Porto de destino' : aereo ? 'Aeroporto de destino' : 'Destino', { span:2 })}
-      ${procCampo('transporte.etd', 'ETD (saída estimada)', { type:'date' })}
-      ${procCampo('transporte.eta', 'ETA (chegada estimada)', { type:'date' })}
-      ${procCampo('transporte.chegada', 'Chegada efetiva', { type:'date' })}
-      <div></div>
-      ${procCampo('transporte.volumes', 'Volumes', { type:'number', step:'1' })}
-      ${fcl ? '' : procCampo('transporte.pesoBruto', 'Peso bruto (kg)', { type:'number', step:'any' })}
-      ${fcl ? '' : procCampo('transporte.cubagem', 'Cubagem (m³)', { type:'number', step:'any' })}
+function procTransporteJanelaHtml(t, base, n, chave, removivel){
+  const maritimo = t.modal==='maritimo', aereo = t.modal==='aereo', usaCont = usaContainersProc(t);
+  const confirmando = state.pendingDelete === 'transp:' + chave;
+  const c = (campo, rot, o) => procCampo(`${base}.${campo}`, rot, o);
+  return `<div class="card proc-transporte">
+    <div class="proc-forn-topo">
+      <div class="section-title"><span class="num">03</span> Transporte${n>1 ? ' ' + n : ''}<span class="proc-forn-nome"> · ${esc(PROC_MODAIS[t.modal] || '')}</span></div>
+      ${removivel ? `<button class="btn btn-ghost btn-sm ${confirmando ? 'btn-perigo' : ''}" data-action="proc-rm-transporte:${chave}"
+        title="${confirmando ? 'Clique de novo para confirmar' : 'Remover este transporte e os custos dele'}">${ICONS.trash} ${confirmando ? 'Confirmar remoção' : 'Remover transporte'}</button>` : ''}
     </div>
-    ${fcl ? procContainersHtml(t) : ''}
-  </div>
-  <div class="card">
-    <div class="section-title" style="margin-bottom:6px;"><span class="num">04</span> Custos de transporte</div>
-    <p class="hint" style="margin:0 0 12px; color:var(--ink-soft); font-size:12.5px;">Frete internacional (marítimo, aéreo ou rodoviário internacional), taxas de origem e taxas de destino. Cada transporte tem a sua janela de custos.</p>
-    <div class="btn-row" style="align-items:center;">
-      <button class="btn btn-primary btn-sm" data-action="proc-modal-abrir:transporte:">${ICONS.calc} Custos de transporte</button>
-      <button class="btn btn-ghost btn-sm" data-action="proc-add-transporte">${ICONS.plus} Adicionar Transporte</button>
-      <span class="membro-sub" id="proc-resumo-transporte">${resumoTransporteTxt()}</span>
+    <div class="field-row grid-4">
+      ${c('modal', 'Modal', { options: opcoes(PROC_MODAIS) })}
+      ${maritimo ? c('tipoCarga', 'Tipo de carga', { options:[['FCL','FCL (container cheio)'],['LCL','LCL (carga consolidada)'],['BREAK','Carga solta / break bulk']] }) : ''}
+      ${n===1 ? procCampoEmpresa('proc-agente', { span:2 }) : c('agenteCarga', 'Agente de carga', { span:2, placeholder:'Agente / transportadora' })}
+      ${c('armador', maritimo ? 'Armador' : aereo ? 'Companhia aérea' : 'Transportadora')}
+      ${c('navioVoo', maritimo ? 'Navio / viagem' : aereo ? 'Voo' : 'Veículo / placa')}
+      ${c('booking', 'Booking')}
+      ${c('conhecimentoMaster', maritimo ? 'MBL (master)' : aereo ? 'MAWB (master)' : 'CRT / conhecimento')}
+      ${c('conhecimentoHouse', maritimo ? 'HBL (house)' : aereo ? 'HAWB (house)' : 'Conhecimento house')}
+      ${c('freeTime', 'Free time (dias)', { type:'number', step:'1' })}
+      ${c('origem', maritimo ? 'Porto de origem' : aereo ? 'Aeroporto de origem' : 'Origem', { span:2 })}
+      ${c('destino', maritimo ? 'Porto de destino' : aereo ? 'Aeroporto de destino' : 'Destino', { span:2 })}
+      ${c('etd', 'ETD (saída estimada)', { type:'date' })}
+      ${c('eta', 'ETA (chegada estimada)', { type:'date' })}
+      ${c('chegada', 'Chegada efetiva', { type:'date' })}
+      <div></div>
+      ${c('volumes', 'Volumes', { type:'number', step:'1' })}
+      ${usaCont ? '' : c('pesoBruto', 'Peso bruto (kg)', { type:'number', step:'any' })}
+      ${usaCont ? '' : c('cubagem', 'Cubagem (m³)', { type:'number', step:'any' })}
+    </div>
+    ${usaCont ? procContainersHtml(t, base, chave) : ''}
+    <div class="proc-custos-bar">
+      <div class="proc-forn-itens" style="margin:0;">Custos deste transporte</div>
+      <div class="btn-row" style="align-items:center; margin:0;">
+        <span class="membro-sub" data-pm-calc="trres:${chave}">${resumoTransporteTxt(t)}</span>
+        <button class="btn btn-primary btn-sm" data-action="proc-modal-abrir:transporte:${chave}" title="Frete internacional, taxas de origem e taxas de destino">${ICONS.calc} Custos de transporte</button>
+      </div>
     </div>
   </div>`;
 }
-function resumoTransporteTxt(){
-  const p = state.procDraft, c = totaisCustosProc(p), n = p.custosTransporte.length;
-  return n ? `${n} transporte${n===1?'':'s'} · frete ${fmtBRL(c.frete)} · taxas ${fmtBRL(c.origem + c.destino)} · total ${fmtBRL(c.transporte)}` : 'Nenhum transporte lançado';
+function procAbaTransporte(){
+  const p = state.procDraft, ts = todosTransportesProc(p);
+  return ts.map((t, k)=>procTransporteJanelaHtml(t, k===0 ? 'transporte' : `transportes.${k-1}`, k+1, chaveTransporteProc(p, t), k>0)).join('') + `
+    <div class="proc-forn-rodape">
+      <button class="btn btn-ghost" data-action="proc-add-transporte">${ICONS.plus} Adicionar Transporte</button>
+      <span class="hint" style="font-size:12px; color:var(--ink-soft);">Abre uma nova janela de transporte (marítimo, aéreo, rodoviário, ferroviário ou multimodal).</span>
+    </div>`;
+}
+function resumoTransporteTxt(t){
+  const c = t.custos, frete = somaLinhasProc(c.frete), taxas = somaLinhasProc(c.taxasOrigem) + somaLinhasProc(c.taxasDestino);
+  return (frete || taxas) ? `Frete ${fmtBRL(frete)} · taxas ${fmtBRL(taxas)} · total ${fmtBRL(frete + taxas)}` : 'Nenhum custo lançado';
 }
 // Janela Transporte (FCL, LCL e Carga solta): uma linha por container, com botão para adicionar e totais automáticos logo abaixo.
-function procContainersHtml(t){
+function procContainersHtml(t, base, chave){
   const cs = t.containers, tot = totaisContainersProc(t);
   const linhas = cs.map((c, n)=>{
-    const pc = `transporte.containers.${n}`, confirmando = state.pendingDelete === 'cont:' + c.id;
+    const pc = `${base}.containers.${n}`, confirmando = state.pendingDelete === 'cont:' + c.id;
     return `<tr>
       <td><select data-proc="${pc}.tipo">${PROC_CONTAINER_TIPOS.map(x=>`<option ${c.tipo===x?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
       <td><input data-proc="${pc}.numero" value="${esc(c.numero)}" placeholder="Ex.: MSKU1234567" autocomplete="off" style="text-transform:uppercase;"></td>
@@ -3050,18 +3121,18 @@ function procContainersHtml(t){
       <td><input data-proc="${pc}.pesoLiquido" type="number" step="any" min="0" class="num-mono" value="${esc(c.pesoLiquido)}" placeholder="kg"></td>
       <td><input data-proc="${pc}.cubagem" type="number" step="any" min="0" class="num-mono" value="${esc(c.cubagem)}" placeholder="m³"></td>
       <td><input data-proc="${pc}.lacres" value="${esc(c.lacres)}" placeholder="Lacre 1, Lacre 2" autocomplete="off"></td>
-      <td>${cs.length>1 ? `<button class="row-remove ${confirmando ? 'btn-perigo' : ''}" title="${confirmando ? 'Clique de novo para confirmar' : 'Remover este container'}" data-action="proc-rm-container:${c.id}">${ICONS.trash}</button>` : ''}</td>
+      <td>${cs.length>1 ? `<button class="row-remove ${confirmando ? 'btn-perigo' : ''}" title="${confirmando ? 'Clique de novo para confirmar' : 'Remover este container'}" data-action="proc-rm-container:${chave}:${c.id}">${ICONS.trash}</button>` : ''}</td>
     </tr>`; }).join('');
   return `
     <div class="proc-forn-itens proc-cont-topo" style="display:flex; justify-content:space-between; align-items:center;">
       <span>Containers</span>
-      <button class="btn btn-ghost btn-sm" data-action="proc-add-container">${ICONS.plus} Adicionar Container</button>
+      <button class="btn btn-ghost btn-sm" data-action="proc-add-container:${chave}">${ICONS.plus} Adicionar Container</button>
     </div>
     <div class="table-wrap"><table class="proc-itens proc-containers">
       <thead><tr><th>Tipo de Container</th><th>Container</th><th class="num-mono">Peso Bruto (kg)</th><th class="num-mono">Peso Líquido (kg)</th><th class="num-mono">Cubagem (m³)</th><th>Lacres</th><th></th></tr></thead>
       <tbody>${linhas}</tbody>
     </table></div>
-    <div class="field-row grid-4 proc-cont-totais" id="proc-cont-totais" style="margin-top:14px;">${procContainersTotaisHtml(tot)}</div>`;
+    <div class="field-row grid-4 proc-cont-totais" id="proc-cont-totais-${chave}" style="margin-top:14px;">${procContainersTotaisHtml(tot)}</div>`;
 }
 function procContainersTotaisHtml(tot){
   const f = v => v.toLocaleString('pt-BR', { maximumFractionDigits:3 });
@@ -3077,10 +3148,11 @@ const PROC_TIPOS_CALCULO = ['Container', 'Documento', 'Dia', 'Volume'];
 const optMoedasProc = sel => PROC_MOEDAS.map(m=>`<option ${sel===m?'selected':''}>${m}</option>`).join('');
 const optTiposCalcProc = sel => `<option value=""></option>` + PROC_TIPOS_CALCULO.map(t=>`<option ${sel===t?'selected':''}>${t}</option>`).join('');
 const procParcelaBRL = (pa, M) => numProcSimples(pa.valor) * ((pa.moeda||M)==='BRL' ? 1 : numProcSimples(pa.taxa));
-const grupoArmazenagemProc = (p, l) => ((p.transporte||{}).containers||[]).some(c=>c.id===l.containerId) ? l.containerId : '';
+const grupoArmazenagemProc = (p, l) => todosTransportesProc(p).some(t=>(t.containers||[]).some(c=>c.id===l.containerId)) ? l.containerId : '';
 
 // Linha de custo (tarifa × quantidade × taxa da moeda). "pathArray" é o caminho da lista (para remover a linha).
-function procLinhaCustoHtml(base, l, pathArray){
+// fin: mostra vencimento e pago (Armazenagem).
+function procLinhaCustoHtml(base, l, pathArray, fin){
   const real = (l.moeda||'BRL')==='BRL';
   return `<tr>
     <td><input data-proc="${base}.descricao" value="${esc(l.descricao)}" placeholder="Descrição"></td>
@@ -3090,84 +3162,66 @@ function procLinhaCustoHtml(base, l, pathArray){
     <td><select data-proc="${base}.tipoCalculo">${optTiposCalcProc(l.tipoCalculo)}</select></td>
     <td><input data-proc="${base}.quantidade" type="number" step="any" min="0" class="num-mono" value="${esc(l.quantidade)}"></td>
     <td class="num-mono" data-pm-calc="lin:${l.id}">${fmtBRL(totalLinhaProc(l))}</td>
+    ${fin ? `<td><input data-proc="${base}.vencimento" type="date" value="${esc(l.vencimento)}"></td><td style="text-align:center;"><input type="checkbox" data-proc="${base}.pago" ${l.pago?'checked':''}></td>` : ''}
     <td><button class="row-remove" title="Remover" data-action="proc-rm-linha:${pathArray}:${l.id}">${ICONS.trash}</button></td>
   </tr>`;
 }
-function procTabelaCustosHtml(pares, pathArray, chaveTotal, vazio){
-  const total = pares.reduce((s,[,l])=>s + totalLinhaProc(l), 0);
+function procTabelaCustosHtml(pares, pathArray, chaveTotal, vazio, fin){
+  const total = pares.reduce((s,[,l])=>s + totalLinhaProc(l), 0), cols = fin ? 10 : 8;
   return `<div class="table-wrap"><table class="proc-itens">
-    <thead><tr><th>Descrição</th><th class="num-mono">Tarifa</th><th>Moeda</th><th class="num-mono">Taxa da moeda</th><th>Tipo de cálculo</th><th class="num-mono">Qtd.</th><th class="num-mono">Total R$</th><th></th></tr></thead>
-    <tbody>${pares.length ? pares.map(([b,l])=>procLinhaCustoHtml(b, l, pathArray)).join('') : `<tr><td colspan="8" style="text-align:center; color:var(--ink-soft);">${vazio}</td></tr>`}</tbody>
-    <tfoot><tr><td colspan="6">Total</td><td class="num-mono" data-pm-calc="${chaveTotal}">${fmtBRL(total)}</td><td></td></tr></tfoot>
+    <thead><tr><th>Descrição</th><th class="num-mono">Tarifa</th><th>Moeda</th><th class="num-mono">Taxa da moeda</th><th>Tipo de cálculo</th><th class="num-mono">Qtd.</th><th class="num-mono">Total R$</th>${fin ? '<th>Vencimento</th><th style="text-align:center;">Pago</th>' : ''}<th></th></tr></thead>
+    <tbody>${pares.length ? pares.map(([b,l])=>procLinhaCustoHtml(b, l, pathArray, fin)).join('') : `<tr><td colspan="${cols}" style="text-align:center; color:var(--ink-soft);">${vazio}</td></tr>`}</tbody>
+    <tfoot><tr><td colspan="6">Total</td><td class="num-mono" data-pm-calc="${chaveTotal}">${fmtBRL(total)}</td>${fin ? '<td></td><td></td>' : ''}<td></td></tr></tfoot>
   </table></div>`;
 }
 
-/* --- janela sobre o Produto: fechamento de câmbio do fornecedor --- */
+/* --- janela sobre o Produto: fechamento de câmbio do fornecedor (cada parcela com condição, banco e contrato) --- */
 function procCambioModalHtml(fo, k){
   const base = `produto.fornecedores.${k}.fechamento`, M = fo.moeda || 'USD', f = fo.fechamento, sub = totaisFornecedorProc(fo);
   const linhas = f.parcelas.map((pa, n)=>{
     const b = `${base}.parcelas.${n}`, real = (pa.moeda||M)==='BRL';
     return `<tr>
-      <td><input data-proc="${b}.descricao" value="${esc(pa.descricao)}" placeholder="Ex.: Sinal 30%"></td>
+      <td><input data-proc="${b}.descricao" value="${esc(pa.descricao)}" placeholder="Ex.: Sinal 30%" style="min-width:110px;"></td>
+      <td><input data-proc="${b}.condicao" value="${esc(pa.condicao)}" placeholder="Ex.: 30% antecipado" style="min-width:140px;"></td>
+      <td><input data-proc="${b}.banco" value="${esc(pa.banco)}" placeholder="Banco" style="min-width:110px;"></td>
+      <td><input data-proc="${b}.contrato" value="${esc(pa.contrato)}" placeholder="Nº do contrato" style="min-width:110px;"></td>
       <td><select data-proc="${b}.moeda">${optMoedasProc(pa.moeda||M)}</select></td>
-      <td>${real ? '<span class="vazio">—</span>' : `<input data-proc="${b}.taxa" type="number" step="any" min="0" class="num-mono" value="${esc(pa.taxa)}" placeholder="Ex.: 5,35">`}</td>
+      <td>${real ? '<span class="vazio">—</span>' : `<input data-proc="${b}.taxa" type="number" step="any" min="0" class="num-mono" value="${esc(pa.taxa)}" placeholder="Ex.: 5,35" style="min-width:90px;">`}</td>
       <td><input data-proc="${b}.vencimento" type="date" value="${esc(pa.vencimento)}"></td>
-      <td><input data-proc="${b}.valor" type="number" step="any" min="0" class="num-mono" value="${esc(pa.valor)}" placeholder="0,00"></td>
+      <td><input data-proc="${b}.valor" type="number" step="any" min="0" class="num-mono" value="${esc(pa.valor)}" placeholder="0,00" style="min-width:100px;"></td>
       <td class="num-mono" data-pm-calc="lin:${pa.id}">${fmtBRL(procParcelaBRL(pa, M))}</td>
       <td style="text-align:center;"><input type="checkbox" data-proc="${b}.pago" ${pa.pago?'checked':''}></td>
       <td><button class="row-remove" title="Remover" data-action="proc-rm-parcela-cambio:${fo.id}:${pa.id}">${ICONS.trash}</button></td>
     </tr>`;
   }).join('');
   return `
-    <div class="field-row grid-3">
-      ${procCampo(base+'.condicao', 'Condição de pagamento', { placeholder:'Ex.: 30% antecipado, 70% contra BL' })}
-      ${procCampo(base+'.banco', 'Banco do câmbio')}
-      ${procCampo(base+'.contrato', 'Nº do contrato de câmbio')}
-    </div>
-    <div class="proc-forn-itens" style="margin-top:18px;">Parcelas do fechamento de câmbio</div>
+    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Cada parcela tem a sua condição de pagamento, banco do câmbio e nº do contrato. As parcelas, com as taxas fechadas, aparecem no Resumo das Despesas e definem o <b>custo</b> da mercadoria no rateio.
+      A base de cálculo do Desembaraço (VMLE, VMLD) não usa o fechamento: usa só o valor do produto na Invoice, pela taxa de conversão do dia.</p>
     <div class="table-wrap"><table class="proc-itens">
-      <thead><tr><th>Parcela</th><th>Moeda</th><th class="num-mono">Taxa da moeda</th><th>Vencimento</th><th class="num-mono">Valor</th><th class="num-mono">Total R$</th><th style="text-align:center;">Pago</th><th></th></tr></thead>
-      <tbody>${linhas || `<tr><td colspan="8" style="text-align:center; color:var(--ink-soft);">Nenhuma parcela. Clique em "Adicionar parcela".</td></tr>`}</tbody>
+      <thead><tr><th>Parcela</th><th>Condição de pagamento</th><th>Banco do câmbio</th><th>Nº do contrato de câmbio</th><th>Moeda</th><th class="num-mono">Taxa da moeda</th><th>Vencimento</th><th class="num-mono">Valor</th><th class="num-mono">Total R$</th><th style="text-align:center;">Pago</th><th></th></tr></thead>
+      <tbody>${linhas || `<tr><td colspan="11" style="text-align:center; color:var(--ink-soft);">Nenhuma parcela. Clique em "Adicionar parcela".</td></tr>`}</tbody>
     </table></div>
     <div class="btn-row" style="margin-top:12px;"><button class="btn btn-ghost btn-sm" data-action="proc-add-parcela-cambio:${fo.id}">${ICONS.plus} Adicionar parcela</button></div>
     <div class="proc-resumo" style="margin-top:16px;">
-      <div class="stat-card"><div class="lbl">Total da mercadoria</div><div class="val" style="font-size:18px;">${fmtMoeda(sub.total, M)}</div></div>
+      <div class="stat-card"><div class="lbl">Total da mercadoria (Invoice)</div><div class="val" style="font-size:18px;">${fmtMoeda(sub.total, M)}</div></div>
       <div class="stat-card"><div class="lbl">Total das parcelas</div><div class="val" style="font-size:18px;" data-pm-calc="cmb:${fo.id}:parcelas">—</div><div class="sub" data-pm-calc="cmb:${fo.id}:dif"></div></div>
-      <div class="stat-card"><div class="lbl">Taxa média ponderada</div><div class="val" style="font-size:18px;" data-pm-calc="cmb:${fo.id}:taxa">—</div><div class="sub">Usada para converter a mercadoria em reais</div></div>
+      <div class="stat-card"><div class="lbl">Taxa média ponderada</div><div class="val" style="font-size:18px;" data-pm-calc="cmb:${fo.id}:taxa">—</div><div class="sub">Custo da mercadoria no rateio</div></div>
       <div class="stat-card"><div class="lbl">Total em reais</div><div class="val" style="font-size:18px;" data-pm-calc="cmb:${fo.id}:brl">—</div></div>
     </div>`;
 }
 
-/* --- janela sobre o Transporte: frete internacional, taxas de origem e taxas de destino --- */
-function procTransporteModalHtml(){
-  const p = state.procDraft, legs = p.custosTransporte;
-  const grupos = [['frete', 'Frete internacional'], ['taxasOrigem', 'Taxas de Origem'], ['taxasDestino', 'Taxas de Destino']];
-  const blocos = legs.map((c, k)=>{
-    const confirmando = state.pendingDelete === 'tr:' + c.id;
-    return `<div class="proc-leg">
-      <div class="proc-leg-topo">
-        <div class="section-title" style="margin:0;">Transporte ${k+1}</div>
-        <div class="proc-leg-campos">
-          ${procCampo(`custosTransporte.${k}.tipo`, 'Tipo de frete internacional', { options:Object.entries(PROC_TIPOS_FRETE).map(([v,r])=>[v, r.replace('Frete ', '').replace(/^./, ch=>ch.toUpperCase())]) })}
-          ${procCampo(`custosTransporte.${k}.transportadora`, 'Transportadora / agente', { placeholder:'Opcional' })}
-        </div>
-        <button class="btn btn-ghost btn-sm ${confirmando ? 'btn-perigo' : ''}" data-action="proc-rm-transporte:${c.id}" title="${confirmando ? 'Clique de novo para confirmar' : 'Remover este transporte e os custos dele'}">${ICONS.trash} ${confirmando ? 'Confirmar remoção' : 'Remover transporte'}</button>
-      </div>
-      ${grupos.map(([g, rot])=>`
-        <div class="proc-forn-itens" style="margin-top:14px;">${rot}${g==='frete' ? ' — ' + esc(PROC_TIPOS_FRETE[c.tipo] || '') : ''}</div>
-        ${procTabelaCustosHtml(c[g].map((l, n)=>[`custosTransporte.${k}.${g}.${n}`, l]), `custosTransporte.${k}.${g}`, `leg:${c.id}:${g}`, 'Nenhuma linha.')}
-        <div class="btn-row" style="margin:8px 0 0;"><button class="btn btn-ghost btn-sm" data-action="proc-add-linha:custosTransporte.${k}.${g}">${ICONS.plus} Adicionar linha</button></div>`).join('')}
-      <div class="proc-total-tributos" style="margin-top:12px;">Total deste transporte: <b data-pm-calc="leg:${c.id}:total">—</b></div>
-    </div>`;
-  }).join('');
+/* --- janela sobre o Transporte: custos de UM transporte (frete internacional, taxas de origem e taxas de destino) --- */
+function procTransporteModalHtml(chave){
+  const p = state.procDraft, tt = transporteDaChaveProc(p, chave); if(!tt) return '';
+  const { t, base } = tt, grupos = [['frete', PROC_TIPOS_FRETE[t.modal] ? 'Frete internacional — ' + PROC_TIPOS_FRETE[t.modal].replace('Frete ', '') : 'Frete internacional'], ['taxasOrigem', 'Taxas de Origem'], ['taxasDestino', 'Taxas de Destino']];
   return `
-    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Lance o frete internacional (marítimo, aéreo ou rodoviário internacional) e as taxas de origem e de destino de cada transporte do processo.
+    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Frete internacional, taxas de origem e taxas de destino deste transporte (${esc(PROC_MODAIS[t.modal] || '')}).
       Total = tarifa × quantidade × taxa da moeda (em reais a taxa é 1). Tudo entra no custo e é rateado entre os produtos pelo peso líquido.</p>
-    ${blocos || '<div class="empty" style="padding:24px;"><h3>Nenhum transporte lançado</h3><p>Clique em "Adicionar Transporte".</p></div>'}
-    <div class="btn-row" style="margin-top:6px; justify-content:space-between;">
-      <button class="btn btn-ghost" data-action="proc-add-transporte">${ICONS.plus} Adicionar Transporte</button>
-      <div class="proc-total-tributos" style="margin:0;">Frete: <b data-pm-calc="trtot:frete">—</b> · Origem: <b data-pm-calc="trtot:origem">—</b> · Destino: <b data-pm-calc="trtot:destino">—</b> · Total: <b data-pm-calc="trtot:total">—</b></div>
-    </div>`;
+    ${grupos.map(([g, rot])=>`
+      <div class="proc-forn-itens" style="margin-top:14px;">${esc(rot)}</div>
+      ${procTabelaCustosHtml(t.custos[g].map((l, n)=>[`${base}.custos.${g}.${n}`, l]), `${base}.custos.${g}`, `tr:${chave}:${g}`, 'Nenhuma linha.')}
+      <div class="btn-row" style="margin:8px 0 0;"><button class="btn btn-ghost btn-sm" data-action="proc-add-linha:${base}.custos.${g}">${ICONS.plus} Adicionar linha</button></div>`).join('')}
+    <div class="proc-total-tributos" style="margin-top:16px;">Total deste transporte: <b data-pm-calc="tr:${chave}:total">—</b></div>`;
 }
 
 /* --- moldura da janela (modal) sobre a aba atual --- */
@@ -3179,8 +3233,11 @@ function procModalHtml(){
     if(k<0){ state.procModal = null; return ''; }
     const fo = p.produto.fornecedores[k];
     titulo = `Fechamento de câmbio — ${fo.fornecedor || 'Fornecedor ' + (k+1)} (${fo.moeda || 'USD'})`; corpo = procCambioModalHtml(fo, k);
-  }else if(m.tipo==='transporte'){ titulo = 'Custos de transporte'; corpo = procTransporteModalHtml(); }
-  else return '';
+  }else if(m.tipo==='transporte'){
+    const tt = transporteDaChaveProc(p, m.id);
+    if(!tt){ state.procModal = null; return ''; }
+    titulo = `Custos de transporte — Transporte ${tt.n} · ${PROC_MODAIS[tt.t.modal] || ''}`; corpo = procTransporteModalHtml(m.id);
+  }else return '';
   return `<div class="proc-modal-fundo" id="proc-modal-fundo" data-action="proc-modal-fechar">
     <div class="proc-modal ${podeSalvarProcesso() ? '' : 'proc-leitura'}" id="proc-modal" data-action="proc-modal-nada" role="dialog" aria-modal="true">
       <div class="proc-modal-topo"><div class="proc-modal-titulo">${esc(titulo)}</div>
@@ -3189,9 +3246,9 @@ function procModalHtml(){
     </div>
   </div>`;
 }
-// Valores calculados que aparecem na janela (atualizados enquanto a pessoa digita)
+// Valores calculados que aparecem na tela (atualizados enquanto a pessoa digita)
 function procAcharLinhaPorId(p, id){
-  for(const c of p.custosTransporte) for(const g of ['frete','taxasOrigem','taxasDestino']){ const l = c[g].find(x=>x.id===id); if(l) return { t:'custo', l }; }
+  for(const t of todosTransportesProc(p)) for(const g of ['frete','taxasOrigem','taxasDestino']){ const l = t.custos[g].find(x=>x.id===id); if(l) return { t:'custo', l }; }
   let l = p.armazenagem.lancamentos.find(x=>x.id===id); if(l) return { t:'custo', l };
   l = p.outrasDespesas.lancamentos.find(x=>x.id===id); if(l) return { t:'despesa', l };
   for(const fo of p.produto.fornecedores){ l = (fo.fechamento.parcelas||[]).find(x=>x.id===id); if(l) return { t:'parcela', l, fo }; }
@@ -3200,8 +3257,8 @@ function procAcharLinhaPorId(p, id){
 function procValorCalc(p, key){
   const [t, a, b] = key.split(':');
   if(t==='lin'){ const r = procAcharLinhaPorId(p, a); if(!r) return fmtBRL(0); return fmtBRL(r.t==='custo' ? totalLinhaProc(r.l) : r.t==='despesa' ? totalDespesaProc(r.l) : procParcelaBRL(r.l, r.fo.moeda||'USD')); }
-  if(t==='leg'){ const c = p.custosTransporte.find(x=>x.id===a); if(!c) return fmtBRL(0); return fmtBRL(b==='total' ? somaLinhasProc(c.frete)+somaLinhasProc(c.taxasOrigem)+somaLinhasProc(c.taxasDestino) : somaLinhasProc(c[b])); }
-  if(t==='trtot'){ const x = totaisCustosProc(p); return fmtBRL(({ frete:x.frete, origem:x.origem, destino:x.destino, total:x.transporte })[a]); }
+  if(t==='tr'){ const tt = transporteDaChaveProc(p, a); if(!tt) return fmtBRL(0); const c = tt.t.custos; return fmtBRL(b==='total' ? somaLinhasProc(c.frete)+somaLinhasProc(c.taxasOrigem)+somaLinhasProc(c.taxasDestino) : somaLinhasProc(c[b])); }
+  if(t==='trres'){ const tt = transporteDaChaveProc(p, a); return tt ? resumoTransporteTxt(tt.t) : ''; }
   if(t==='arm'){ return fmtBRL(somaLinhasProc(p.armazenagem.lancamentos.filter(l=>grupoArmazenagemProc(p, l)===a))); }
   if(t==='armtot') return fmtBRL(somaLinhasProc(p.armazenagem.lancamentos));
   if(t==='outras'){ const ls = p.outrasDespesas.lancamentos.filter(d=>a==='tot' || (a==='int' ? d.origem==='internacional' : d.origem!=='internacional')); return fmtBRL(ls.reduce((s,d)=>s + totalDespesaProc(d), 0)); }
@@ -3220,34 +3277,47 @@ function atualizarModalProcesso(){
   document.querySelectorAll('[data-pm-calc]').forEach(el=>{ el.textContent = procValorCalc(p, el.getAttribute('data-pm-calc')); });
 }
 
-/* --- aba Armazenagem: custos de armazenagem de cada container --- */
+/* --- aba Armazenagem: terminal portuário a pagar e custos de armazenagem de cada container --- */
 function procAbaArmazenagem(){
-  const p = state.procDraft, conts = (p.transporte.containers||[]);
-  const lancs = p.armazenagem.lancamentos;
+  const p = state.procDraft, lancs = p.armazenagem.lancamentos;
   const pares = id => lancs.map((l, n)=>[`armazenagem.lancamentos.${n}`, l]).filter(([,l])=>grupoArmazenagemProc(p, l)===id);
-  const grupos = [ ...(usaContainersProc(p.transporte) ? conts.map(c=>({ id:c.id, titulo:`Container ${c.numero || '(sem número)'} · ${c.tipo}` })) : []), { id:'', titulo:'Carga (sem container)' } ];
-  const mostrar = grupos.filter(g=>g.id!=='' || pares('').length || !usaContainersProc(p.transporte));
+  const ts = todosTransportesProc(p), comCont = ts.some(t=>usaContainersProc(t));
+  const grupos = [ ...ts.flatMap((t, k)=>usaContainersProc(t) ? (t.containers||[]).map(c=>({ id:c.id, titulo:`${ts.length>1 ? 'Transporte ' + (k+1) + ' · ' : ''}Container ${c.numero || '(sem número)'} · ${c.tipo}` })) : []), { id:'', titulo:'Carga (sem container)' } ];
+  const mostrar = grupos.filter(g=>g.id!=='' || pares('').length || !comCont);
   return `<div class="card">
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">04</span> Terminal portuário (a pagar)</div>
+    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Dados do terminal portuário que receberá o pagamento da armazenagem.</p>
+    <div class="field-row grid-3">
+      ${procCampo('armazenagem.terminal.nome', 'Terminal portuário / razão social', { span:2, placeholder:'Ex.: Conexão Marítima – Serviços Logísticos S.A.' })}
+      ${procCampo('armazenagem.terminal.cnpj', 'CNPJ', { placeholder:'00.000.000/0000-00' })}
+      ${procCampo('armazenagem.terminal.contato', 'Contato')}
+      ${procCampo('armazenagem.terminal.email', 'E-mail', { type:'email' })}
+      ${procCampo('armazenagem.terminal.telefone', 'Telefone', { type:'tel' })}
+    </div>
+  </div>
+  <div class="card">
     <div class="section-title" style="margin-bottom:6px;"><span class="num">05</span> Armazenagem</div>
-    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Lance os custos de armazenagem de cada container (descrição, tarifa, moeda, taxa da moeda, tipo de cálculo e quantidade, como no Frete das cotações).
+    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Lance os custos de armazenagem de cada container (descrição, tarifa, moeda, taxa da moeda, tipo de cálculo e quantidade, como no Frete das cotações), com vencimento e pago.
       Entram no custo e são rateados entre os produtos pelo valor da mercadoria.</p>
     ${mostrar.map(g=>`
       <div class="proc-leg">
         <div class="proc-leg-topo"><div class="section-title" style="margin:0;">${esc(g.titulo)}</div></div>
-        ${procTabelaCustosHtml(pares(g.id), 'armazenagem.lancamentos', `arm:${g.id}`, 'Nenhum custo de armazenagem lançado.')}
+        ${procTabelaCustosHtml(pares(g.id), 'armazenagem.lancamentos', `arm:${g.id}`, 'Nenhum custo de armazenagem lançado.', true)}
         <div class="btn-row" style="margin:8px 0 0;"><button class="btn btn-ghost btn-sm" data-action="proc-add-armaz:${g.id}">${ICONS.plus} Adicionar custo de armazenagem</button></div>
       </div>`).join('')}
     <div class="proc-total-tributos">Total de armazenagem: <b data-pm-calc="armtot">${fmtBRL(somaLinhasProc(lancs))}</b></div>
   </div>`;
 }
 
-/* --- aba Outras Despesas (antigo Financeiro): custos extras do processo, nacionais ou internacionais --- */
+/* --- aba Outras Despesas (antigo Financeiro): custos extras do processo, nacionais ou internacionais, com o prestador a pagar --- */
 function procAbaFinanceiro(){
   const p = state.procDraft, ds = p.outrasDespesas.lancamentos;
+  const prestadores = [...new Set((state.clientes||[]).map(x=>nomeCadastro(x)).filter(Boolean))];
   const linhas = ds.map((d, n)=>{
     const b = `outrasDespesas.lancamentos.${n}`, real = (d.moeda||'BRL')==='BRL', nac = d.origem!=='internacional';
     return `<tr>
-      <td><input data-proc="${b}.descricao" value="${esc(d.descricao)}" placeholder="Ex.: Despachante, Siscomex, AFRMM"></td>
+      <td><input data-proc="${b}.descricao" value="${esc(d.descricao)}" placeholder="Ex.: Despachante, Siscomex, AFRMM" style="min-width:150px;"></td>
+      <td><input data-proc="${b}.prestador" list="dl-proc-prestadores" value="${esc(d.prestador)}" placeholder="Prestador de serviço" autocomplete="off" style="min-width:160px;"></td>
       <td><select data-proc="${b}.origem"><option value="nacional" ${nac?'selected':''}>Nacional</option><option value="internacional" ${nac?'':'selected'}>Internacional</option></select></td>
       <td><select data-proc="${b}.moeda">${optMoedasProc(d.moeda||'BRL')}</select></td>
       <td>${real ? '<span class="vazio">—</span>' : `<input data-proc="${b}.taxa" type="number" step="any" min="0" class="num-mono" value="${esc(d.taxa)}" placeholder="R$ por ${esc(d.moeda)}">`}</td>
@@ -3259,12 +3329,13 @@ function procAbaFinanceiro(){
     </tr>`;
   }).join('');
   return `<div class="card">
-    <div class="section-title" style="margin-bottom:6px;"><span class="num">08</span> Outras Despesas</div>
-    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Custos extras do processo, nacionais (em reais) ou internacionais (em moeda estrangeira, cada um com a sua taxa).
+    <datalist id="dl-proc-prestadores">${prestadores.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">09</span> Outras Despesas</div>
+    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Custos extras do processo, nacionais (em reais) ou internacionais (em moeda estrangeira, cada um com a sua taxa), com o prestador de serviço a pagar.
       Entram no custo e são rateados entre os produtos pelo valor da mercadoria. Lance aqui o custo real do Siscomex e do AFRMM.</p>
     <div class="table-wrap"><table class="proc-itens">
-      <thead><tr><th>Descrição</th><th>Origem</th><th>Moeda</th><th class="num-mono">Taxa da moeda</th><th class="num-mono">Valor</th><th class="num-mono">Total R$</th><th>Vencimento</th><th style="text-align:center;">Pago</th><th></th></tr></thead>
-      <tbody>${linhas || `<tr><td colspan="9" style="text-align:center; color:var(--ink-soft);">Nenhuma despesa lançada.</td></tr>`}</tbody>
+      <thead><tr><th>Descrição</th><th>Prestador de serviço (a pagar)</th><th>Origem</th><th>Moeda</th><th class="num-mono">Taxa da moeda</th><th class="num-mono">Valor</th><th class="num-mono">Total R$</th><th>Vencimento</th><th style="text-align:center;">Pago</th><th></th></tr></thead>
+      <tbody>${linhas || `<tr><td colspan="10" style="text-align:center; color:var(--ink-soft);">Nenhuma despesa lançada.</td></tr>`}</tbody>
     </table></div>
     <div class="btn-row" style="margin-top:12px;"><button class="btn btn-ghost btn-sm" data-action="proc-add-outra">${ICONS.plus} Adicionar despesa</button></div>
     <div class="proc-resumo" style="margin-top:16px;">
@@ -3276,13 +3347,19 @@ function procAbaFinanceiro(){
 }
 
 function procBasesHtml(nm){
-  const it = (id, rot, v, forte) => `<div class="stat-card"><div class="lbl">${rot}</div><div class="val" id="${id}" style="font-size:17px;${forte?' color:var(--navy);':''}">${fmtBRL(v)}</div></div>`;
-  return it('proc-b-vmle', 'VMLE (custo total dos produtos)', nm.vmle) + it('proc-b-frete', 'Frete internacional', nm.freteInternacional) + it('proc-b-seguro', 'Seguro internacional', nm.seguro)
-    + it('proc-b-vmld', 'VMLD (produto + frete + seguro)', nm.vmld) + it('proc-b-acres', 'Acréscimo', nm.acrescimo) + it('proc-b-va', 'Valor aduaneiro (VMLD + Acréscimo)', nm.valorAduaneiro, true);
+  const b = nm.bases, linhas = [
+    ['VMLE — soma dos produtos da Invoice', extTextoProc(b.vmleExt), nm.vmle, false],
+    ['Frete internacional', extTextoProc(b.freteExt), nm.freteInternacional, false],
+    ['Seguro internacional', extTextoProc(b.seguroExt), nm.seguro, false],
+    ['VMLD — VMLE + frete + seguro', extTextoProc(b.vmldExt), nm.vmld, true],
+    ['Acréscimo (soma-se ao VMLD)', '—', nm.acrescimo, false],
+    ['Valor aduaneiro (VMLD + Acréscimo)', '—', nm.valorAduaneiro, true] ];
+  return `<div class="table-wrap"><table><thead><tr><th>Base de cálculo</th><th class="num-mono">Moeda estrangeira</th><th class="num-mono">Em reais (R$)</th></tr></thead>
+    <tbody>${linhas.map(([r, e, v, f])=>`<tr><td>${f ? `<b>${esc(r)}</b>` : esc(r)}</td><td class="num-mono">${f ? `<b>${esc(e)}</b>` : esc(e)}</td><td class="num-mono">${f ? `<b>${fmtBRL(v)}</b>` : fmtBRL(v)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function procAbaDesembaraco(){
   const d = state.procDraft.desembaraco;
-  const tot = totaisProcesso(state.procDraft), nm = computeNumerarioProcesso(state.procDraft);
+  const tot = totaisProcesso(state.procDraft), nm = computeNumerarioProcesso(state.procDraft), moedasDia = moedasTaxaDiaProc(state.procDraft);
   const pagoHtml = k => `<label class="tpl-campo" style="margin-top:6px;"><input type="checkbox" data-proc="desembaraco.pagos.${k}" ${d.pagos && d.pagos[k] ? 'checked' : ''}> Pago</label>`;
   return `<div class="card">
     <div class="section-title" style="margin-bottom:16px;"><span class="num">06</span> Desembaraço aduaneiro</div>
@@ -3301,13 +3378,19 @@ function procAbaDesembaraco(){
     </div>
   </div>
   <div class="card">
-    <div class="section-title" style="margin-bottom:6px;"><span class="num">07</span> Valor aduaneiro (informativo)</div>
-    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Como na ${esc(d.tipoDeclaracao||'DUIMP')}: VMLE (custo total dos produtos) + frete + seguro = VMLD. O Acréscimo soma-se ao VMLD e forma o valor aduaneiro.
-      O frete vem dos custos de transporte. Estes valores são bases de cálculo dos tributos e não somam no custo.</p>
-    <div class="proc-resumo" id="proc-bases">${procBasesHtml(nm)}</div>
-    <div class="field-row grid-4" style="margin-top:14px;">
-      ${procCampo('desembaraco.seguro', 'Seguro internacional (R$)', { type:'number', step:'any', placeholder:'0,00' })}
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">07</span> Valor aduaneiro e taxa do dia</div>
+    <p class="hint" style="margin:0 0 14px; color:var(--ink-soft); font-size:12.5px;">Como na ${esc(d.tipoDeclaracao||'DUIMP')}: o VMLE é a soma dos produtos da Invoice (janela Produto) em moeda estrangeira; VMLE + frete + seguro = VMLD; o Acréscimo soma-se ao VMLD e forma o valor aduaneiro.
+      Tudo é convertido para reais pela <b>taxa de conversão do dia</b> informada abaixo. O fechamento de câmbio não entra nesta base: ele define o custo no Numerário.</p>
+    <div class="field-row grid-4">
+      ${moedasDia.length ? moedasDia.map(m=>procCampo('desembaraco.taxasDia.'+m, `Taxa de conversão do dia — ${esc(m)} (R$ por ${esc(m)})`, { type:'number', step:'any', placeholder:'Ex.: 5,0096' })).join('')
+        : '<div class="hint" style="font-size:12.5px; color:var(--ink-soft); grid-column:1/-1;">Mercadoria, frete e seguro em reais: não há conversão a informar.</div>'}
     </div>
+    <div class="field-row grid-4" style="margin-top:14px;">
+      ${procCampo('desembaraco.seguro', 'Seguro internacional (moeda estrangeira)', { type:'number', step:'any', placeholder:'0,00' })}
+      ${procCampo('desembaraco.seguroMoeda', 'Moeda do seguro', { options: opcoesLista(PROC_MOEDAS) })}
+      <div class="field"><label>Seguro convertido em reais</label><input readonly id="proc-seguro-brl" value="${fmtBRL(nm.seguro)}"><span class="hint">Usado na base de cálculo da importação</span></div>
+    </div>
+    <div id="proc-bases" style="margin-top:16px;">${procBasesHtml(nm)}</div>
   </div>
   <div class="card">
     <div class="section-title" style="margin-bottom:6px;"><span class="num">08</span> Tributos e bases (R$)</div>
@@ -3321,49 +3404,49 @@ function procAbaDesembaraco(){
   </div>`;
 }
 
-
 // --------- Numerário do processo ---------
-// Mesma regra da cotação Formal: Custo = Mercadoria (Invoice) + Frete (frete internacional + taxas de origem e de destino)
+// Mesma regra da cotação Formal: Custo = Mercadoria + Frete (frete internacional + taxas de origem e de destino, de todos os transportes)
 // + Armazenagem + Outras Despesas + tributos (II, IPI, PIS, COFINS e ICMS lançados no Desembaraço).
-// Rateio por produto: o frete vai pelo peso líquido (pelo valor, se não houver pesos); armazenagem, outras despesas e
-// tributos pelo valor da mercadoria em reais. Frete, Seguro, Acréscimo, Siscomex e AFRMM do Desembaraço compõem as bases
-// aduaneiras (VMLE, VMLD e valor aduaneiro) e NÃO somam no custo; o custo real deles entra em Outras Despesas.
+// A mercadoria entra no custo pelo FECHAMENTO DE CÂMBIO (parcelas × taxas). Rateio por produto: frete pelo peso líquido (pelo valor,
+// se não houver pesos); mercadoria, armazenagem, outras despesas e tributos pelo valor.
+// Base de cálculo da importação (VMLE, VMLD e valor aduaneiro): só o valor do produto na Invoice, convertido pela taxa do dia do
+// Desembaraço; não depende do fechamento de câmbio. Frete, Seguro, Acréscimo, Siscomex e AFRMM do Desembaraço NÃO somam no custo.
 function computeNumerarioProcesso(proc){
   const p = procNorm(proc), tr = p.desembaraco.tributos || {};
   const imposto = k => numProcSimples(tr[k]);
   const impostosTotal = PROC_TRIBUTOS_IMPOSTOS.reduce((s,k)=>s + imposto(k), 0);
   const creditoTotal = PROC_TRIBUTOS_CREDITO.reduce((s,k)=>s + imposto(k), 0);
   const avisos = [];
+  const bases = basesAduaneirasProc(p);
   const fornecedores = p.produto.fornecedores.map((fo, k)=>{
-    const M = fo.moeda || 'USD', tx = cambioFornecedorProc(p, fo), nome = fo.fornecedor || `Fornecedor ${k+1}`;
+    const M = fo.moeda || 'USD', cf = custoFornecedorProc(p, fo), nome = fo.fornecedor || `Fornecedor ${k+1}`, td = taxaDiaProc(p, M);
     const itens = (fo.itens||[]).filter(i=>i.produto || i.quantidade || i.valorUnit).map(i=>{
-      const qty = numProcSimples(i.quantidade), vu = numProcSimples(i.valorUnit), peso = numProcSimples(i.pesoLiquido);
-      return { fornecedor:nome, moeda:M, produto:i.produto, ncm:i.ncm, unidade:i.unidade, qty, vu, peso, totalExt:qty*vu, totalBRL:qty*vu*tx };
+      const qty = numProcSimples(i.quantidade), vu = numProcSimples(i.valorUnit), peso = numProcSimples(i.pesoLiquido), totalExt = qty*vu;
+      return { fornecedor:nome, moeda:M, produto:i.produto, ncm:i.ncm, unidade:i.unidade, qty, vu, peso, totalExt, totalBRL: cf.ext>0 ? totalExt/cf.ext*cf.brl : 0, baseBRL: totalExt*td };
     });
-    const totalExt = itens.reduce((s,i)=>s + i.totalExt, 0);
-    if(totalExt>0 && !tx) avisos.push(`Informe o fechamento de câmbio de ${nome} (botão "Fechamento de câmbio" na janela Produto).`);
-    return { nome, incoterm:fo.incoterm, moeda:M, cambio:tx, itens, totalExt, totalBRL:itens.reduce((s,i)=>s + i.totalBRL, 0) };
+    if(cf.ext>0 && !cf.brl) avisos.push(`Informe o fechamento de câmbio de ${nome} (botão "Fechamento de câmbio" na janela Produto).`);
+    if(cf.excesso) avisos.push(`As parcelas de câmbio de ${nome} excedem o valor da mercadoria.`);
+    return { nome, incoterm:fo.incoterm, moeda:M, cambio:cf.taxa, cf, fo, itens, totalExt:cf.ext, totalBRL:itens.reduce((s,i)=>s + i.totalBRL, 0) };
   }).filter(fo=>fo.itens.length);
   linhasSemTaxaProc(p).forEach(rot=>avisos.push(`Informe a taxa da moeda: ${rot}.`));
+  bases.faltamTaxaDia.forEach(m=>avisos.push(`Informe a taxa de conversão do dia de ${m} na janela Desembaraço (base de cálculo da importação).`));
   const itens = fornecedores.flatMap(fo=>fo.itens);
   const cx = totaisCustosProc(p);
-  const seguro = numProcSimples(p.desembaraco.seguro), acrescimo = imposto('acrescimo');
-  const mercadoriaBRL = fornecedores.reduce((s,fo)=>s + fo.totalBRL, 0);          // VMLE: custo total dos produtos
-  const vmld = mercadoriaBRL + cx.frete + seguro;                                  // VMLD: produto + frete + seguro
-  const valorAduaneiro = vmld + acrescimo;                                         // o Acréscimo soma-se ao VMLD
+  const acrescimo = imposto('acrescimo');
+  const mercadoriaBRL = fornecedores.reduce((s,fo)=>s + fo.totalBRL, 0);          // custo da mercadoria (fechamento de câmbio)
+  const valorAduaneiro = bases.vmld + acrescimo;                                   // o Acréscimo soma-se ao VMLD
   const despesasTotal = cx.transporte + cx.armazenagem + cx.outras;
   const custoSemCredito = mercadoriaBRL + despesasTotal + impostosTotal;
   const custoComCredito = custoSemCredito - creditoTotal;
   // Rateio por produto
-  const todosCambios = fornecedores.every(fo=>fo.cambio);
-  const base = i => todosCambios ? i.totalBRL : i.totalExt;
-  const somaBase = itens.reduce((s,i)=>s + base(i), 0), somaPeso = itens.reduce((s,i)=>s + i.peso, 0);
+  const somaBase = itens.reduce((s,i)=>s + i.totalBRL, 0) || itens.reduce((s,i)=>s + i.totalExt, 0), somaPeso = itens.reduce((s,i)=>s + i.peso, 0);
+  const usaBRL = itens.some(i=>i.totalBRL>0);
   const n = itens.length || 1;
   const linhas = itens.map(i=>{
-    const valorShare = somaBase>0 ? base(i)/somaBase : 1/n;
+    const valorShare = somaBase>0 ? (usaBRL ? i.totalBRL : i.totalExt)/somaBase : 1/n;
     const freteShare = somaPeso>0 ? i.peso/somaPeso : valorShare;
     const rateioFrete = freteShare*cx.transporte, rateioAcrescimo = valorShare*acrescimo;
-    const valorAduaneiroItem = i.totalBRL + freteShare*cx.frete + valorShare*seguro + rateioAcrescimo;
+    const valorAduaneiroItem = i.baseBRL + freteShare*bases.freteBRL + valorShare*bases.seguro + rateioAcrescimo;
     const rateioArmazenagem = valorShare*cx.armazenagem, rateioOutras = valorShare*cx.outras;
     const tributos = Object.fromEntries(PROC_TRIBUTOS_IMPOSTOS.map(k=>[k, valorShare*imposto(k)]));
     const credito = PROC_TRIBUTOS_CREDITO.reduce((s,k)=>s + tributos[k], 0);
@@ -3376,45 +3459,57 @@ function computeNumerarioProcesso(proc){
   const totais = Object.fromEntries(['qty','peso','totalBRL','rateioFrete','rateioAcrescimo','valorAduaneiro','rateioArmazenagem','rateioOutras',...PROC_TRIBUTOS_IMPOSTOS,'custoSemCredito','custoComCredito'].map(k=>[k, soma(k)]));
   const porMoeda = {}; fornecedores.forEach(fo=>{ porMoeda[fo.moeda] = (porMoeda[fo.moeda]||0) + fo.totalExt; });
   totais.totalExtTexto = Object.keys(porMoeda).length ? fmtPorMoeda(porMoeda) : '—';
-  return { p, fornecedores, mercadoriaBRL, vmle:mercadoriaBRL, vmld, seguro, acrescimo, valorAduaneiro, freteInternacional:cx.frete, custos:cx,
+  return { p, fornecedores, mercadoriaBRL, bases, vmle:bases.vmle, vmld:bases.vmld, seguro:bases.seguro, freteInternacional:bases.freteBRL, acrescimo, valorAduaneiro, custos:cx,
     imposto, impostosTotal, creditoTotal, despesasTotal, custoSemCredito, custoComCredito, linhas, totais, avisos };
 }
 const fmtTaxaProc = v => v ? fmtNum(v, 4) : '—';
 // Linhas do Resumo das Despesas (tela e PDF): { label, ext (moeda estrangeira), brl, taxa, indent }
 function resumoNumerarioProc(nm){
   const p = nm.p, linhas = [];
-  nm.fornecedores.forEach(fo=>linhas.push({ label:`Mercadoria — ${fo.nome} (${fo.incoterm||'—'})`, ext:fmtMoeda(fo.totalExt, fo.moeda), brl:fmtBRL(fo.totalBRL), taxa:fmtTaxaProc(fo.cambio) }));
-  if(!nm.fornecedores.length) linhas.push({ label:'Mercadoria', ext:'—', brl:fmtBRL(0), taxa:'' });
   const estrangeira = l => (l.moeda||'BRL')!=='BRL';
+  nm.fornecedores.forEach(fo=>{
+    const cf = fo.cf;
+    if(cf.parcelas.length){   // fechamento de câmbio: cada parcela com a sua taxa
+      cf.parcelas.forEach((pa, n)=>linhas.push({ label:`Mercadoria — ${fo.nome} · Parcela ${n+1}${pa.descricao ? ' (' + pa.descricao + ')' : ''}${pa.banco ? ' · ' + pa.banco : ''}${pa.contrato ? ' · contrato ' + pa.contrato : ''}`,
+        ext:fmtMoeda(numProcSimples(pa.valor), pa.moeda||fo.moeda), brl:fmtBRL(numProcSimples(pa.valor)*numProcSimples(pa.taxa)), taxa:fmtTaxaProc(numProcSimples(pa.taxa)), indent:true }));
+      if(cf.saldoExt>0.005) linhas.push({ label:`Mercadoria — ${fo.nome} · Saldo sem fechamento (taxa média)`, ext:fmtMoeda(cf.saldoExt, fo.moeda), brl:fmtBRL(cf.saldoBRL), taxa:fmtTaxaProc(cf.media), indent:true });
+    }else linhas.push({ label:`Mercadoria — ${fo.nome} (${fo.incoterm||'—'})`, ext:fmtMoeda(fo.totalExt, fo.moeda), brl:fmtBRL(fo.totalBRL), taxa:fmtTaxaProc(fo.cambio) });
+  });
+  if(!nm.fornecedores.length) linhas.push({ label:'Mercadoria', ext:'—', brl:fmtBRL(0), taxa:'' });
   const linha = (rot, l) => ({ label:`${rot} — ${l.descricao || '(sem descrição)'}`, ext: estrangeira(l) ? fmtMoeda(numProcSimples(l.tarifa)*numProcSimples(l.quantidade), l.moeda) : '',
     brl:fmtBRL(totalLinhaProc(l)), taxa: estrangeira(l) ? fmtTaxaProc(numProcSimples(l.taxa)) : '', indent:true });
-  p.custosTransporte.forEach(c=>{
-    c.frete.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha(PROC_TIPOS_FRETE[c.tipo] || 'Frete internacional', l)));
-    c.taxasOrigem.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha('Taxas de Origem', l)));
-    c.taxasDestino.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha('Taxas de Destino', l)));
+  const ts = todosTransportesProc(p);
+  ts.forEach((t, k)=>{
+    const pre = ts.length>1 ? `Transporte ${k+1} · ` : '';
+    t.custos.frete.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha(pre + (PROC_TIPOS_FRETE[t.modal] || 'Frete internacional'), l)));
+    t.custos.taxasOrigem.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha(pre + 'Taxas de Origem', l)));
+    t.custos.taxasDestino.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha(pre + 'Taxas de Destino', l)));
   });
-  p.armazenagem.lancamentos.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha('Armazenagem · ' + nomeContainerProc(p, l.containerId), l)));
-  p.outrasDespesas.lancamentos.filter(linhaPreenchidaProc).forEach(d=>linhas.push({ label:`Outras Despesas · ${d.origem==='internacional' ? 'Internacional' : 'Nacional'} — ${d.descricao || '(sem descrição)'}`,
+  const term = (p.armazenagem.terminal||{}).nome;
+  p.armazenagem.lancamentos.filter(linhaPreenchidaProc).forEach(l=>linhas.push(linha('Armazenagem · ' + nomeContainerProc(p, l.containerId) + (term ? ' · ' + term : ''), l)));
+  p.outrasDespesas.lancamentos.filter(linhaPreenchidaProc).forEach(d=>linhas.push({ label:`Outras Despesas · ${d.origem==='internacional' ? 'Internacional' : 'Nacional'} — ${d.descricao || '(sem descrição)'}${d.prestador ? ' · ' + d.prestador : ''}`,
     ext: estrangeira(d) ? fmtMoeda(numProcSimples(d.valor), d.moeda) : '', brl:fmtBRL(totalDespesaProc(d)), taxa: estrangeira(d) ? fmtTaxaProc(numProcSimples(d.taxa)) : '', indent:true }));
   PROC_TRIBUTOS_IMPOSTOS.forEach(k=>linhas.push({ label:PROC_TRIBUTOS.find(([x])=>x===k)[1], ext:'', brl:fmtBRL(nm.imposto(k)), taxa:'' }));
   return linhas;
 }
-// Bases do Desembaraço (informativas, não somam no custo)
+// Bases do Desembaraço (informativas, não somam no custo): [rótulo, moeda estrangeira, R$]
+const extTextoProc = o => Object.keys(o).length ? fmtPorMoeda(o) : '—';
 function basesNumerarioProc(nm){
+  const b = nm.bases;
   return [
-    ['VMLE — valor da mercadoria no local de embarque (custo total dos produtos)', nm.vmle],
-    ['Frete internacional', nm.freteInternacional], ['Seguro internacional', nm.seguro],
-    ['VMLD — valor da mercadoria no local de destino (produto + frete + seguro)', nm.vmld],
-    ['Acréscimo (soma-se ao VMLD)', nm.acrescimo], ['Valor aduaneiro (VMLD + Acréscimo)', nm.valorAduaneiro],
-    ['Taxa Siscomex', nm.imposto('siscomex')], ['AFRMM', nm.imposto('afrmm')],
+    ['VMLE — valor da mercadoria no local de embarque (soma dos produtos da Invoice)', extTextoProc(b.vmleExt), nm.vmle],
+    ['Frete internacional', extTextoProc(b.freteExt), nm.freteInternacional], ['Seguro internacional', extTextoProc(b.seguroExt), nm.seguro],
+    ['VMLD — valor da mercadoria no local de destino (VMLE + frete + seguro)', extTextoProc(b.vmldExt), nm.vmld],
+    ['Acréscimo (soma-se ao VMLD)', '', nm.acrescimo], ['Valor aduaneiro (VMLD + Acréscimo)', '', nm.valorAduaneiro],
+    ['Taxa Siscomex', '', nm.imposto('siscomex')], ['AFRMM', '', nm.imposto('afrmm')],
   ];
 }
 
 function procAbaNumerario(){
   const nm = computeNumerarioProcesso(state.procDraft), p = nm.p;
   const resumo = resumoNumerarioProc(nm);
-  const bases = basesNumerarioProc(nm).map(([rot, v], i)=>{ const forte = rot.startsWith('Valor aduaneiro') || rot.startsWith('VMLD');
-    return `<tr><td>${forte ? `<b>${esc(rot)}</b>` : esc(rot)}</td><td class="num-mono">${forte ? `<b>${fmtBRL(v)}</b>` : fmtBRL(v)}</td></tr>`; }).join('');
+  const bases = basesNumerarioProc(nm).map(([rot, ext, v])=>{ const forte = rot.startsWith('Valor aduaneiro') || rot.startsWith('VMLD');
+    return `<tr><td>${forte ? `<b>${esc(rot)}</b>` : esc(rot)}</td><td class="num-mono">${forte ? `<b>${esc(ext)}</b>` : esc(ext)}</td><td class="num-mono">${forte ? `<b>${fmtBRL(v)}</b>` : fmtBRL(v)}</td></tr>`; }).join('');
   const rows = nm.linhas.length ? nm.linhas.map(l=>`<tr>
       <td>${esc(l.fornecedor)}</td><td>${esc(l.produto)||'—'}</td><td>${esc(l.ncm)||'—'}</td>
       <td class="num-mono">${fmtNum(l.qty)}</td><td class="num-mono">${fmtMoeda(l.vu, l.moeda)}</td><td class="num-mono">${fmtNum(l.peso)} kg</td>
@@ -3428,8 +3523,8 @@ function procAbaNumerario(){
   const T = nm.totais;
   const obs = [p.cliente.observacoes, p.desembaraco.observacoes].filter(Boolean);
   return `<div class="card">
-    <div class="section-title" style="margin-bottom:6px;"><span class="num">09</span> Resumo das despesas</div>
-    <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 14px;">Leitura automática das janelas Produto, Transporte, Armazenagem, Desembaraço e Outras Despesas. Os valores mudam assim que essas janelas são alteradas.</p>
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">10</span> Resumo das despesas</div>
+    <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 14px;">Leitura automática das janelas Produto (fechamento de câmbio), Transporte, Armazenagem, Desembaraço e Outras Despesas. Os valores mudam assim que essas janelas são alteradas.</p>
     ${nm.avisos.length ? `<div class="alert alert-warn" style="margin-bottom:14px;">${ICONS.warn}<div>${nm.avisos.map(esc).join('<br>')}</div></div>` : ''}
     <div class="table-wrap" style="margin-bottom:8px;">
       ${resumoTabelaHtml(resumo, 'CUSTO TOTAL DA IMPORTAÇÃO (s/ créditos)', fmtBRL(nm.custoSemCredito))}
@@ -3442,12 +3537,12 @@ function procAbaNumerario(){
     </div>
   </div>
   <div class="card">
-    <div class="section-title" style="margin-bottom:6px;"><span class="num">10</span> Bases do Desembaraço (informativo)</div>
-    <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 12px;">Compõem o valor aduaneiro e os tributos; não somam no custo. O custo real do Siscomex e do AFRMM entra em Outras Despesas.</p>
-    <div class="table-wrap"><table><tbody>${bases}</tbody></table></div>
+    <div class="section-title" style="margin-bottom:6px;"><span class="num">11</span> Bases do Desembaraço (informativo)</div>
+    <p class="hint" style="color:var(--ink-soft); font-size:12px; margin:0 0 12px;">Calculadas só com o valor dos produtos da Invoice, pela taxa de conversão do dia (Desembaraço); não usam o fechamento de câmbio e não somam no custo. O custo real do Siscomex e do AFRMM entra em Outras Despesas.</p>
+    <div class="table-wrap"><table><thead><tr><th>Base</th><th class="num-mono">Moeda estrangeira</th><th class="num-mono">Em reais (R$)</th></tr></thead><tbody>${bases}</tbody></table></div>
   </div>
   <div class="card">
-    <div class="section-title" style="margin-bottom:12px;"><span class="num">11</span> Rateio dos custos por produto</div>
+    <div class="section-title" style="margin-bottom:12px;"><span class="num">12</span> Rateio dos custos por produto</div>
     <div class="table-wrap" style="margin-bottom:10px;">
       <table style="min-width:2000px;">
         <thead>
@@ -3479,7 +3574,7 @@ function procAbaNumerario(){
     </p>
   </div>
   ${obs.length ? `<div class="card">
-    <div class="section-title" style="margin-bottom:12px;"><span class="num">12</span> Observações</div>
+    <div class="section-title" style="margin-bottom:12px;"><span class="num">13</span> Observações</div>
     <div style="white-space:pre-wrap; font-size:13.5px; line-height:1.55; color:var(--ink);">${obs.map(esc).join('\n\n')}</div>
   </div>` : ''}
   <div class="btn-row"><button class="btn btn-ghost" data-action="proc-numerario-pdf">${ICONS.download} Baixar PDF do Numerário</button></div>`;
@@ -3512,9 +3607,9 @@ async function baixarNumerarioProcessoPdf(){
     columnStyles:{ 1:{ halign:'right', cellWidth:100 }, 2:{ halign:'right', cellWidth:100 }, 3:{ halign:'right', cellWidth:70 } } });
   y = doc.lastAutoTable.finalY + 18;
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(75,90,104);
-  doc.text('Bases do Desembaraço (informativo — não somam no custo)', 28, y); y += 8;
-  doc.autoTable({ startY:y, head:[['Base','Valor R$']], body:basesNumerarioProc(nm).map(([r,v])=>[r, fmtBRL(v)]),
-    theme:'grid', margin:{ left:28, right:28 }, tableWidth:460, styles:{ fontSize:8, cellPadding:3 }, headStyles:cab, columnStyles:{ 1:{ halign:'right', cellWidth:100 } } });
+  doc.text('Bases do Desembaraço (informativo — Invoice pela taxa do dia; não somam no custo)', 28, y); y += 8;
+  doc.autoTable({ startY:y, head:[['Base','Moeda estrangeira','Valor R$']], body:basesNumerarioProc(nm).map(([r,e,v])=>[r, e, fmtBRL(v)]),
+    theme:'grid', margin:{ left:28, right:28 }, tableWidth:560, styles:{ fontSize:8, cellPadding:3 }, headStyles:cab, columnStyles:{ 1:{ halign:'right', cellWidth:110 }, 2:{ halign:'right', cellWidth:100 } } });
   y = doc.lastAutoTable.finalY + 18;
   const T = nm.totais, impostos = PROC_TRIBUTOS_IMPOSTOS.map(k=>PROC_TRIBUTOS.find(([x])=>x===k)[1]);
   doc.autoTable({ startY:y,
@@ -3539,7 +3634,7 @@ function atualizarTotaisProcesso(){
   const tot = totaisProcesso(p);
   const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
   sincronizarContainersProc(p);
-  const cx = document.getElementById('proc-cont-totais'); if(cx) cx.innerHTML = procContainersTotaisHtml(totaisContainersProc(p.transporte));
+  todosTransportesProc(p).forEach(t=>{ const cx = document.getElementById('proc-cont-totais-' + chaveTransporteProc(p, t)); if(cx) cx.innerHTML = procContainersTotaisHtml(totaisContainersProc(t)); });
   p.produto.fornecedores.forEach((fo, k)=>{
     const M = fo.moeda || 'USD', sub = totaisFornecedorProc(fo);
     fo.itens.forEach((it, n)=>{
@@ -3553,14 +3648,13 @@ function atualizarTotaisProcesso(){
   set('proc-total-peso-geral', tot.pesoLiq.toLocaleString('pt-BR') + ' kg');
   set('proc-total-tributos', fmtMoeda(tot.tributos, 'BRL'));
   const nm = computeNumerarioProcesso(p);
-  set('proc-b-vmle', fmtBRL(nm.vmle)); set('proc-b-frete', fmtBRL(nm.freteInternacional)); set('proc-b-seguro', fmtBRL(nm.seguro));
-  set('proc-b-vmld', fmtBRL(nm.vmld)); set('proc-b-acres', fmtBRL(nm.acrescimo)); set('proc-b-va', fmtBRL(nm.valorAduaneiro));
-  set('proc-resumo-transporte', resumoTransporteTxt());
+  const bz = document.getElementById('proc-bases'); if(bz) bz.innerHTML = procBasesHtml(nm);
+  const sg = document.getElementById('proc-seguro-brl'); if(sg) sg.value = fmtBRL(nm.seguro);
   atualizarModalProcesso();
 }
 
 // Campos que mudam a estrutura da janela (redesenha) — o resto só guarda o valor.
-const PROC_REDESENHA = /^(transporte\.(modal|tipoCarga)|desembaraco\.(liNecessaria|tipoDeclaracao)|financeiro\.(freteMoeda|seguroMoeda)|produto\.fornecedores\.\d+\.moeda|produto\.fornecedores\.\d+\.fechamento\.parcelas\.\d+\.moeda|custosTransporte\.\d+\.tipo|custosTransporte\.\d+\.(frete|taxasOrigem|taxasDestino)\.\d+\.moeda|armazenagem\.lancamentos\.\d+\.moeda|outrasDespesas\.lancamentos\.\d+\.(origem|moeda)|status)$/;
+const PROC_REDESENHA = /^(transporte\.(modal|tipoCarga)|transportes\.\d+\.(modal|tipoCarga)|desembaraco\.(liNecessaria|tipoDeclaracao|seguroMoeda)|financeiro\.(freteMoeda|seguroMoeda)|produto\.fornecedores\.\d+\.moeda|produto\.fornecedores\.\d+\.fechamento\.parcelas\.\d+\.moeda|(transporte|transportes\.\d+)\.custos\.(frete|taxasOrigem|taxasDestino)\.\d+\.moeda|armazenagem\.lancamentos\.\d+\.moeda|outrasDespesas\.lancamentos\.\d+\.(origem|moeda)|status)$/;
 function onProcessoInput(el, evento){
   const path = el.getAttribute('data-proc');
   if(!path || !state.procDraft) return false;
@@ -3660,7 +3754,7 @@ async function duplicarProcesso(id){
   p.id = 'PRC-' + String(seq).padStart(4,'0'); p.seq = seq; p.status = 'aberto';
   p.criadoEm = agora; p.atualizadoEm = agora; p.criadoPor = usuarioAtual.nome || usuarioAtual.email; delete p.atualizadoPor;
   p.cliente.dataAbertura = hojeISO();
-  Object.assign(p.transporte, { booking:'', conhecimentoMaster:'', conhecimentoHouse:'', navioVoo:'', etd:'', eta:'', chegada:'' });
+  todosTransportesProc(p).forEach(t=>Object.assign(t, { booking:'', conhecimentoMaster:'', conhecimentoHouse:'', navioVoo:'', etd:'', eta:'', chegada:'' }));
   Object.assign(p.desembaraco, { numeroDeclaracao:'', dataRegistro:'', canal:'', dataDesembaraco:'', numeroLi:'' });
   p.financeiro.contratoCambio = '';
   p.financeiro.parcelas = (p.financeiro.parcelas||[]).map(x=>({ ...x, id:uid(), vencimento:'', pago:false }));
@@ -3713,18 +3807,19 @@ function acaoProcesso(cmd, a1, a2){
     case 'proc-add-item': { const fo = p.produto.fornecedores.find(x=>x.id===a1) || p.produto.fornecedores[0]; fo.itens.push(novoItemProcesso()); saveDraftProcesso(); renderApp(); return true; }
     case 'proc-rm-item': { const fo = p.produto.fornecedores.find(x=>x.id===a1); if(fo) fo.itens = fo.itens.filter(x=>x.id!==a2); saveDraftProcesso(); renderApp(); return true; }
     case 'proc-add-container': {
-      const cs = p.transporte.containers, ult = cs[cs.length-1];
+      const tt = transporteDaChaveProc(p, a1); if(!tt) return true;
+      const cs = tt.t.containers, ult = cs[cs.length-1];
       cs.push(novoContainerProcesso({ tipo: ult ? ult.tipo : "40' HC" }));
       sincronizarContainersProc(p); saveDraftProcesso(); renderApp();
-      const ls = document.querySelectorAll('.proc-containers tbody tr'); if(ls.length){ const inp = ls[ls.length-1].querySelector('input'); if(inp) inp.focus(); }
       return true;
     }
     case 'proc-rm-container': {
-      const cs = p.transporte.containers, c = cs.find(x=>x.id===a1);
+      const tt = transporteDaChaveProc(p, a1); if(!tt) return true;
+      const cs = tt.t.containers, c = cs.find(x=>x.id===a2);
       if(!c || cs.length<2) return true;
       const temDados = c.numero || c.pesoBruto || c.pesoLiquido || c.cubagem || c.lacres;
-      if(temDados && !requestDelete('cont', a1)) return true;
-      p.transporte.containers = cs.filter(x=>x.id!==a1); sincronizarContainersProc(p); saveDraftProcesso(); renderApp(); return true;
+      if(temDados && !requestDelete('cont', a2)) return true;
+      tt.t.containers = cs.filter(x=>x.id!==a2); sincronizarContainersProc(p); saveDraftProcesso(); renderApp(); return true;
     }
     case 'proc-modal-abrir': state.procModal = { tipo:a1, id:a2 }; renderApp(); return true;
     case 'proc-modal-fechar': state.procModal = null; renderApp(); return true;
@@ -3732,12 +3827,12 @@ function acaoProcesso(cmd, a1, a2){
     case 'proc-add-parcela-cambio': { const fo = p.produto.fornecedores.find(x=>x.id===a1); if(fo) fo.fechamento.parcelas.push(novaParcelaCambioProc({ moeda:fo.moeda||'USD' })); saveDraftProcesso(); renderApp(); return true; }
     case 'proc-rm-parcela-cambio': { const fo = p.produto.fornecedores.find(x=>x.id===a1); if(fo) fo.fechamento.parcelas = fo.fechamento.parcelas.filter(x=>x.id!==a2); saveDraftProcesso(); renderApp(); return true; }
     case 'proc-add-transporte': {
-      p.custosTransporte.push(novoCustoTransporteProc({ tipo: ({ aereo:'aereo', rodoviario:'rodoviario' })[p.transporte.modal] || 'maritimo' }));
-      state.procModal = { tipo:'transporte', id:'' }; saveDraftProcesso(); renderApp(); return true;
+      p.transportes.push(novoTransporteExtraProc({ modal:'maritimo' }));
+      saveDraftProcesso(); renderApp(); setTimeout(()=>window.scrollTo({ top:document.body.scrollHeight, behavior:'smooth' }), 50); return true;
     }
     case 'proc-rm-transporte': {
-      if(!requestDelete('tr', a1)) return true;
-      p.custosTransporte = p.custosTransporte.filter(x=>x.id!==a1); saveDraftProcesso(); renderApp(); return true;
+      if(!requestDelete('transp', a1)) return true;
+      p.transportes = p.transportes.filter(x=>x.id!==a1); state.procModal = null; saveDraftProcesso(); renderApp(); return true;
     }
     case 'proc-add-linha': { const ls = getPath(p, a1); if(Array.isArray(ls)) ls.push(novaLinhaCustoProc({ moeda: a1.startsWith('armazenagem') ? 'BRL' : 'USD' })); saveDraftProcesso(); renderApp(); return true; }
     case 'proc-rm-linha': { const ls = getPath(p, a1); if(Array.isArray(ls)){ const i = ls.findIndex(x=>x.id===a2); if(i>=0) ls.splice(i, 1); } saveDraftProcesso(); renderApp(); return true; }
@@ -5199,14 +5294,15 @@ function containersDosProcessos(){
   const out = [];
   (state.processosIndex||[]).forEach(raw=>{
     let p; try{ p = normalizarProcesso(raw); }catch(e){ return; }
-    const t = p.transporte || {};
-    if(t.modal!=='maritimo') return;
-    (t.containers||[]).forEach(c=>{
-      const numero = String(c.numero||'').trim();
-      if(!numero) return;
-      out.push({ processoId:p.id, containerId:c.id, container:numero.toUpperCase(), tipo:c.tipo || "40' HC", etd:t.etd||'', eta:t.eta||'', chegada:t.chegada||'',
-        paisOrigem:paisesDoProcesso(p), portoOrigem:t.origem||'', portoDestino:t.destino||'', freeTime:t.freeTime||'',
-        referenciaCliente:(p.cliente||{}).referenciaCliente||'', cliente:(p.cliente||{}).nome||'' });
+    todosTransportesProc(p).forEach(t=>{
+      if(!t || t.modal!=='maritimo') return;
+      (t.containers||[]).forEach(c=>{
+        const numero = String(c.numero||'').trim();
+        if(!numero) return;
+        out.push({ processoId:p.id, containerId:c.id, container:numero.toUpperCase(), tipo:c.tipo || "40' HC", etd:t.etd||'', eta:t.eta||'', chegada:t.chegada||'',
+          paisOrigem:paisesDoProcesso(p), portoOrigem:t.origem||'', portoDestino:t.destino||'', freeTime:t.freeTime||'',
+          referenciaCliente:(p.cliente||{}).referenciaCliente||'', cliente:(p.cliente||{}).nome||'' });
+      });
     });
   });
   return out;
@@ -10587,7 +10683,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.22 · custos do processo (câmbio, transporte, armazenagem, outras despesas) · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.23 · custos do processo (ajustes) · build 15/10/2026</span></div>
   `;
 }
 
