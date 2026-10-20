@@ -876,7 +876,9 @@ tbody tr:hover{background:#F9FAFD;}
 .fin-nada{display:inline-flex; align-items:center; cursor:default; margin-right:6px;} .fin-nada input{margin:0;}
 .lm-val input, .lm-val select{width:100%; padding:3px 6px; font-size:12.5px; height:26px; border:1px solid #DFE3EC; border-radius:6px; background:#fff;}
 .lm-val .tpl-campo{margin:0; font-weight:700;}
-.fin-massa{background:#fff; border:1px solid #C9D5E8; border-left:4px solid var(--amber); border-radius:12px; padding:12px 16px; margin:0 0 12px;}
+.fin-massa{background:#fff; border:1px solid #C9D5E8; border-left:4px solid var(--amber); border-radius:12px; padding:12px 16px; margin:12px 0 0; position:sticky; bottom:12px; z-index:15; box-shadow:0 10px 28px rgba(23,58,94,.20);}
+.fin-massa-topo select{max-width:280px; padding:5px 8px; font-size:12.5px; border:1px solid #DFE3EC; border-radius:8px;}
+.fin-nada input:disabled{opacity:.35; cursor:not-allowed;}
 .fin-massa-topo{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
 .fin-massa-campos{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;} .fin-massa-campos .field{min-width:150px; margin:0;}
 </style>
@@ -1228,7 +1230,7 @@ const PERMISSAO_DA_ACAO = {
   'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-numerario-pdf':['processos','ver'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 
-  'go:financeiro':['financeiro','ver'], 'fin-filtrar':['financeiro','ver'], 'fin-limpar':['financeiro','ver'], 'fin-editar':['financeiro','editar'], 'fin-salvar':['financeiro','editar'], 'fin-cancelar':['financeiro','ver'], 'fin-massa-aplicar':['financeiro','editar'], 'fin-sel-limpar':['financeiro','ver'],
+  'go:financeiro':['financeiro','ver'], 'fin-filtrar':['financeiro','ver'], 'fin-limpar':['financeiro','ver'], 'fin-editar':['financeiro','editar'], 'fin-massa-modo':['financeiro','editar'], 'fin-sel-processo':['financeiro','editar'], 'fin-salvar':['financeiro','editar'], 'fin-cancelar':['financeiro','ver'], 'fin-massa-aplicar':['financeiro','editar'], 'fin-sel-limpar':['financeiro','ver'],
   'go:monitoramento':['monitoramento','ver'], 'go:monitoramentoCusto':['monitoramento','ver'],
   'mon-add':['monitoramento','criar'], 'mon-importar':['monitoramento','criar'],
   'mon-atualizar':['monitoramento','editar'], 'mon-atualizar-um':['monitoramento','editar'], 'mon-excluir':['monitoramento','editar'],
@@ -3589,6 +3591,10 @@ function finLerEdicao(){
   const pg = lerEl('pago'); if(pg) m.pago = !!pg.checked;
   return m;
 }
+// Seleção para alteração em massa: só vale para custos do MESMO processo
+const finProcDe = chave => String(chave).split('|')[0];
+function finProcSelecionado(){ const k = Object.keys(state.finSel||{})[0]; return k ? finProcDe(k) : ''; }
+function finRender(){ const y = window.scrollY || 0; renderApp(); try{ window.scrollTo(0, y); }catch(e){} }
 async function acaoFin(cmd, a1){
   if(cmd==='fin-nada') return true;
   if(cmd==='fin-filtrar'){
@@ -3596,7 +3602,9 @@ async function acaoFin(cmd, a1){
     state.finFiltro = { busca:v('busca'), situacao:v('situacao'), de:v('de'), ate:v('ate') }; renderApp(); return true;
   }
   if(cmd==='fin-limpar'){ state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; renderApp(); return true; }
-  if(cmd==='fin-sel-limpar'){ state.finSel = {}; renderApp(); return true; }
+  if(cmd==='fin-massa-modo'){ if(!podeEditarFin()) return true; state.finMassa = !state.finMassa; state.finSel = {}; state.finEdit = null; renderApp(); return true; }
+  if(cmd==='fin-sel-limpar'){ state.finSel = {}; finRender(); return true; }
+  if(cmd==='fin-sel-processo'){ if(!podeEditarFin()) return true; finSelecionarProcesso(a1); return true; }
   if(cmd==='fin-editar'){ if(!podeEditarFin()) return true; state.finEdit = a1; renderApp(); return true; }
   if(cmd==='fin-cancelar'){ state.finEdit = null; renderApp(); return true; }
   if(cmd==='fin-salvar'){
@@ -3607,39 +3615,54 @@ async function acaoFin(cmd, a1){
     if(m.taxa!==undefined && m.taxa!=='' && !(m.taxa>0)){ toast('Informe uma taxa válida (maior que zero).'); return true; }
     const n = await finSalvar([{ procId:l.procId, fonte:l.fonte, mudancas:m }]);
     if(n<0) return true;
-    state.finEdit = null; toast(n ? `Custo atualizado no processo ${l.procId}.` : 'Nenhuma alteração.', n ? 'ok' : undefined); renderApp(); return true;
+    state.finEdit = null; toast(n ? `Custo atualizado no processo ${l.procId}.` : 'Nenhuma alteração.', n ? 'ok' : undefined); finRender(); return true;
   }
   if(cmd==='fin-massa-aplicar'){ finAplicarMassa(); return true; }
   return false;
 }
+// Seleciona todos os custos (do filtro atual) de um processo
+function finSelecionarProcesso(procId){
+  const atual = finProcSelecionado();
+  if(atual && atual!==procId){ toast(`Só é possível alterar em massa custos do mesmo processo. Limpe a seleção de ${atual} para escolher ${procId}.`); finRender(); return; }
+  financeiroFiltradas().filter(l=>l.procId===procId).forEach(l=>{ state.finSel[l.chave] = true; });
+  finRender();
+}
 // Marcar/desmarcar como pago direto na lista, e seleção de linhas
 async function onFinInput(el){
-  if(el.hasAttribute('data-fin-sel')){ const k = el.getAttribute('data-fin-sel'); if(el.checked) state.finSel[k] = true; else delete state.finSel[k]; renderApp(); return; }
-  if(el.hasAttribute('data-fin-selall')){
-    state.finSel = {}; if(el.checked) financeiroFiltradas().forEach(l=>{ state.finSel[l.chave] = true; }); renderApp(); return;
+  if(el.hasAttribute('data-fin-sel')){
+    if(!podeEditarFin() || !state.finMassa) return;
+    const k = el.getAttribute('data-fin-sel'), atual = finProcSelecionado();
+    if(el.checked){
+      if(atual && atual!==finProcDe(k)){ toast(`Só é possível alterar em massa custos do mesmo processo (${atual}).`); finRender(); return; }
+      state.finSel[k] = true;
+    }else delete state.finSel[k];
+    finRender(); return;
   }
+  if(el.hasAttribute('data-fin-proc-sel')){ if(el.value) finSelecionarProcesso(el.value); return; }
   if(el.hasAttribute('data-fin-pago')){
     if(!podeEditarFin()) return;
     const l = financeiroLinhasTodas().find(x=>x.chave===el.getAttribute('data-fin-pago')); if(!l) return;
     const n = await finSalvar([{ procId:l.procId, fonte:l.fonte, mudancas:{ pago:!!el.checked } }]);
     if(n>=0) toast(el.checked ? 'Custo marcado como pago.' : 'Custo marcado como em aberto.', 'ok');
-    renderApp();
+    finRender();
   }
 }
-// Alteração em massa: aplica o que foi preenchido a todas as linhas selecionadas
+// Alteração em massa: aplica o que foi preenchido a todas as linhas selecionadas (do mesmo processo)
 async function finAplicarMassa(){
   if(!podeEditarFin()) return;
   const el = k => document.querySelector(`[data-fin-massa="${k}"]`), val = k => el(k) ? el(k).value : '';
+  const sel = financeiroLinhasTodas().filter(l=>state.finSel[l.chave]);
+  if(!sel.length) return toast('Selecione os custos que serão alterados.');
+  const procs = new Set(sel.map(l=>l.procId));
+  if(procs.size>1) return toast('Só é possível alterar em massa custos do mesmo processo. Deixe selecionados apenas os de um processo.');
   const m = {}; const pg = val('pago'); if(pg==='pago') m.pago = true; else if(pg==='aberto') m.pago = false;
   if(val('vencimento')) m.vencimento = val('vencimento');
   const adiar = Number(val('adiar')) || 0;
   if(val('moeda')) m.moeda = val('moeda');
   if(val('taxa')!==''){ const t = Number(String(val('taxa')).replace(',', '.')); if(!(t>0)) return toast('Informe uma taxa válida (maior que zero).'); m.taxa = t; }
   if(m.pago===undefined && !m.vencimento && !adiar && !m.moeda && m.taxa===undefined) return toast('Preencha pelo menos um campo para alterar.');
-  const sel = financeiroLinhasTodas().filter(l=>state.finSel[l.chave]);
-  if(!sel.length) return toast('Selecione os custos que serão alterados.');
-  const procs = new Set(sel.map(l=>l.procId));
-  if(!window.confirm(`Aplicar a alteração a ${sel.length} custo${sel.length===1?'':'s'} de ${procs.size} processo${procs.size===1?'':'s'}?`)) return;
+  const procId = [...procs][0];
+  if(!window.confirm(`Aplicar a alteração a ${sel.length} custo${sel.length===1?'':'s'} do processo ${procId}?`)) return;
   const alteracoes = sel.map(l=>{
     const mud = { ...m };
     if(l.fonte.kind==='trib'){ delete mud.moeda; delete mud.taxa; }
@@ -3648,15 +3671,16 @@ async function finAplicarMassa(){
   });
   const n = await finSalvar(alteracoes);
   if(n<0) return;
-  state.finSel = {}; toast(`${n} custo${n===1?'':'s'} atualizado${n===1?'':'s'} em ${procs.size} processo${procs.size===1?'':'s'}.`, 'ok'); renderApp();
+  state.finSel = {}; toast(`${n} custo${n===1?'':'s'} atualizado${n===1?'':'s'} no processo ${procId}.`, 'ok'); finRender();
 }
 
 /* --- tela --- */
 function financeiroLinhaHtml(l, editavel){
   const estr = l.moeda!=='BRL', editando = state.finEdit===l.chave, trib = l.fonte.kind==='trib';
   const vazio = '<span class="vazio">—</span>', nada = h => `<label data-action="fin-nada" class="fin-nada">${h}</label>`;
-  const sel = !!state.finSel[l.chave];
-  const idHtml = (editavel ? nada(`<input type="checkbox" data-fin-sel="${esc(l.chave)}" ${sel ? 'checked' : ''} title="Selecionar para alterar em massa">`) : '') + `<span class="lm-ref">${esc(l.procId)}</span>`;
+  const massa = editavel && !!state.finMassa, sel = !!state.finSel[l.chave], atual = finProcSelecionado();
+  const bloqueado = massa && atual && atual!==l.procId;
+  const idHtml = (massa ? nada(`<input type="checkbox" data-fin-sel="${esc(l.chave)}" ${sel ? 'checked' : ''} ${bloqueado ? 'disabled' : ''} title="${bloqueado ? 'Só é possível alterar em massa custos do mesmo processo (' + esc(atual) + ')' : 'Selecionar para alterar em massa'}">`) : '') + `<span class="lm-ref">${esc(l.procId)}</span>`;
   const common = [
     { label:'Ref. do cliente', html:l.refCliente ? esc(l.refCliente) : vazio },
     { label:l.tipo, html:l.descricao ? esc(l.descricao) : vazio },
@@ -3685,28 +3709,33 @@ function financeiroLinhaHtml(l, editavel){
   const acoes = editando
     ? `<div class="ci-actions"><button class="icon-btn" title="Salvar no processo" data-action="fin-salvar:${esc(l.chave)}">${ICONS.check}</button><button class="icon-btn" title="Cancelar" data-action="fin-cancelar">${ICONS.x || '×'}</button></div>`
     : `<div class="ci-actions">${editavel ? `<button class="icon-btn" title="Editar valor, vencimento, taxa e moeda" data-action="fin-editar:${esc(l.chave)}">${ICONS.edit}</button>` : ''}${abrir}</div>`;
-  return { acao: editando ? '' : `proc-abrir:${esc(l.procId)}`, idHtml, idW:(editavel ? 24 : 0) + String(l.procId).length*7.6, campos, acoes };
+  return { acao: editando ? '' : `proc-abrir:${esc(l.procId)}`, idHtml, idW:(massa ? 24 : 0) + String(l.procId).length*7.6, campos, acoes };
 }
-function financeiroPainelMassaHtml(sel){
-  const procs = new Set(sel.map(l=>l.procId)), semTrib = sel.filter(l=>l.fonte.kind!=='trib').length;
+function financeiroPainelMassaHtml(sel, linhas){
+  const procId = finProcSelecionado();
+  const procsFiltro = [...new Set(linhas.map(l=>l.procId))];
+  const noProc = procId ? linhas.filter(l=>l.procId===procId).length : 0, semTrib = sel.filter(l=>l.fonte.kind!=='trib').length;
+  const topo = sel.length
+    ? `<b>Alterar em massa — ${esc(procId)}</b><span class="membro-sub">${sel.length} custo${sel.length===1?'':'s'} selecionado${sel.length===1?'':'s'}</span>${noProc>sel.length ? `<button class="btn btn-ghost btn-sm" data-action="fin-sel-processo:${esc(procId)}">Selecionar todos os ${noProc} custos de ${esc(procId)}</button>` : ''}`
+    : `<b>Alterar em massa</b><span class="membro-sub">Marque os custos que deseja alterar. Só é possível alterar em massa custos do <b>mesmo processo</b>.</span>
+       <select data-fin-proc-sel title="Selecionar de uma vez todos os custos de um processo"><option value="">Selecionar todos os custos do processo…</option>${procsFiltro.map(id=>`<option value="${esc(id)}">${esc(id)}</option>`).join('')}</select>`;
   return `<div class="fin-massa">
-    <div class="fin-massa-topo"><b>Alterar em massa</b><span class="membro-sub">${sel.length} custo${sel.length===1?'':'s'} selecionado${sel.length===1?'':'s'} em ${procs.size} processo${procs.size===1?'':'s'} · preencha só o que quer alterar</span></div>
+    <div class="fin-massa-topo">${topo}</div>
     <div class="fin-massa-campos">
       <div class="field"><label>Pagamento</label><select data-fin-massa="pago"><option value="">Não alterar</option><option value="pago">Marcar como pago</option><option value="aberto">Marcar como em aberto</option></select></div>
       <div class="field"><label>Novo vencimento</label><input type="date" data-fin-massa="vencimento"></div>
       <div class="field"><label>Ou adiar o vencimento em (dias)</label><input type="number" step="1" data-fin-massa="adiar" placeholder="Ex.: 7 ou -3"></div>
       <div class="field"><label>Moeda</label><select data-fin-massa="moeda"><option value="">Não alterar</option>${PROC_MOEDAS.map(m=>`<option>${m}</option>`).join('')}</select></div>
       <div class="field"><label>Taxa da moeda</label><input type="number" step="any" min="0" data-fin-massa="taxa" placeholder="Ex.: 5,35"></div>
-      <div class="btn-row" style="align-self:flex-end;"><button class="btn btn-primary btn-sm" data-action="fin-massa-aplicar">${ICONS.check} Aplicar às ${sel.length} linhas</button><button class="btn btn-ghost btn-sm" data-action="fin-sel-limpar">Limpar seleção</button></div>
+      <div class="btn-row" style="align-self:flex-end;"><button class="btn btn-primary btn-sm" data-action="fin-massa-aplicar" ${sel.length ? '' : 'disabled'}>${ICONS.check} Aplicar${sel.length ? ' às ' + sel.length + ' linhas' : ''}</button>${sel.length ? `<button class="btn btn-ghost btn-sm" data-action="fin-sel-limpar">Limpar seleção</button>` : ''}</div>
     </div>
-    <p class="hint" style="margin:8px 0 0;">As alterações são gravadas nos processos de origem. Nos tributos só mudam o pagamento e a data; moeda e taxa valem para os demais custos (${semTrib}). O valor é alterado linha a linha, no lápis.</p>
+    <p class="hint" style="margin:8px 0 0;">As alterações são gravadas no processo de origem. Nos tributos só mudam o pagamento e a data; moeda e taxa valem para os demais custos${sel.length ? ' (' + semTrib + ')' : ''}. O valor é alterado linha a linha, no lápis.</p>
   </div>`;
 }
 function renderFinanceiro(){
-  const f = state.finFiltro || {}, todas = financeiroLinhasTodas(), linhas = financeiroFiltradas(), editavel = podeEditarFin();
+  const f = state.finFiltro || {}, todas = financeiroLinhasTodas(), linhas = financeiroFiltradas(), editavel = podeEditarFin(), massa = editavel && !!state.finMassa;
   const soma = sit => linhas.filter(l=>!sit || l.sit===sit).reduce((s,l)=>s + l.brl, 0);
-  const sel = editavel ? todas.filter(l=>state.finSel[l.chave]) : [];
-  const todosSel = editavel && linhas.length>0 && linhas.every(l=>state.finSel[l.chave]);
+  const sel = massa ? todas.filter(l=>state.finSel[l.chave]) : [];
   const corpo = !todas.length ? `<div class="empty">${ICONS.calc}<h3>Nenhum custo lançado nos processos</h3><p>Os custos lançados em Produto (câmbio), Transporte, Armazenagem, Desembaraço e Outras Despesas aparecem aqui, uma linha por custo.</p></div>`
     : !linhas.length ? `<div class="empty"><h3>Nenhum lançamento encontrado</h3><p>Ajuste os filtros ou clique em "Limpar".</p></div>`
     : listaModernaHtml(linhas.map(l=>financeiroLinhaHtml(l, editavel)),
@@ -3722,7 +3751,10 @@ function renderFinanceiro(){
     <div class="kpi"><div class="k-lbl">Vencidos</div><div class="k-val" style="color:var(--red);">${fmtBRL(soma('vencido'))}</div></div>
   </div>
   <div class="lista-painel">
-    <div class="cot-barra"><span class="membro-sub">${editavel ? `<label class="tpl-campo" data-action="fin-nada"><input type="checkbox" data-fin-selall ${todosSel ? 'checked' : ''}> Selecionar todos os ${linhas.length} filtrados</label>` : 'Somente leitura: para alterar um custo, abra o processo.'}</span><div class="btn-row">${botoesExportarHtml('fin')}</div></div>
+    <div class="cot-barra">
+      ${editavel ? `<button class="btn btn-sm ${massa ? 'btn-primary' : 'btn-ghost'}" data-action="fin-massa-modo" aria-pressed="${massa}" title="Libera a seleção de custos (do mesmo processo) para alterar vários de uma vez">${ICONS.edit} Alterar em Massa</button>` : '<span class="membro-sub">Somente leitura: para alterar um custo, abra o processo.</span>'}
+      <div class="btn-row">${botoesExportarHtml('fin')}</div>
+    </div>
     <div class="filter-bar">
       <div class="field" style="min-width:220px;"><label>Buscar</label><input data-fin-filtro="busca" value="${esc(f.busca)}" placeholder="Processo, cliente, prestador, custo…" autocomplete="off"></div>
       <div class="field"><label>Pagamento</label><select data-fin-filtro="situacao"><option value="">Todos</option>${Object.entries(FIN_SIT).map(([k,[r]])=>`<option value="${k}" ${f.situacao===k?'selected':''}>${r}</option>`).join('')}</select></div>
@@ -3730,8 +3762,8 @@ function renderFinanceiro(){
       <div class="field"><label>Vencimento até</label><input type="date" data-fin-filtro="ate" value="${esc(f.ate)}"></div>
       <div class="btn-row" style="align-self:flex-end;"><button class="btn btn-primary btn-sm" data-action="fin-filtrar">Filtrar</button><button class="btn btn-ghost btn-sm" data-action="fin-limpar">Limpar</button></div>
     </div>
-    ${sel.length ? financeiroPainelMassaHtml(sel) : ''}
     ${corpo}
+    ${massa ? financeiroPainelMassaHtml(sel, linhas) : ''}
   </div>`;
 }
 
@@ -6481,7 +6513,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
-state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.finSel = {}; state.finEdit = null; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
+state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.finSel = {}; state.finEdit = null; state.finMassa = false; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
 state.dash = { cot:{gran:'mes',ano:0,mes:0,comp:[]}, proc:{gran:'mes',ano:0,mes:0,comp:[]}, mon:{gran:'mes',ano:0,mes:0,comp:[],medida:'qtd'}, fin:{gran:'mes',ano:0,mes:0,comp:[],visao:'total'} };
 state.dashSel = { cot:true, proc:true, mon:true, fin:true, cad:true }; state.dashFormato = 'pdf'; state.dashBaixar = { aberto:false };
 state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
@@ -10849,7 +10881,7 @@ function onAppChange(e){
   if(el.hasAttribute('data-proc')){ onProcessoInput(el, 'change'); return; }
   if(el.hasAttribute('data-mon') || el.hasAttribute('data-monsim') || el.hasAttribute('data-mon-filtro')){ onMonitoramentoInput(el, 'change'); return; }
   if(el.hasAttribute('data-dash') || el.hasAttribute('data-dash-sel') || el.hasAttribute('data-dash-fmt')){ onDashInput(el); return; }
-  if(el.hasAttribute('data-fin-sel') || el.hasAttribute('data-fin-selall') || el.hasAttribute('data-fin-pago')){ onFinInput(el); return; }
+  if(el.hasAttribute('data-fin-sel') || el.hasAttribute('data-fin-proc-sel') || el.hasAttribute('data-fin-pago')){ onFinInput(el); return; }
   if(el.hasAttribute('data-mtpl-campo')){ onTemplateCampoMon(el); return; }
   if(el.hasAttribute('data-tpl-campo')){ onTemplateCampo(el); return; }
   if(el.hasAttribute('data-cot-tpl')){ onCotTemplateCampo(el); return; }
@@ -11028,7 +11060,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.30 · edição e alteração em massa no Financeiro · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.31 · alteração em massa no Financeiro (mesmo processo) · build 15/10/2026</span></div>
   `;
 }
 
