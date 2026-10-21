@@ -5895,20 +5895,54 @@ const saveDraftFormal = ()=>{};
 const SESSAO_COTACAO = { dados:'simples', numerario:'simples', dadosFormal:'formal', numerarioFormal:'formal' };
 // Texto da cotação sem os ids (para saber se há algo não salvo)
 const semIds = x => JSON.stringify(x, (k, v)=>k==='id' ? undefined : v);
-function descartarCotacaoEmEdicao(sessao){
-  let perdeu = false;
+// Há informações da cotação em edição que ainda não foram salvas?
+function cotacaoTemAlteracao(sessao){
   if(sessao==='simples'){
     const salvo = state.currentCotacaoId ? (state.cotacoesIndex||[]).find(x=>x.id===state.currentCotacaoId) : null;
-    perdeu = semIds(state.dados) !== semIds(salvo ? normalizeDados(JSON.parse(JSON.stringify(salvo.dados))) : dadosPadrao());
-    state.dados = dadosPadrao(); state.currentCotacaoId = null;
-  }else{
-    const salvo = state.currentCotacaoFormalId ? (state.cotacoesFormalIndex||[]).find(x=>x.id===state.currentCotacaoFormalId) : null;
-    perdeu = semIds(state.dadosFormal) !== semIds(salvo ? normalizeDadosFormal(JSON.parse(JSON.stringify(salvo.dados))) : dadosFormalPadrao());
-    state.dadosFormal = dadosFormalPadrao(); state.currentCotacaoFormalId = null;
+    return semIds(state.dados) !== semIds(salvo ? normalizeDados(JSON.parse(JSON.stringify(salvo.dados))) : dadosPadrao());
   }
+  const salvo = state.currentCotacaoFormalId ? (state.cotacoesFormalIndex||[]).find(x=>x.id===state.currentCotacaoFormalId) : null;
+  return semIds(state.dadosFormal) !== semIds(salvo ? normalizeDadosFormal(JSON.parse(JSON.stringify(salvo.dados))) : dadosFormalPadrao());
+}
+function descartarCotacaoEmEdicao(sessao){
+  const perdeu = cotacaoTemAlteracao(sessao);
+  if(sessao==='simples'){ state.dados = dadosPadrao(); state.currentCotacaoId = null; }
+  else{ state.dadosFormal = dadosFormalPadrao(); state.currentCotacaoFormalId = null; }
   return perdeu;
 }
-const saveDraftSimulacao = debounce(async ()=>{ await storeSet('simulacao:draft', state.simulacao); }, 500);
+const NOME_SESSAO_COTACAO = { simples:'Cotação Simplificada', formal:'Cotação Formal' };
+// Janela de confirmação ao sair da cotação com informações não salvas
+function confirmarSaidaCotacaoHtml(){
+  const c = state.sairCotacao; if(!c) return '';
+  const nome = NOME_SESSAO_COTACAO[c.sessao] || 'cotação';
+  return `<div class="proc-modal-fundo" data-action="sair-cot-cancelar"><div class="proc-modal rel-escolha" data-action="proc-modal-nada" role="alertdialog" aria-modal="true" style="width:min(520px,100%);">
+    <div class="proc-modal-topo"><div class="proc-modal-titulo">Sair sem salvar?</div></div>
+    <p style="margin:0 0 16px; color:var(--ink-soft); line-height:1.5;">A <b>${esc(nome)}</b> tem informações que ainda não foram salvas. Elas não são guardadas automaticamente: se você sair agora, serão <b>apagadas</b>.</p>
+    <div class="btn-row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn-ghost" data-action="sair-cot-cancelar">Continuar editando</button>
+      <button class="btn btn-danger" data-action="sair-cot-descartar">Sair sem salvar</button>
+      <button class="btn btn-primary" data-action="sair-cot-salvar">${ICONS.check} Salvar e sair</button>
+    </div>
+  </div></div>`;
+}
+async function acaoSairCotacao(cmd){
+  const c = state.sairCotacao; if(!c) return true;
+  if(cmd==='sair-cot-cancelar'){ state.sairCotacao = null; renderApp(); return true; }
+  if(cmd==='sair-cot-descartar'){ state.sairCotacao = null; state.sairSemConfirmar = true; try{ navigate(c.destino); } finally { state.sairSemConfirmar = false; } return true; }
+  if(cmd==='sair-cot-salvar'){
+    state.sairCotacao = null;
+    try{ if(c.sessao==='simples') await salvarCalculo(); else await salvarCalculoFormal(); }catch(e){ console.error(e); toast('Não foi possível salvar a cotação.'); renderApp(); return true; }
+    if(cotacaoTemAlteracao(c.sessao)){ renderApp(); return true; }   // não salvou (ex.: faltou preencher algo): continua na cotação
+    state.sairSemConfirmar = true; try{ navigate(c.destino); } finally { state.sairSemConfirmar = false; }
+    return true;
+  }
+  return false;
+}
+// Fechar ou recarregar a página com cotação não salva
+function avisoSairDaPagina(e){
+  const sessao = SESSAO_COTACAO[state.route];
+  if(sessao && cotacaoTemAlteracao(sessao)){ e.preventDefault(); e.returnValue = ''; return ''; }
+}const saveDraftSimulacao = debounce(async ()=>{ await storeSet('simulacao:draft', state.simulacao); }, 500);
 
 async function loadInitialData(){
   const v = await storeGetMany([...CHAVES_SERVIDOR, 'dados:draft', 'dadosFormal:draft', 'simulacao:draft', 'filtrosTodas:fixado', 'processo:draft', 'filtrosProc:fixado', 'filtrosCot:fixado', 'filtrosMon:fixado']);
@@ -6875,7 +6909,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
-state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.prodFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.prodTemplateAberto = false; state.prodTemplateSel = null; state.finSel = {}; state.finEdit = null; state.finMassa = false; state.procFoco = null; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
+state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.sairCotacao = null; state.sairSemConfirmar = false; state.prodFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.prodTemplateAberto = false; state.prodTemplateSel = null; state.finSel = {}; state.finEdit = null; state.finMassa = false; state.procFoco = null; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
 state.dash = { cot:{gran:'mes',ano:0,mes:0,comp:[]}, proc:{gran:'mes',ano:0,mes:0,comp:[]}, mon:{gran:'mes',ano:0,mes:0,comp:[],medida:'qtd'}, fin:{gran:'mes',ano:0,mes:0,comp:[],visao:'total'} };
 state.dashSel = { cot:true, proc:true, mon:true, fin:true, cad:true }; state.dashFormato = 'pdf'; state.dashBaixar = { aberto:false };
 state.monSim = { fonte:'', freeTime:'7', dias:'12', custoDiario:'', moeda:'USD', cambio:'', qtd:'1' };
@@ -6894,7 +6928,10 @@ function navigate(route){
   }
   // Saiu da sessão de uma cotação sem salvar: as informações são apagadas
   const sessaoAnterior = SESSAO_COTACAO[state.route];
-  if(sessaoAnterior && sessaoAnterior!==SESSAO_COTACAO[route] && descartarCotacaoEmEdicao(sessaoAnterior)) toast('A cotação não salva foi descartada.');
+  if(sessaoAnterior && sessaoAnterior!==SESSAO_COTACAO[route]){
+    if(!state.sairSemConfirmar && cotacaoTemAlteracao(sessaoAnterior)){ state.sairCotacao = { sessao:sessaoAnterior, destino:route }; renderApp(); return; }   // pergunta antes de apagar
+    if(descartarCotacaoEmEdicao(sessaoAnterior)) toast('A cotação não salva foi descartada.');
+  }
   state.route = route;
   if(ROUTE_META[route].group==='imp') state.openModule='imp';
   if(ROUTE_META[route].group==='sim') state.openModule='sim';
@@ -7037,7 +7074,7 @@ function renderApp(){
   </div>` : '';
   const classesLayout = `layout ${state.sideCollapsed ? 'side-collapsed' : ''} ${state.sideMobile ? 'side-open' : ''}`;
   app.innerHTML = `<div class="${classesLayout}">${sideNavHtml()}<div class="side-backdrop" data-action="toggle-sidebar"></div>
-    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d + relEscolhaHtml();
+    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d + relEscolhaHtml() + confirmarSaidaCotacaoHtml();
   if(state.route==='dados') patchComputedDados();
   if(state.route==='dadosFormal') patchComputedDadosFormal();
   if(state.route==='simCarga') patchComputedSimCarga();
@@ -11387,6 +11424,7 @@ function onAppClick(e){
   if(!state.relPular){ const docEsc = relDocDaAcao(action); if(docEsc && relCfgSalva(docEsc).escolherAoBaixar){ state.relEscolha = { docId:docEsc, action }; renderApp(); return; } }
   state.relPular = false;
   const [cmd, a1, a2] = action.split(':');
+  if(cmd.startsWith('sair-cot-')){ acaoSairCotacao(cmd); return; }
   if(cmd.startsWith('rel-') && acaoRel(cmd, a1)) return;
   if(cmd.startsWith('cfg-')){ acaoConfig(cmd, a1, a2); return; }
   if(cmd.startsWith('proc-') && (acaoTemplateProcesso(cmd, a1, a2) || acaoProcesso(cmd, a1, a2))) return;
@@ -11754,6 +11792,7 @@ async function init(){
   }
   renderApp();
 }
+window.addEventListener('beforeunload', avisoSairDaPagina);
 init();
 
 /* --------------------------------- Home ----------------------------------- */
@@ -11799,7 +11838,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.41 · produção, tipos de cadastro e cotações sem rascunho · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.42 · confirmação ao sair da cotação · build 15/10/2026</span></div>
   `;
 }
 
