@@ -929,6 +929,14 @@ tbody tr:hover{background:#F9FAFD;}
 @media (max-width:980px){ .prod-kanban{grid-template-columns:1fr;} }
 .vf-box{background:#EEF0F5; border:1px solid #DFE3EC; border-radius:8px; padding:9px 12px; min-height:38px; font-weight:600; color:var(--navy-deep); display:flex; align-items:center;}
 .vf-pref{display:flex; align-items:center; gap:0;} .vf-pref > span{background:#EEF0F5; border:1px solid #DFE3EC; border-right:0; border-radius:8px 0 0 8px; padding:9px 10px; font-size:12.5px; color:var(--ink-soft);} .vf-pref > input{border-radius:0 8px 8px 0; flex:1; min-width:0;}
+.trk-busca{margin-bottom:16px;} .trk-bloco{display:flex; flex-direction:column; gap:14px; margin-bottom:16px;}
+.trk-topo{display:flex; justify-content:space-between; align-items:flex-start; gap:12px;} .trk-cli{font-size:13px; color:var(--ink-soft); margin-top:4px;}
+.trk-sub{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:14px 0 6px;}
+.trk-linha{display:flex; gap:4px; flex-wrap:wrap; align-items:flex-start;} .trk-passo{flex:1 1 86px; min-width:78px; display:flex; flex-direction:column; align-items:center; gap:5px; text-align:center; font-size:10.5px; color:var(--ink-soft); position:relative;}
+.trk-passo i{width:14px; height:14px; border-radius:50%; background:#DDE2EC; border:2px solid #fff; box-shadow:0 0 0 1px #DDE2EC; display:block;} .trk-passo.feito i{background:var(--green); box-shadow:0 0 0 1px var(--green);} .trk-passo.atual i{background:var(--amber); box-shadow:0 0 0 3px rgba(201,162,39,.3);} .trk-passo.atual span{color:var(--navy-deep); font-weight:700;} .trk-passo.feito span{color:var(--green);}
+.trk-cancelado{padding:8px 12px; border-radius:8px; background:#FBE9E7; color:var(--red); font-weight:700; font-size:13px;}
+.trk-fatos{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px 16px; margin-top:12px;} .trk-fatos > div:not(.trk-fato-t){display:flex; flex-direction:column;} .trk-fatos span{font-size:10.5px; color:var(--ink-soft);} .trk-fatos b{font-size:13px; color:var(--navy-deep);} .trk-fato-t{grid-column:1/-1; font-weight:700; color:var(--navy);}
+.trk-lista{display:flex; flex-direction:column; gap:6px;} .trk-linha-info{display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--paper); border:1px solid var(--line); border-radius:9px; padding:7px 11px; font-size:13px;}
 </style>
 </head>
 <body>
@@ -988,16 +996,16 @@ function toast(msg, kind){
 // Cada chave tem uma versão: se outra pessoa salvou antes, as alterações são mescladas item a item.
 const sb = window.comextaSupabase;
 const CHAVE_LOCAL = /:draft$|^filtros(Todas|Proc|Cot|Mon):/;
-const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','processos:index','monitoramento:list','vendasCot:list','vendasPed:list'];
+const CHAVES_SERVIDOR = ['cotacoes:index','cotacoesFormal:index','simulacoes:index','clientes:list','fornecedores:list','produtos:list','processos:index','monitoramento:list','vendasCot:list','vendasPed:list','estoque:list'];
 const SECAO_DA_CHAVE = {
   'cotacoes:index':'cotacoes', 'cotacoesFormal:index':'cotacoes', 'simulacoes:index':'simulador',
   'clientes:list':'cadastros', 'fornecedores:list':'cadastros', 'produtos:list':'cadastros',
-  'processos:index':'processos', 'monitoramento:list':'monitoramento', 'vendasCot:list':'vendas', 'vendasPed:list':'vendas',
+  'processos:index':'processos', 'monitoramento:list':'monitoramento', 'vendasCot:list':'vendas', 'vendasPed:list':'vendas', 'estoque:list':'vendas',
 };
 const ESTADO_DA_CHAVE = {
   'cotacoes:index':'cotacoesIndex', 'cotacoesFormal:index':'cotacoesFormalIndex', 'simulacoes:index':'simulacoesIndex',
   'clientes:list':'clientes', 'produtos:list':'produtos',
-  'processos:index':'processosIndex', 'monitoramento:list':'monitoramento', 'vendasCot:list':'vendasCot', 'vendasPed:list':'vendasPed',
+  'processos:index':'processosIndex', 'monitoramento:list':'monitoramento', 'vendasCot:list':'vendasCot', 'vendasPed:list':'vendasPed', 'estoque:list':'estoque',
 };
 // Itens numerados em sequência: se dois usuários criarem o mesmo número ao mesmo tempo, o segundo é renumerado.
 const NUMERACAO_DA_CHAVE = {
@@ -1007,10 +1015,11 @@ const NUMERACAO_DA_CHAVE = {
   'processos:index':{ prefixo:'PRC-', atual:'currentProcessoId' },
   'vendasCot:list':{ prefixo:'VCOT-', atual:'currentVendaCotId' },
   'vendasPed:list':{ prefixo:'PED-', atual:'currentVendaPedId' },
+  'estoque:list':{ prefixo:'EST-', atual:'currentEstoqueId' },
 };
-const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga', processos:'Processos', producao:'Produção', financeiro:'Financeiro', monitoramento:'Monitoramento de Carga', vendas:'Vendas' };
+const SECOES = { cadastros:'Cadastros', cotacoes:'Cotações (nova e salvas)', simulador:'Simulador de Carga', processos:'Processos', producao:'Produção', financeiro:'Financeiro', monitoramento:'Monitoramento de Carga', vendas:'Vendas', tracking:'Tracking' };
 // Quem ainda não tem as áreas "Monitoramento de Carga" e "Financeiro" definidas herda a permissão de Processos (como era antes de existirem as áreas próprias).
-const comMonitoramentoHerdado = perms => { const p = perms || {}; return { ...p, ...(p.monitoramento ? {} : { monitoramento:p.processos }), ...(p.financeiro ? {} : { financeiro:p.processos }), ...(p.producao ? {} : { producao:p.processos }), ...(p.vendas ? {} : { vendas:p.cotacoes }) }; };
+const comMonitoramentoHerdado = perms => { const p = perms || {}; return { ...p, ...(p.monitoramento ? {} : { monitoramento:p.processos }), ...(p.financeiro ? {} : { financeiro:p.processos }), ...(p.producao ? {} : { producao:p.processos }), ...(p.vendas ? {} : { vendas:p.cotacoes }), ...(p.tracking ? {} : { tracking:p.processos }) }; };
 
 let usuarioAtual = null; // { id, email, nome, telefone, cargo, foto, papel, permissoes, convidado, empresa_id }
 let empresaAtual = null;
@@ -1280,14 +1289,14 @@ const PERMISSAO_DA_ACAO = {
   'proc-excluir':['processos','editar'], 'proc-salvar':['processos','salvar'], 'proc-numerario-pdf':['processos','ver'], 'proc-duplicar':['processos','criar'],
   'proc-template':['processos','ver'], 'proc-modo':['processos','ver'],
 
-  'go:vendaCotacoes':['vendas','ver'], 'go:vendaPedidos':['vendas','ver'], 'venda-modo':['vendas','ver'], 'venda-template':['vendas','ver'], 'venda-tpl-aba':['vendas','ver'], 'venda-tpl-grupo':['vendas','ver'], 'venda-tpl-padrao':['vendas','ver'], 'venda-tpl-salvar':['vendas','ver'], 'venda-filtrar':['vendas','ver'], 'venda-limpar':['vendas','ver'], 'venda-abrir':['vendas','ver'], 'venda-pdf':['vendas','ver'], 'venda-aba':['vendas','ver'], 'venda-nova':['vendas','criar'], 'venda-duplicar':['vendas','criar'], 'venda-add-item':['vendas','ver'], 'venda-rm-item':['vendas','ver'], 'venda-salvar':['vendas','salvar'], 'venda-aceitar':['vendas','editar'], 'venda-form-aceitar':['vendas','editar'], 'venda-excluir':['vendas','editar'],
+  'go:vendaCotacoes':['vendas','ver'], 'go:vendaEstoque':['vendas','ver'], 'go:tracking':['tracking','ver'], 'trk-buscar':['tracking','ver'], 'trk-limpar':['tracking','ver'], 'trk-buscar-ref':['tracking','ver'], 'est-modo':['vendas','ver'], 'est-template':['vendas','ver'], 'est-tpl-aba':['vendas','ver'], 'est-tpl-grupo':['vendas','ver'], 'est-tpl-padrao':['vendas','ver'], 'est-tpl-salvar':['vendas','ver'], 'est-filtrar':['vendas','ver'], 'est-limpar':['vendas','ver'], 'est-abrir-proc':['processos','ver'], 'est-remover':['vendas','editar'], 'vinc-abrir':['vendas','editar'], 'go:vendaPedidos':['vendas','ver'], 'venda-modo':['vendas','ver'], 'venda-template':['vendas','ver'], 'venda-tpl-aba':['vendas','ver'], 'venda-tpl-grupo':['vendas','ver'], 'venda-tpl-padrao':['vendas','ver'], 'venda-tpl-salvar':['vendas','ver'], 'venda-filtrar':['vendas','ver'], 'venda-limpar':['vendas','ver'], 'venda-abrir':['vendas','ver'], 'venda-pdf':['vendas','ver'], 'venda-aba':['vendas','ver'], 'venda-nova':['vendas','criar'], 'venda-duplicar':['vendas','criar'], 'venda-add-item':['vendas','ver'], 'venda-rm-item':['vendas','ver'], 'venda-salvar':['vendas','salvar'], 'venda-aceitar':['vendas','editar'], 'venda-form-aceitar':['vendas','editar'], 'venda-excluir':['vendas','editar'],
   'go:producao':['producao','ver'], 'prod-filtrar':['producao','ver'], 'prod-limpar':['producao','ver'], 'prod-modo':['producao','ver'], 'prod-template':['producao','ver'], 'prod-tpl-aba':['producao','ver'], 'prod-tpl-grupo':['producao','ver'], 'prod-tpl-padrao':['producao','ver'], 'prod-tpl-salvar':['producao','ver'], 'prod-remover':['producao','editar'], 'prod-abrir':['processos','ver'], 'go:financeiro':['financeiro','ver'], 'fin-filtrar':['financeiro','ver'], 'fin-limpar':['financeiro','ver'], 'fin-editar':['financeiro','editar'], 'fin-massa-modo':['financeiro','editar'], 'fin-sel-processo':['financeiro','editar'], 'fin-salvar':['financeiro','editar'], 'fin-cancelar':['financeiro','ver'], 'fin-massa-aplicar':['financeiro','editar'], 'fin-sel-limpar':['financeiro','ver'],
   'go:monitoramento':['monitoramento','ver'], 'go:monitoramentoCusto':['monitoramento','ver'],
   'mon-add':['monitoramento','criar'], 'mon-importar':['monitoramento','criar'],
   'mon-atualizar':['monitoramento','editar'], 'mon-atualizar-um':['monitoramento','editar'], 'mon-excluir':['monitoramento','editar'],
   'mon-testar-api':['monitoramento','ver'], 'mon-modo':['monitoramento','ver'], 'mon-template':['monitoramento','ver'], 'mon-tpl-aba':['monitoramento','ver'], 'mon-tpl-grupo':['monitoramento','ver'], 'mon-tpl-padrao':['monitoramento','ver'], 'mon-tpl-salvar':['monitoramento','ver'], 'mon-abrir':['monitoramento','ver'], 'mon-minimizar':['monitoramento','ver'], 'mon-minimizar-todos':['monitoramento','ver'], 'mon-rastrear':['monitoramento','editar'], 'mon-rastrear-todos':['monitoramento','editar'], 'mon-aplicar-devolucao':['monitoramento','editar'],
 };
-const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', prod:'producao', fin:'financeiro', mon:'monitoramento', vendas:'vendas' };
+const SECAO_DO_GRUPO = { imp:'cotacoes', sim:'simulador', cad:'cadastros', proc:'processos', prod:'producao', fin:'financeiro', mon:'monitoramento', vendas:'vendas', trk:'tracking' };
 
 function permissaoDaAcao(action){
   return PERMISSAO_DA_ACAO[action] || PERMISSAO_DA_ACAO[action.split(':')[0]] || null;
@@ -1369,9 +1378,10 @@ function nomeEmpresa(){ return (empresaAtual && (empresaAtual.nome_fantasia || e
 function perfilIncompleto(){ return !!usuarioAtual && usuarioAtual.convidado && (!usuarioAtual.telefone || !usuarioAtual.cargo); }
 
 // Os processos também são lidos por quem tem só a área Financeiro (o resumo financeiro vem deles)
-function podeVerChave(k){ return pode(SECAO_DA_CHAVE[k], 'ver') || (k==='processos:index' && (pode('financeiro', 'ver') || pode('producao', 'ver'))); }
+const TRK_CHAVES = ['processos:index','vendasPed:list','estoque:list','monitoramento:list'];
+function podeVerChave(k){ return pode(SECAO_DA_CHAVE[k], 'ver') || (k==='processos:index' && (pode('financeiro', 'ver') || pode('producao', 'ver') || pode('vendas', 'ver'))) || (TRK_CHAVES.includes(k) && pode('tracking', 'ver')) || (k==='estoque:list' && pode('vendas', 'ver')); }
 function permissoesPadraoConvite(){
-  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false}, processos:{ver:true,criar:false,editar:false}, producao:{ver:true,criar:false,editar:false}, financeiro:{ver:true,criar:false,editar:false}, monitoramento:{ver:true,criar:false,editar:false}, vendas:{ver:true,criar:false,editar:false} };
+  return { cadastros:{ver:true,criar:false,editar:false}, cotacoes:{ver:true,criar:false,editar:false}, simulador:{ver:true,criar:false,editar:false}, processos:{ver:true,criar:false,editar:false}, producao:{ver:true,criar:false,editar:false}, financeiro:{ver:true,criar:false,editar:false}, monitoramento:{ver:true,criar:false,editar:false}, vendas:{ver:true,criar:false,editar:false}, tracking:{ver:true,criar:false,editar:false} };
 }
 function matrizPermissoesHtml(prefixo, permissoes, desabilitada){
   const p = comMonitoramentoHerdado(permissoes);
@@ -1470,7 +1480,7 @@ function renderConfigPerfil(){
   <div class="card">
     <div class="section-title" style="margin-bottom:12px;"><span class="num">02</span> Meu acesso</div>
     <p class="page-sub" style="margin:0 0 14px;">Empresa: <b>${esc(nomeEmpresa())}</b> · ${souAdmin() ? 'Administrador (acesso total)' : 'Permissões definidas pelo administrador'}</p>
-    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1}, processos:{ver:1,criar:1,editar:1}, producao:{ver:1,criar:1,editar:1}, financeiro:{ver:1,criar:1,editar:1}, monitoramento:{ver:1,criar:1,editar:1}, vendas:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
+    ${matrizPermissoesHtml('eu', souAdmin() ? { cadastros:{ver:1,criar:1,editar:1}, cotacoes:{ver:1,criar:1,editar:1}, simulador:{ver:1,criar:1,editar:1}, processos:{ver:1,criar:1,editar:1}, producao:{ver:1,criar:1,editar:1}, financeiro:{ver:1,criar:1,editar:1}, monitoramento:{ver:1,criar:1,editar:1}, vendas:{ver:1,criar:1,editar:1}, tracking:{ver:1,criar:1,editar:1} } : u.permissoes, true)}
   </div>`;
 }
 
@@ -2810,10 +2820,11 @@ function procStatusOpcoes(atual){
   const l = Object.entries(PROC_STATUS).filter(([k,v])=>!v.legado || k===atual).map(([k,v])=>[k, v.label]);
   return l;
 }
-async function moverProcessoStatus(id, novo){
+async function moverProcessoStatus(id, novo, confirmado){
   if(!pode('processos','editar')){ toast('Você não tem permissão para editar processos.'); renderApp(); return; }
   const p = (state.processosIndex||[]).find(x=>x.id===id);
   if(!p || statusProc(p)===novo || !PROC_STATUS[novo]) return;
+  if(novo==='finalizado' && !confirmado){ state.estoquePergunta = { origem:'mover', procId:id, novo }; renderApp(); return; }   // pergunta: Cadastrar Produtos em Estoque?
   p.status = novo; p.atualizadoEm = new Date().toISOString(); p.atualizadoPor = usuarioAtual.nome || usuarioAtual.email;
   if(state.currentProcessoId===id && state.procDraft) state.procDraft.status = novo;
   if(await persistProcessosIndex()) toast(`${id}: status alterado para "${PROC_STATUS[novo].label}".`, 'ok');
@@ -3817,7 +3828,7 @@ const VENDA_UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','
 const numV = v => { if(typeof v==='number') return isFinite(v) ? v : 0; let t = String(v ?? '').trim().replace(/\s/g, '').replace(/%$/, ''); if(!t) return 0; if(t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); const n = parseFloat(t); return isFinite(n) ? n : 0; };
 const strV = n => String(Math.round(n*1e6)/1e6);
 const hojeVenda = () => { try{ return hojeLocalISO(); }catch(e){ return new Date().toISOString().slice(0,10); } };
-function novoItemVenda(base){ return { id:uid(), produtoId:'', descricao:'', sku:'', ncm:'', quantidade:'', un:'UN', precoUn:'', pesoBruto:'', pesoLiquido:'', ipi:'', icms:'', icmsSt:'', pis:'', cofins:'', difal:'', ...(base||{}) }; }
+function novoItemVenda(base){ return { id:uid(), produtoId:'', descricao:'', sku:'', ncm:'', quantidade:'', un:'UN', precoUn:'', pesoBruto:'', pesoLiquido:'', ipi:'', icms:'', icmsSt:'', pis:'', cofins:'', difal:'', origem:{ tipo:'', ref:'' }, ...(base||{}) }; }
 function novaVenda(tipo){
   const agora = new Date().toISOString();
   return { id:'', seq:0, tipo, status: tipo==='cot' ? 'em_andamento' : 'aberto', criadoEm:agora, criadoPor:'', atualizadoEm:agora,
@@ -3828,7 +3839,7 @@ function novaVenda(tipo){
     desconto:'', fretePagoCliente:'', fretePagoEmpresa:'', despesas:'',
     formaRecebimento:'', parcelasQtd:'1', primeiroVencimento:'', intervaloDias:'30',
     formaEnvio:VENDA_FORMAS_ENVIO[0], formaFrete:VENDA_FORMAS_FRETE[0], codigoRastreio:'', urlRastreio:'', freteConta:VENDA_FRETE_CONTA[0], transportadorNome:'', qtdVolumes:'', enviarExpedicao:'Sim',
-    deposito:'Padrão', observacoes:'', observacoesInternas:'', cotacaoId:'', pedidoId:'' };
+    deposito:'Padrão', observacoes:'', observacoesInternas:'', cotacaoId:'', pedidoId:'', desdobradoDe:'' };
 }
 function normalizarVenda(v, tipo){
   const b = novaVenda(tipo || (v && v.tipo) || 'cot'), m = { ...b, ...(v||{}) };
@@ -4005,6 +4016,7 @@ function renderVendaForm(){
     <div class="field-row grid-4">${vf('deposito','Depósito',{ options:[['Padrão','Padrão'], ['Matriz','Matriz'], ['Filial','Filial']] })}</div>
     <div class="field-row" style="margin-top:12px;">${vf('observacoes','Observações',{ textarea:true, hint:'Esta informação será impressa na venda e transferida para as observações da nota.' })}</div>
     <div class="field-row" style="margin-top:12px;">${vf('observacoesInternas','Observações internas',{ textarea:true, hint:'Esta informação é de uso interno, portanto somente exibida na impressão detalhada.' })}</div></div>
+  ${vendaDisponibilidadeHtml(d)}
   <div class="btn-row" style="margin:6px 0 40px; gap:10px; flex-wrap:wrap;">
     <button class="btn btn-primary" data-action="venda-salvar">${ICONS.check} Salvar ${cot ? 'cotação' : 'pedido'}</button>
     ${cot && d.status!=='aceita' && !d.pedidoId ? `<button class="btn btn-ghost" data-action="venda-form-aceitar" title="Salva e gera o pedido de venda com estas informações">${ICONS.check} Aceitar e gerar pedido</button>` : ''}
@@ -4061,7 +4073,7 @@ async function salvarVenda(){
   d.id = copia.id; d.seq = copia.seq;
   if(f.tipo==='cot' && copia.status==='aceita' && !copia.pedidoId){
     const ped = await gerarPedidoDaCotacao(copia.id);
-    toast(`Cotação ${copia.id} aceita: ${ped.id} gerado em Pedidos.`, 'ok'); state.vendaForm = null; navigate('vendaPedidos'); return true;
+    toast(`Cotação ${copia.id} aceita: ${ped.id} gerado em Pedidos.`, 'ok'); state.vendaForm = null; navigate('vendaPedidos'); abrirVinculo(ped.id); return true;
   }
   toast(`${cfg.nome} ${copia.id} salva.`, 'ok'); state.vendaForm = null; navigate(cfg.rota); return true;
 }
@@ -4070,7 +4082,7 @@ async function aceitarCotacao(id){
   if(cot.pedidoId){ toast(`Esta cotação já foi aceita: ${cot.pedidoId}.`); return; }
   if(!window.confirm(`Aceitar a cotação ${id} e gerar o pedido de venda?`)) return;
   const ped = await gerarPedidoDaCotacao(id); if(!ped) return;
-  toast(`Cotação ${id} aceita: ${ped.id} gerado em Pedidos.`, 'ok'); navigate('vendaPedidos');
+  toast(`Cotação ${id} aceita: ${ped.id} gerado em Pedidos.`, 'ok'); navigate('vendaPedidos'); abrirVinculo(ped.id);
 }
 async function excluirVenda(tipo, id){
   if(!requestDelete('venda', id)) return;
@@ -4093,6 +4105,7 @@ const VENDA_CAMPOS = [
   { id:'vendedor', label:'Vendedor', grupo:'Cliente e operação', txt:(v)=>v.vendedor },
   { id:'status', label:'Situação', grupo:'Cliente e operação', minW:110, txt:(v)=>VENDA_TIPOS[v.tipo].status[v.status][0], html:(v)=>`<span class="badge ${VENDA_TIPOS[v.tipo].status[v.status][1]}">${VENDA_TIPOS[v.tipo].status[v.status][0]}</span>` },
   { id:'natureza', label:'Natureza da operação', grupo:'Cliente e operação', txt:(v)=>v.natureza },
+  { id:'disponibilidade', label:'Disponibilidade dos produtos', grupo:'Cliente e operação', tipos:['ped'], txt:(v)=>disponibilidadeVenda(v) },
   { id:'origem', label:'Origem / vínculo', grupo:'Cliente e operação', txt:(v)=>v.tipo==='ped' ? (v.cotacaoId ? 'Cotação ' + v.cotacaoId : '') : (v.pedidoId ? 'Pedido ' + v.pedidoId : '') },
   { id:'dataVenda', label:'Data da venda', grupo:'Datas', txt:(v)=>dtV(v.dataVenda) },
   { id:'validade', label:'Validade', grupo:'Datas', tipos:['cot'], txt:(v)=>dtV(v.validade) },
@@ -4143,7 +4156,7 @@ const VENDA_FILTROS = [
 const VENDA_FILTRO = Object.fromEntries(VENDA_FILTROS.map(f=>[f.id, f]));
 const VENDA_TPL_PADRAO = {
   cot:{ lista:['cliente','vendedor','status','dataVenda','validade','nItens','totalVenda','formaRecebimento','origem'], card:['vendedor','dataVenda','validade','nItens','totalVenda'], filtros:['busca','status','cliente','vendedor','dataVenda','total'] },
-  ped:{ lista:['cliente','vendedor','status','dataVenda','dataPrevistaEntrega','nItens','totalVenda','formaRecebimento','origem'], card:['vendedor','dataVenda','dataPrevistaEntrega','nItens','totalVenda'], filtros:['busca','status','cliente','vendedor','dataVenda','total'] },
+  ped:{ lista:['cliente','vendedor','status','disponibilidade','dataVenda','dataPrevistaEntrega','nItens','totalVenda','formaRecebimento','origem'], card:['vendedor','dataVenda','dataPrevistaEntrega','nItens','totalVenda'], filtros:['busca','status','cliente','vendedor','dataVenda','total'] },
 };
 function prefsVendas(tipo){
   const p = ((usuarioAtual && usuarioAtual.preferencias) || {})[VENDA_TIPOS[tipo].estado] || {}, pad = VENDA_TPL_PADRAO[tipo];
@@ -4187,6 +4200,7 @@ function vendaAcoesHtml(tipo, v){
   return `<div class="ci-actions"><button class="icon-btn" title="${ed ? 'Abrir para edição' : 'Abrir'}" data-action="venda-abrir:${tipo}:${esc(v.id)}">${ICONS.open}</button>
     <button class="icon-btn" title="Baixar o PDF" data-action="venda-pdf:${tipo}:${esc(v.id)}">${ICONS.download}</button>
     ${tipo==='cot' && ed && !v.pedidoId && v.status!=='recusada' ? `<button class="icon-btn" title="Aceitar e gerar o pedido" data-action="venda-aceitar:${esc(v.id)}">${ICONS.check}</button>` : ''}
+    ${tipo==='ped' && ed ? `<button class="icon-btn" title="Vincular produtos a processo ou estoque" data-action="vinc-abrir:${esc(v.id)}">${ICONS.link}</button>` : ''}
     ${tipo==='cot' && cr ? `<button class="icon-btn" title="Duplicar" data-action="venda-duplicar:${esc(v.id)}">${ICONS.copy || ICONS.plus}</button>` : ''}
     ${ed ? `<button class="icon-btn" title="Excluir" data-action="venda-excluir:${tipo}:${esc(v.id)}">${ICONS.trash}</button>` : ''}</div>`;
 }
@@ -4358,6 +4372,446 @@ async function gerarPdfVenda(tipo, id){
     if(relBloco(doc, 'observacoesInternas')) texto('Observações internas (uso interno)', v.observacoesInternas);
     await downloadPdfBlob(doc, `${tipo==='cot' ? 'cotacao' : 'pedido'}-venda-${String(v.id).toLowerCase()}.pdf`);
   }catch(err){ console.error('Falha ao gerar o PDF da venda:', err); toast('Não foi possível gerar o PDF.'); }
+}
+
+/* =========================== Estoque (Vendas): produtos dos processos finalizados =========================== */
+const EST_SIT = { disponivel:['Disponível','badge-green','#2F6B4F'], parcial:['Parcialmente reservado','badge-amber','#C07A25'], esgotado:['Esgotado','badge-red','#B23A32'] };
+const idEstoque = seq => 'EST-' + String(seq).padStart(4, '0');
+function lerCopiaLocalEstoque(){ try{ const raw = localStorage.getItem(chaveLocal('estoque:copia')); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
+let estoqueAvisouLocal = false;
+async function persistEstoque(){
+  try{ localStorage.setItem(chaveLocal('estoque:copia'), JSON.stringify(state.estoque)); }catch(e){}
+  const ok = await storeSet('estoque:list', state.estoque);
+  if(!ok && !estoqueAvisouLocal){ estoqueAvisouLocal = true; toast('Estoque mantido neste navegador. Se o erro continuar, o servidor ainda precisa aceitar a chave "estoque:list".'); }
+  return ok;
+}
+// Quantidade reservada por pedidos (não cancelados) vinculados a este item do estoque
+function reservadoEstoque(estId){
+  return (state.vendasPed||[]).filter(p=>p.status!=='cancelado').reduce((s, p)=>s + (p.itens||[]).filter(i=>i.origem && i.origem.tipo==='estoque' && i.origem.ref===estId).reduce((a, i)=>a + numV(i.quantidade), 0), 0);
+}
+function resumoEstoque(e){
+  const reservado = reservadoEstoque(e.id), disponivel = Math.max(0, numV(e.quantidade) - reservado);
+  return { reservado, disponivel, sit: disponivel<=0 ? 'esgotado' : (reservado>0 ? 'parcial' : 'disponivel') };
+}
+// Cria os registros de estoque a partir dos produtos de um processo (sem duplicar o que já foi cadastrado)
+async function cadastrarEstoqueDoProcesso(procId){
+  const raw = (state.processosIndex||[]).find(x=>x.id===procId); if(!raw) return { criados:0, existentes:0 };
+  const p = procNorm(raw); let nm = null; try{ nm = computeNumerarioProcesso(p); }catch(e){}
+  const t0 = p.transporte || {}, ts = todosTransportesProc(p), agora = new Date().toISOString();
+  const containers = ts.flatMap(t=>(t.containers||[]).map(c=>c.numero).filter(Boolean)).join(', ');
+  const entrada = (ts.map(t=>t.chegada).filter(Boolean)[0]) || (p.desembaraco && p.desembaraco.dataDesembaraco) || agora.slice(0, 10);
+  let criados = 0, existentes = 0;
+  p.produto.fornecedores.forEach((fo, k)=>(fo.itens||[]).forEach((it, n)=>{
+    if(!String(it.produto||'').trim() || !(numV(it.quantidade)>0)) return;
+    if((state.estoque||[]).some(e=>e.processoId===p.id && e.foId===fo.id && e.itId===it.id)){ existentes++; return; }
+    const linha = nm && nm.linhas.find(l=>l.kForn===k && l.nItem===n), pr = (state.produtos||[]).find(x=>normBuscaV(x.nome)===normBuscaV(it.produto));
+    const seq = Math.max(0, ...(state.estoque||[]).map(x=>x.seq||0)) + 1, qtd = numV(it.quantidade), vu = numV(it.valorUnit), forn = (state.clientes||[]).find(c=>nomeCadastro(c)===fo.fornecedor);
+    state.estoque.push({ id:idEstoque(seq), seq, criadoEm:agora, criadoPor:nomeUsuarioVenda(), processoId:p.id, foId:fo.id, itId:it.id,
+      refCliente:(p.cliente||{}).referenciaCliente||'', cliente:(p.cliente||{}).nome||'', fornecedor:fo.fornecedor||'', paisOrigem:(forn && forn.enderecos && forn.enderecos[0] && forn.enderecos[0].pais) || fo.paisOrigem || '',
+      produto:it.produto, descricao:it.descricao||'', ncm:it.ncm||'', quantidade:qtd, unidade:it.unidade||'', moeda:fo.moeda||'USD', valorUnit:vu, valorTotal:qtd*vu, pesoLiquido:numV(it.pesoLiquido),
+      custoUnitSem:linha ? linha.unitSemCredito : 0, custoUnitCom:linha ? linha.unitComCredito : 0, custoTotalSem:linha ? linha.custoSemCredito : 0,
+      container:containers, booking:t0.booking||'', mbl:t0.conhecimentoMaster||'', hbl:t0.conhecimentoHouse||'', portoOrigem:t0.origem||'', portoDestino:t0.destino||'', dataEntrada:entrada,
+      terminal:(p.armazenagem && p.armazenagem.terminal && p.armazenagem.terminal.nome) || '', declaracao:((p.desembaraco||{}).tipoDeclaracao||'') + ' ' + ((p.desembaraco||{}).numeroDeclaracao||''),
+      cad: pr ? { produtoId:pr.id, codigoInterno:pr.codigoInterno||'', categoria:pr.categoria||'', subcategoria:pr.subcategoria||'', descricao:pr.descricao||'', unidadeMedida:pr.unidadeMedida||'', pesoBruto:pr.pesoBruto||'', pesoLiquido:pr.pesoLiquido||'', cubagem:pr.cubagem||'',
+        altura:pr.altura||'', largura:pr.largura||'', comprimento:pr.comprimento||'', gtin:pr.codigoBarrasGtin||'', precoSaida:pr.precoSaida||'', embalagem:pr.embalagem||'' } : null });
+    criados++;
+  }));
+  if(criados) await persistEstoque();
+  return { criados, existentes };
+}
+/* --- catálogo, lista, cards e template --- */
+const dimEst = c => (c && (c.altura || c.largura || c.comprimento)) ? [c.altura, c.largura, c.comprimento].map(x=>x || '—').join(' × ') + ' cm' : '';
+const ESTOQUE_CAMPOS = [
+  { id:'cliente', label:'Cliente', grupo:'Processo', txt:e=>e.cliente },
+  { id:'refCliente', label:'Ref. do cliente', grupo:'Processo', txt:e=>e.refCliente },
+  { id:'fornecedor', label:'Fornecedor / Exportador', grupo:'Processo', txt:e=>e.fornecedor },
+  { id:'paisOrigem', label:'País de origem', grupo:'Processo', txt:e=>e.paisOrigem },
+  { id:'booking', label:'Booking', grupo:'Processo', txt:e=>e.booking },
+  { id:'mbl', label:'MBL / MAWB', grupo:'Processo', txt:e=>e.mbl },
+  { id:'hbl', label:'HBL / HAWB', grupo:'Processo', txt:e=>e.hbl },
+  { id:'container', label:'Container(s)', grupo:'Processo', txt:e=>e.container },
+  { id:'portoOrigem', label:'Porto/aeroporto de origem', grupo:'Processo', txt:e=>e.portoOrigem },
+  { id:'portoDestino', label:'Porto/aeroporto de destino', grupo:'Processo', txt:e=>e.portoDestino },
+  { id:'declaracao', label:'Declaração (DUIMP/DI)', grupo:'Processo', txt:e=>String(e.declaracao||'').trim() },
+  { id:'terminal', label:'Terminal portuário', grupo:'Processo', txt:e=>e.terminal },
+  { id:'dataEntrada', label:'Data de entrada', grupo:'Processo', txt:e=>dtV(e.dataEntrada) },
+  { id:'produto', label:'Produto', grupo:'Produto (do processo)', txt:e=>e.produto },
+  { id:'descricao', label:'Descrição', grupo:'Produto (do processo)', txt:e=>e.descricao },
+  { id:'ncm', label:'NCM', grupo:'Produto (do processo)', txt:e=>e.ncm },
+  { id:'quantidade', label:'Quantidade (entrada)', grupo:'Produto (do processo)', num:true, txt:e=>fmtNum(numV(e.quantidade), 0) },
+  { id:'unidade', label:'Unid.', grupo:'Produto (do processo)', txt:e=>e.unidade },
+  { id:'valorUnit', label:'Valor unitário', grupo:'Produto (do processo)', num:true, txt:e=>e.valorUnit ? fmtMoeda(e.valorUnit, e.moeda) : '' },
+  { id:'valorTotal', label:'Valor total (invoice)', grupo:'Produto (do processo)', num:true, txt:e=>e.valorTotal ? fmtMoeda(e.valorTotal, e.moeda) : '' },
+  { id:'pesoLiquido', label:'Peso líquido (kg)', grupo:'Produto (do processo)', num:true, txt:e=>e.pesoLiquido ? fmtNum(e.pesoLiquido, 3) : '' },
+  { id:'custoUnitSem', label:'Custo unitário (s/ créditos)', grupo:'Custos', num:true, txt:e=>e.custoUnitSem ? rsV(e.custoUnitSem) : '' },
+  { id:'custoUnitCom', label:'Custo unitário (c/ créditos)', grupo:'Custos', num:true, txt:e=>e.custoUnitCom ? rsV(e.custoUnitCom) : '' },
+  { id:'custoTotalSem', label:'Custo total (s/ créditos)', grupo:'Custos', num:true, txt:e=>e.custoTotalSem ? rsV(e.custoTotalSem) : '' },
+  { id:'sku', label:'Código interno (SKU)', grupo:'Cadastro do produto', txt:e=>(e.cad||{}).codigoInterno },
+  { id:'categoria', label:'Categoria', grupo:'Cadastro do produto', txt:e=>[(e.cad||{}).categoria, (e.cad||{}).subcategoria].filter(Boolean).join(' / ') },
+  { id:'descricaoCad', label:'Descrição do cadastro', grupo:'Cadastro do produto', txt:e=>(e.cad||{}).descricao },
+  { id:'gtin', label:'GTIN / código de barras', grupo:'Cadastro do produto', txt:e=>(e.cad||{}).gtin },
+  { id:'pesoBrutoUn', label:'Peso bruto un. (kg)', grupo:'Cadastro do produto', num:true, txt:e=>(e.cad||{}).pesoBruto },
+  { id:'cubagem', label:'Cubagem (m³)', grupo:'Cadastro do produto', num:true, txt:e=>(e.cad||{}).cubagem },
+  { id:'dimensoes', label:'Dimensões (A × L × C)', grupo:'Cadastro do produto', txt:e=>dimEst(e.cad) },
+  { id:'embalagem', label:'Embalagem', grupo:'Cadastro do produto', txt:e=>(e.cad||{}).embalagem },
+  { id:'precoSaida', label:'Preço de venda (cadastro)', grupo:'Cadastro do produto', num:true, txt:e=>(e.cad||{}).precoSaida ? rsV(numV((e.cad||{}).precoSaida)) : '' },
+  { id:'situacao', label:'Situação', grupo:'Estoque', minW:120, txt:e=>EST_SIT[resumoEstoque(e).sit][0], html:e=>{ const s = EST_SIT[resumoEstoque(e).sit]; return `<span class="badge ${s[1]}">${s[0]}</span>`; } },
+  { id:'reservado', label:'Reservado em pedidos', grupo:'Estoque', num:true, txt:e=>fmtNum(resumoEstoque(e).reservado, 0) },
+  { id:'disponivel', label:'Disponível', grupo:'Estoque', num:true, txt:e=>fmtNum(resumoEstoque(e).disponivel, 0), html:e=>`<b>${fmtNum(resumoEstoque(e).disponivel, 0)}</b>` },
+];
+ESTOQUE_CAMPOS.forEach(c=>{ if(!c.html) c.html = e=>{ const t = c.txt(e); return t ? esc(t) : vazioV; }; });
+const ESTOQUE_CAMPO = Object.fromEntries(ESTOQUE_CAMPOS.map(c=>[c.id, c]));
+const ESTOQUE_TPL_PADRAO = { lista:['produto','descricao','cliente','refCliente','fornecedor','quantidade','unidade','reservado','disponivel','situacao','dataEntrada','sku'], card:['fornecedor','cliente','refCliente','quantidade','unidade','disponivel','custoUnitSem','sku'] };
+function prefsEstoque(){
+  const p = ((usuarioAtual && usuarioAtual.preferencias) || {}).estoque || {}, valido = a => Array.isArray(a) ? a.filter(id=>ESTOQUE_CAMPO[id]) : null;
+  return { modo:p.modo==='card' ? 'card' : 'lista', lista:valido(p.lista) || ESTOQUE_TPL_PADRAO.lista, card:valido(p.card) || ESTOQUE_TPL_PADRAO.card };
+}
+const salvarPrefsEstoque = (alteracao, mensagem) => salvarPreferencias('estoque', alteracao, prefsEstoque(), mensagem);
+const uiEstoque = () => { state.estoqueUI = state.estoqueUI || { templateAberto:false, tplAba:'lista', tplSel:null, filtro:{ busca:'', situacao:'', cliente:'', fornecedor:'', de:'', ate:'' } }; return state.estoqueUI; };
+function estoqueFiltrado(){
+  const f = uiEstoque().filtro || {}, q = normBuscaV(f.busca);
+  return (state.estoque||[]).filter(e=>{
+    const r = resumoEstoque(e);
+    if(f.situacao && r.sit!==f.situacao) return false; if(f.cliente && e.cliente!==f.cliente) return false; if(f.fornecedor && e.fornecedor!==f.fornecedor) return false;
+    if(f.de && !(e.dataEntrada && e.dataEntrada>=f.de)) return false; if(f.ate && !(e.dataEntrada && e.dataEntrada<=f.ate)) return false;
+    if(q && !normBuscaV([e.id, e.processoId, e.cliente, e.refCliente, e.fornecedor, e.produto, e.descricao, e.ncm, e.booking, e.mbl, e.hbl, e.container, (e.cad||{}).codigoInterno, (e.cad||{}).gtin].join(' ')).includes(q)) return false;
+    return true;
+  }).sort((a, b)=>String(b.dataEntrada||'').localeCompare(String(a.dataEntrada||'')) || b.seq - a.seq);
+}
+function estoqueLinhaHtml(e, prefs, editavel, podeAbrir){
+  const campos = prefs.lista.map(id=>ESTOQUE_CAMPO[id]).map(c=>({ label:c.label, html:c.html(e), num:!!c.num, minW:c.minW || 0 }));
+  const abrir = podeAbrir ? `<button class="icon-btn" title="Abrir o processo ${esc(e.processoId)}" data-action="est-abrir-proc:${esc(e.processoId)}">${ICONS.open}</button>` : '';
+  const rm = editavel ? `<button class="icon-btn" title="Retirar do estoque" data-action="est-remover:${esc(e.id)}">${ICONS.trash}</button>` : '';
+  return { acao: podeAbrir ? `est-abrir-proc:${esc(e.processoId)}` : '', idHtml:`<span class="lm-ref">${esc(e.id)}</span>`, campos, acoes:`<div class="ci-actions">${abrir}${rm}</div>` };
+}
+function renderEstoqueCards(itens, prefs, editavel, podeAbrir){
+  const campos = prefs.card.map(id=>ESTOQUE_CAMPO[id]);
+  return `<div class="prod-kanban" style="grid-template-columns:repeat(3,minmax(0,1fr));">${Object.entries(EST_SIT).map(([sit, [rot, badge, cor]])=>{
+    const ls = itens.filter(e=>resumoEstoque(e).sit===sit);
+    return `<div class="prod-col" style="border-top:3px solid ${cor};"><div class="prod-col-topo"><b>${rot}</b><span class="badge ${badge}">${ls.length}</span></div>
+      ${ls.length ? ls.map(e=>`<div class="prod-card" ${podeAbrir ? `data-action="est-abrir-proc:${esc(e.processoId)}"` : ''}>
+        <div class="prod-card-topo"><span class="lm-ref">${esc(e.id)} · ${esc(e.processoId)}</span>${editavel ? `<button class="icon-btn" title="Retirar do estoque" data-action="est-remover:${esc(e.id)}">${ICONS.trash}</button>` : ''}</div>
+        <div class="prod-card-titulo">${esc(e.produto)}</div>
+        ${campos.filter(c=>c.id!=='produto').map(c=>`<div class="prod-card-campo"><span>${esc(c.label)}</span><div>${c.html(e)}</div></div>`).join('')}</div>`).join('') : '<div class="prod-vazio">Nenhum item</div>'}</div>`;
+  }).join('')}</div>`;
+}
+function renderEstoqueTemplate(){
+  const ui = uiEstoque(), aba = ui.tplAba || 'lista';
+  if(!ui.tplSel){ const pr = prefsEstoque(); ui.tplSel = { lista:[...pr.lista], card:[...pr.card] }; }
+  const sel = new Set(ui.tplSel[aba]);
+  const grupos = [...new Set(ESTOQUE_CAMPOS.map(c=>c.grupo))].map(g=>{
+    const campos = ESTOQUE_CAMPOS.filter(c=>c.grupo===g && !(aba==='card' && c.id==='produto')), marcados = campos.filter(c=>sel.has(c.id)).length;
+    return `<div class="tpl-grupo"><div class="tpl-grupo-topo"><b>${esc(g)}</b><span class="membro-sub">${marcados} de ${campos.length}</span><button class="link-btn" data-action="est-tpl-grupo:${esc(g)}:${marcados===campos.length ? '0' : '1'}">${marcados===campos.length ? 'Desmarcar todos' : 'Marcar todos'}</button></div>
+      ${campos.map(c=>`<label class="tpl-campo"><input type="checkbox" data-estpl-campo="${c.id}" ${sel.has(c.id) ? 'checked' : ''}> ${esc(c.label)}</label>`).join('')}</div>`;
+  }).join('');
+  return `<div class="card proc-template"><div class="proc-template-topo"><div class="section-title">${ICONS.gear} Template</div>
+    <div class="pers-tabs" style="margin:0;"><button class="pers-tab ${aba==='lista' ? 'active' : ''}" data-action="est-tpl-aba:lista">Configurar Lista</button><button class="pers-tab ${aba==='card' ? 'active' : ''}" data-action="est-tpl-aba:card">Configurar Card</button></div></div>
+    <p class="page-sub" style="margin:10px 0 16px;">${aba==='card' ? 'Escolha as informações de cada card. O produto e os números aparecem sempre no topo; os cards ficam agrupados pela situação.' : 'Escolha as colunas da lista. O número do estoque aparece sempre na primeira coluna.'} Todas as informações vindas do Processo e do Cadastro do Produto estão disponíveis. Esta escolha vale só para você.</p>
+    <div class="tpl-grupos">${grupos}</div>
+    <div class="btn-row" style="margin-top:18px; justify-content:space-between;"><span class="membro-sub">${sel.size} selecionado${sel.size===1 ? '' : 's'}</span><div class="btn-row"><button class="btn btn-ghost" data-action="est-tpl-padrao">Restaurar padrão</button><button class="btn btn-ghost" data-action="est-template">Cancelar</button><button class="btn btn-primary" data-action="est-tpl-salvar">${ICONS.check} Salvar ${aba==='card' ? 'card' : 'lista'}</button></div></div></div>`;
+}
+function onEstoqueTemplateCampo(el){
+  const id = el.getAttribute('data-estpl-campo'), ui = uiEstoque(); if(!id || !ui.tplSel) return;
+  const aba = ui.tplAba || 'lista', atual = new Set(ui.tplSel[aba]); if(el.checked) atual.add(id); else atual.delete(id);
+  ui.tplSel[aba] = ESTOQUE_CAMPOS.map(c=>c.id).filter(x=>atual.has(x)); renderApp();
+}
+function renderEstoque(){
+  const prefs = prefsEstoque(), ui = uiEstoque(), f = ui.filtro, todos = state.estoque || [], itens = estoqueFiltrado();
+  let editavel = false, podeAbrir = false; try{ editavel = pode('vendas', 'editar'); podeAbrir = pode('processos', 'ver'); }catch(e){}
+  const soma = fn => itens.reduce((s, e)=>s + fn(e), 0);
+  const clientes = [...new Set(todos.map(e=>e.cliente).filter(Boolean))].sort(), forns = [...new Set(todos.map(e=>e.fornecedor).filter(Boolean))].sort();
+  const corpo = !todos.length ? `<div class="empty">${ICONS.cube}<h3>Nenhum produto em estoque</h3><p>Quando um processo for atualizado para <b>Finalizado</b>, o sistema pergunta "Cadastrar Produtos em Estoque?". Respondendo Sim, os produtos do processo entram aqui com as informações do Processo e do Cadastro do Produto.</p></div>`
+    : !itens.length ? `<div class="empty"><h3>Nada encontrado</h3><p>Ajuste os filtros ou clique em "Limpar".</p></div>`
+    : prefs.modo==='card' ? renderEstoqueCards(itens, prefs, editavel, podeAbrir)
+    : listaModernaHtml(itens.map(e=>estoqueLinhaHtml(e, prefs, editavel, podeAbrir)), `<div class="lm-total"><span>${itens.length} ${itens.length===1 ? 'item' : 'itens'} em estoque</span><b>${fmtNum(soma(e=>resumoEstoque(e).disponivel), 0)} disponíveis</b></div>`);
+  return `
+  <div class="page-title">Estoque</div>
+  <div class="page-sub">Produtos dos processos finalizados, com as informações completas do Processo e do Cadastro do Produto. O que for vinculado a pedidos fica reservado.</div>
+  <hr class="hairline">
+  <div class="kpi-row" style="margin-bottom:20px;">
+    <div class="kpi"><div class="k-lbl">Itens em estoque</div><div class="k-val">${itens.length}</div></div>
+    <div class="kpi"><div class="k-lbl">Quantidade de entrada</div><div class="k-val">${fmtNum(soma(e=>numV(e.quantidade)), 0)}</div></div>
+    <div class="kpi"><div class="k-lbl">Reservado em pedidos</div><div class="k-val" style="color:var(--amber-deep);">${fmtNum(soma(e=>resumoEstoque(e).reservado), 0)}</div></div>
+    <div class="kpi"><div class="k-lbl">Disponível</div><div class="k-val" style="color:var(--green);">${fmtNum(soma(e=>resumoEstoque(e).disponivel), 0)}</div></div>
+  </div>
+  <div class="lista-painel">
+    <div class="cot-barra"><div class="view-toggle"><button class="view-toggle-btn ${prefs.modo==='lista' ? 'active' : ''}" data-action="est-modo:lista">${ICONS.file} Lista</button><button class="view-toggle-btn ${prefs.modo==='card' ? 'active' : ''}" data-action="est-modo:card">${ICONS.product} Cards</button></div>
+      <div class="btn-row">${botoesExportarHtml('est')}<button class="btn btn-ghost btn-sm ${ui.templateAberto ? 'ativo' : ''}" data-action="est-template">${ICONS.gear} Template</button></div></div>
+    ${ui.templateAberto ? renderEstoqueTemplate() : ''}
+    <div class="filter-bar">
+      <div class="field" style="min-width:220px;"><label>Buscar</label><input data-estfil="busca" value="${esc(f.busca)}" placeholder="Produto, processo, cliente, SKU, booking, MBL…" autocomplete="off"></div>
+      <div class="field"><label>Situação</label><select data-estfil="situacao"><option value="">Todas</option>${Object.entries(EST_SIT).map(([k, [r]])=>`<option value="${k}" ${f.situacao===k ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+      <div class="field"><label>Cliente</label><select data-estfil="cliente"><option value="">Todos</option>${clientes.map(c=>`<option ${f.cliente===c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+      <div class="field"><label>Fornecedor</label><select data-estfil="fornecedor"><option value="">Todos</option>${forns.map(c=>`<option ${f.fornecedor===c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+      <div class="field"><label>Entrada de</label><input type="date" data-estfil="de" value="${esc(f.de)}"></div><div class="field"><label>Entrada até</label><input type="date" data-estfil="ate" value="${esc(f.ate)}"></div>
+      <div class="btn-row" style="align-self:flex-end;"><button class="btn btn-primary btn-sm" data-action="est-filtrar">Filtrar</button><button class="btn btn-ghost btn-sm" data-action="est-limpar">Limpar</button></div>
+    </div>
+    ${corpo}
+  </div>`;
+}
+function dadosExportacaoEstoque(){
+  const prefs = prefsEstoque(), campos = prefs.lista.map(id=>ESTOQUE_CAMPO[id]), f = uiEstoque().filtro || {};
+  return { titulo:'Estoque', arquivo:'estoque', colunas:['Estoque', 'Processo', ...campos.map(c=>c.label)], linhas:estoqueFiltrado().map(e=>[e.id, e.processoId, ...campos.map(c=>c.txt(e))]),
+    filtros:[f.busca && `Busca: "${f.busca}"`, f.situacao && `Situação: ${EST_SIT[f.situacao][0]}`, f.cliente && `Cliente: ${f.cliente}`, f.fornecedor && `Fornecedor: ${f.fornecedor}`, f.de && `Entrada de ${dtV(f.de)}`, f.ate && `Entrada até ${dtV(f.ate)}`].filter(Boolean) };
+}
+async function acaoEstoque(cmd, a1, a2){
+  const ui = uiEstoque();
+  if(cmd==='est-modo'){ salvarPrefsEstoque({ modo:a1==='card' ? 'card' : 'lista' }); renderApp(); return true; }
+  if(cmd==='est-template'){ ui.templateAberto = !ui.templateAberto; ui.tplSel = null; if(ui.templateAberto) ui.tplAba = prefsEstoque().modo; renderApp(); return true; }
+  if(cmd==='est-tpl-aba'){ ui.tplAba = a1==='card' ? 'card' : 'lista'; renderApp(); return true; }
+  if(cmd==='est-tpl-grupo'){ const aba = ui.tplAba || 'lista', set = new Set(ui.tplSel[aba]); ESTOQUE_CAMPOS.filter(c=>c.grupo===a1 && !(aba==='card' && c.id==='produto')).forEach(c=>{ if(a2==='1') set.add(c.id); else set.delete(c.id); }); ui.tplSel[aba] = ESTOQUE_CAMPOS.map(c=>c.id).filter(x=>set.has(x)); renderApp(); return true; }
+  if(cmd==='est-tpl-padrao'){ const aba = ui.tplAba || 'lista'; ui.tplSel[aba] = [...ESTOQUE_TPL_PADRAO[aba]]; renderApp(); return true; }
+  if(cmd==='est-tpl-salvar'){
+    const aba = ui.tplAba || 'lista', esc2 = (ui.tplSel||{})[aba] || [];
+    if(!esc2.length){ toast('Selecione pelo menos uma informação.'); return true; }
+    salvarPrefsEstoque({ [aba]:[...esc2], modo:aba }, aba==='card' ? 'Template do card salvo.' : 'Template da lista salvo.').then(()=>{ ui.templateAberto = false; ui.tplSel = null; renderApp(); }); return true;
+  }
+  if(cmd==='est-filtrar'){ const v = k => { const el = document.querySelector(`[data-estfil="${k}"]`); return el ? el.value : ''; }; ui.filtro = { busca:v('busca'), situacao:v('situacao'), cliente:v('cliente'), fornecedor:v('fornecedor'), de:v('de'), ate:v('ate') }; renderApp(); return true; }
+  if(cmd==='est-limpar'){ ui.filtro = { busca:'', situacao:'', cliente:'', fornecedor:'', de:'', ate:'' }; renderApp(); return true; }
+  if(cmd==='est-abrir-proc'){ abrirProcesso(a1); return true; }
+  if(cmd==='est-remover'){
+    let ed = false; try{ ed = pode('vendas', 'editar'); }catch(e){} if(!ed) return true;
+    if(!requestDelete('est', a1)) return true;
+    state.estoque = state.estoque.filter(e=>e.id!==a1); await persistEstoque(); toast('Item retirado do estoque.', 'ok'); renderApp(); return true;
+  }
+  return false;
+}
+/* --- Pergunta ao finalizar o processo: "Cadastrar Produtos em Estoque?" --- */
+function estoquePerguntaHtml(){
+  const q = state.estoquePergunta; if(!q) return '';
+  const procId = q.origem==='form' ? (state.currentProcessoId || 'este processo') : q.procId;
+  return `<div class="proc-modal-fundo" data-action="est-perg-cancelar"><div class="proc-modal rel-escolha" data-action="proc-modal-nada" role="alertdialog" aria-modal="true" style="width:min(520px,100%);">
+    <div class="proc-modal-topo"><div class="proc-modal-titulo">Cadastrar Produtos em Estoque?</div></div>
+    <p style="margin:0 0 16px; color:var(--ink-soft); line-height:1.5;">O processo <b>${esc(procId)}</b> será atualizado para <b>Finalizado</b>. Deseja cadastrar os produtos dele em <b>Vendas → Estoque</b>, com as informações do Processo e do Cadastro do Produto?</p>
+    <div class="btn-row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn-ghost" data-action="est-perg-cancelar">Cancelar</button><button class="btn btn-ghost" data-action="est-perg-nao">Não</button><button class="btn btn-primary" data-action="est-perg-sim">${ICONS.check} Sim</button></div>
+  </div></div>`;
+}
+async function acaoEstoquePergunta(cmd){
+  const q = state.estoquePergunta; if(!q) return true;
+  if(cmd==='est-perg-cancelar'){ state.estoquePergunta = null; renderApp(); return true; }   // cancela: o status não muda
+  const sim = cmd==='est-perg-sim';
+  state.estoquePergunta = null;
+  if(q.origem==='form'){
+    if(state.procDraft){ state.procDraft.status = 'finalizado'; state.procDraft.cadastrarEstoque = sim ? 'sim' : 'nao'; saveDraftProcesso(); }
+    renderApp(); if(sim) toast('Ao salvar o processo, os produtos entram em Estoque.'); return true;
+  }
+  await moverProcessoStatus(q.procId, q.novo, true);
+  if(sim){ const r = await cadastrarEstoqueDoProcesso(q.procId); toast(r.criados ? `${r.criados} produto${r.criados===1 ? '' : 's'} cadastrado${r.criados===1 ? '' : 's'} em Estoque.` : 'Os produtos deste processo já estavam em Estoque.', 'ok'); renderApp(); }
+  return true;
+}
+
+/* =========================== Tracking: rastreio de processos e de produtos vinculados =========================== */
+const normTrk = x => String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const trkRotulosTransporte = t => t.modal==='aereo' ? { master:'MAWB', house:'HAWB' } : { master:'MBL', house:'HBL' };
+// Procura processos (Booking, MBL/MAWB, HBL/HAWB, container, referência do cliente, nº do processo) e pedidos (nº do pedido do cliente, e-commerce, canal, nº do pedido)
+function trackingBuscar(q){
+  const nq = normTrk(q), res = { q, processos:[], pedidos:[] };
+  if(nq.length<3) return res;
+  const casa = v => { const nv = normTrk(v); return !!nv && (nv===nq || (nq.length>=4 && nv.includes(nq))); };
+  const procs = new Map(), peds = new Map();
+  (state.processosIndex||[]).forEach(raw=>{
+    let p; try{ p = procNorm(raw); }catch(e){ return; }
+    const achou = [];
+    todosTransportesProc(p).forEach(t=>{ const r = trkRotulosTransporte(t);
+      if(casa(t.booking)) achou.push('Booking ' + t.booking); if(casa(t.conhecimentoMaster)) achou.push(r.master + ' ' + t.conhecimentoMaster); if(casa(t.conhecimentoHouse)) achou.push(r.house + ' ' + t.conhecimentoHouse);
+      (t.containers||[]).forEach(c=>{ if(casa(c.numero)) achou.push('Container ' + c.numero); }); });
+    if(casa((p.cliente||{}).referenciaCliente)) achou.push('Ref. do cliente ' + p.cliente.referenciaCliente);
+    if(casa(p.id)) achou.push('Processo ' + p.id);
+    if(achou.length) procs.set(p.id, { p, achou:[...new Set(achou)] });
+  });
+  (state.vendasPed||[]).forEach(v=>{
+    const achou = [];
+    if(casa(v.numeroPedidoCliente)) achou.push('Nº do pedido do cliente ' + v.numeroPedidoCliente); if(casa(v.idEcommerce)) achou.push('Pedido e-commerce ' + v.idEcommerce); if(casa(v.numeroCanal)) achou.push('Pedido no canal ' + v.numeroCanal); if(casa(v.id)) achou.push('Pedido ' + v.id);
+    if(achou.length) peds.set(v.id, { v, achou });
+  });
+  // processos ligados aos produtos dos pedidos encontrados, e pedidos ligados aos processos encontrados
+  peds.forEach(({ v })=>(v.itens||[]).forEach(i=>{ const o = i.origem || {}; if(o.tipo==='processo'){ const pid = String(o.ref).split('|')[0]; if(!procs.has(pid)){ const raw = (state.processosIndex||[]).find(x=>x.id===pid); if(raw) procs.set(pid, { p:procNorm(raw), achou:[`Produto do pedido ${v.id}`] }); } }
+    if(o.tipo==='estoque'){ const e = (state.estoque||[]).find(x=>x.id===o.ref); if(e && !procs.has(e.processoId)){ const raw = (state.processosIndex||[]).find(x=>x.id===e.processoId); if(raw) procs.set(e.processoId, { p:procNorm(raw), achou:[`Estoque ${e.id} do pedido ${v.id}`] }); } } }));
+  res.processos = [...procs.values()]; res.pedidos = [...peds.values()];
+  return res;
+}
+function pedidosDoProcesso(procId){
+  return (state.vendasPed||[]).filter(v=>v.status!=='cancelado').map(v=>({ v, itens:(v.itens||[]).filter(i=>{ const o = i.origem || {}; return (o.tipo==='processo' && String(o.ref).split('|')[0]===procId) || (o.tipo==='estoque' && ((state.estoque||[]).find(e=>e.id===o.ref)||{}).processoId===procId); }) })).filter(x=>x.itens.length);
+}
+function trkLinhaTempoHtml(st){
+  const fluxo = Object.entries(PROC_STATUS).filter(([k, v])=>!v.legado && k!=='cancelado'), idx = fluxo.findIndex(([k])=>k===st);
+  if(st==='cancelado') return '<div class="trk-cancelado">Processo cancelado</div>';
+  return `<div class="trk-linha">${fluxo.map(([k, v], i)=>`<div class="trk-passo${i<idx ? ' feito' : ''}${i===idx ? ' atual' : ''}"><i></i><span>${esc(v.label)}</span></div>`).join('')}</div>`;
+}
+function trkProcessoHtml({ p, achou }){
+  const st = statusProc(p), s = PROC_STATUS[st] || { label:st, cls:'badge-navy' }, ts = todosTransportesProc(p), peds = pedidosDoProcesso(p.id);
+  const mons = (state.monitoramento||[]).filter(m=>(m.processoId===p.id || m.referencia===p.id));
+  let podeAbrir = false; try{ podeAbrir = pode('processos', 'ver'); }catch(e){}
+  const transportes = ts.map((t, k)=>{ const r = trkRotulosTransporte(t);
+    return `<div class="trk-fatos">${ts.length>1 ? `<div class="trk-fato-t">Transporte ${k+1} · ${esc(PROC_MODAIS[t.modal]||'')}</div>` : ''}
+      <div><span>Modal</span><b>${esc(PROC_MODAIS[t.modal]||'—')}</b></div><div><span>Booking</span><b>${esc(t.booking||'—')}</b></div><div><span>${r.master}</span><b>${esc(t.conhecimentoMaster||'—')}</b></div><div><span>${r.house}</span><b>${esc(t.conhecimentoHouse||'—')}</b></div>
+      <div><span>${t.modal==='aereo' ? 'Voo' : 'Navio / viagem'}</span><b>${esc(t.navioVoo||'—')}</b></div><div><span>Origem → destino</span><b>${esc(t.origem||'—')} → ${esc(t.destino||'—')}</b></div>
+      <div><span>ETD</span><b>${t.etd ? dtV(t.etd) : '—'}</b></div><div><span>ETA</span><b>${t.eta ? dtV(t.eta) : '—'}</b></div><div><span>Chegada efetiva</span><b>${t.chegada ? dtV(t.chegada) : '—'}</b></div></div>`; }).join('');
+  const conts = mons.length ? `<div class="trk-sub">Containers monitorados</div><div class="trk-lista">${mons.map(m=>{ const c = monCalcular(m), r = m.rastreio || {}; const sit = MON_SITUACOES[c.situacao] || { rotulo:c.situacao, classe:'badge-navy' };
+    return `<div class="trk-linha-info"><b>${esc(m.container||'sem número')}</b><span class="badge ${sit.classe}">${esc(sit.rotulo)}</span>${r.situacao ? `<span>Viagem: ${esc((typeof MON_SIT_VIAGEM!=='undefined' && MON_SIT_VIAGEM[r.situacao]) || r.situacao)}</span>` : ''}${r.atrasoDias!=null ? `<span>${r.atrasoDias>0 ? 'Atraso de ' + r.atrasoDias + ' dia(s)' : 'Sem atraso'}</span>` : ''}${r.atualizadoEm ? `<span class="membro-sub">consulta em ${fmtDate(r.atualizadoEm)}</span>` : ''}</div>`; }).join('')}</div>` : '';
+  const prods = p.produto.fornecedores.flatMap(fo=>(fo.itens||[]).filter(i=>i.produto).map(i=>({ fo, i })));
+  const tabProd = prods.length ? `<div class="trk-sub">Produtos do processo</div><div class="trk-lista">${prods.map(({ fo, i })=>`<div class="trk-linha-info"><b>${esc(i.produto)}</b><span>${fmtNum(numV(i.quantidade), 0)} ${esc(i.unidade||'')}</span><span class="membro-sub">${esc(fo.fornecedor||'')}</span>${i.producao && i.producao.ativo ? `<span class="badge ${i.producao.pronto ? 'badge-green' : 'badge-navy'}">${i.producao.pronto ? 'Produção pronta' : 'Em produção'}${i.producao.dataProntidao ? ' · prontidão ' + dtV(i.producao.dataProntidao) : ''}</span>` : ''}</div>`).join('')}</div>` : '';
+  const tabPeds = peds.length ? `<div class="trk-sub">Pedidos de venda com produtos deste processo</div><div class="trk-lista">${peds.map(({ v, itens })=>`<div class="trk-linha-info"><button class="link-btn" data-action="trk-buscar-ref:${esc(v.id)}"><b>${esc(v.id)}</b></button><span>${esc(v.cliente)}</span>${v.numeroPedidoCliente ? `<span class="membro-sub">pedido do cliente ${esc(v.numeroPedidoCliente)}</span>` : ''}<span>${itens.map(i=>esc(i.descricao)).join(', ')}</span></div>`).join('')}</div>` : '';
+  return `<div class="card trk-card"><div class="trk-topo"><div><span class="lm-ref" style="font-size:15px;">${esc(p.id)}</span> <span class="badge ${s.cls}" style="margin-left:8px;">${esc(s.label)}</span><div class="trk-cli">${esc((p.cliente||{}).nome||'')}${(p.cliente||{}).referenciaCliente ? ' · ref. ' + esc(p.cliente.referenciaCliente) : ''}</div></div>
+      ${podeAbrir ? `<button class="btn btn-ghost btn-sm" data-action="est-abrir-proc:${esc(p.id)}">${ICONS.open} Abrir processo</button>` : ''}</div>
+    <div class="membro-sub" style="margin:4px 0 10px;">Encontrado por: ${achou.map(esc).join(' · ')}</div>
+    <div class="trk-sub">Status atual do processo</div>${trkLinhaTempoHtml(st)}${transportes}${conts}${tabProd}${tabPeds}</div>`;
+}
+function statusItemVendaHtml(i){
+  const g = grupoItemVenda(i);
+  if(!g.chave) return '<span class="badge badge-navy">Sem vínculo</span>';
+  const o = i.origem;
+  if(o.tipo==='estoque'){ const e = (state.estoque||[]).find(x=>x.id===o.ref); return `<span class="badge badge-green">Disponível em estoque</span> <span class="membro-sub">${esc(o.ref)}${e ? ' · ' + esc(e.processoId) : ''}</span>`; }
+  const pid = String(o.ref).split('|')[0], raw = (state.processosIndex||[]).find(x=>x.id===pid), st = raw ? statusProc(raw) : '', s = PROC_STATUS[st] || { label:st || '—', cls:'badge-navy' };
+  return `<span class="badge badge-amber">Processo em andamento</span> <span class="badge ${s.cls}">${esc(s.label)}</span> <button class="link-btn" data-action="trk-buscar-ref:${esc(pid)}">${esc(pid)}</button>`;
+}
+function trkPedidoHtml({ v, achou }){
+  const st = VENDA_TIPOS.ped.status[v.status] || ['', 'badge-navy'];
+  return `<div class="card trk-card"><div class="trk-topo"><div><span class="lm-ref" style="font-size:15px;">${esc(v.id)}</span> <span class="badge ${st[1]}" style="margin-left:8px;">${esc(st[0])}</span><div class="trk-cli">${esc(v.cliente)}${v.numeroPedidoCliente ? ' · pedido do cliente ' + esc(v.numeroPedidoCliente) : ''}</div></div></div>
+    <div class="membro-sub" style="margin:4px 0 10px;">Encontrado por: ${achou.map(esc).join(' · ')}</div>
+    <div class="trk-sub">Produtos do pedido e situação de cada um</div>
+    <div class="trk-lista">${(v.itens||[]).filter(i=>i.descricao).map(i=>`<div class="trk-linha-info"><b>${esc(i.descricao)}</b><span>${fmtNum(numV(i.quantidade), 0)} ${esc(i.un||'')}</span>${statusItemVendaHtml(i)}</div>`).join('') || '<span class="membro-sub">Sem itens.</span>'}</div></div>`;
+}
+function renderTracking(){
+  const t = state.trk = state.trk || { q:'' }, r = trackingBuscar(t.q), total = r.processos.length + r.pedidos.length;
+  const msg = !String(t.q||'').trim() ? '' : normTrk(t.q).length<3 ? '<div class="empty"><h3>Digite pelo menos 3 caracteres</h3></div>' : !total ? `<div class="empty">${ICONS.search || ''}<h3>Nada encontrado para "${esc(t.q)}"</h3><p>Confira o número do Booking, MBL, HBL, MAWB, HAWB ou do pedido do cliente.</p></div>` : '';
+  return `
+  <div class="page-title">Tracking</div>
+  <div class="page-sub">Digite o nº do <b>Booking</b>, <b>MBL</b>, <b>HBL</b>, <b>MAWB</b>, <b>HAWB</b> ou o <b>nº do pedido do cliente</b> para acompanhar o processo, ou o produto vinculado a ele, e ver o status atual.</div>
+  <hr class="hairline">
+  <div class="card trk-busca"><div class="field-row" style="grid-template-columns:1fr auto; align-items:flex-end;">
+    <div class="field"><label>Número para rastrear</label><input data-trk-q value="${esc(t.q)}" placeholder="Ex.: Booking, MBL, HBL, MAWB, HAWB, nº do pedido do cliente, container" autocomplete="off" autofocus></div>
+    <div class="btn-row"><button class="btn btn-primary" data-action="trk-buscar">${ICONS.search || ''} Rastrear</button><button class="btn btn-ghost" data-action="trk-limpar">Limpar</button></div></div></div>
+  ${msg}
+  ${r.pedidos.length ? `<div class="trk-bloco">${r.pedidos.map(trkPedidoHtml).join('')}</div>` : ''}
+  ${r.processos.length ? `<div class="trk-bloco">${r.processos.map(trkProcessoHtml).join('')}</div>` : ''}`;
+}
+function acaoTracking(cmd, a1){
+  if(cmd==='trk-buscar'){ const el = document.querySelector('[data-trk-q]'); state.trk = { q:el ? el.value : (state.trk||{}).q || '' }; renderApp(); return true; }
+  if(cmd==='trk-limpar'){ state.trk = { q:'' }; renderApp(); return true; }
+  if(cmd==='trk-buscar-ref'){ state.trk = { q:a1 }; renderApp(); try{ window.scrollTo(0, 0); }catch(e){} return true; }
+  return false;
+}
+
+/* =========================== Pedidos: vincular produtos a processo em andamento ou ao estoque (e split) =========================== */
+function grupoItemVenda(item){
+  const o = (item && item.origem) || {};
+  if(o.tipo==='estoque' && o.ref) return { chave:'estoque', rotulo:'Disponível em estoque' };
+  if(o.tipo==='processo' && o.ref){
+    const pid = String(o.ref).split('|')[0], raw = (state.processosIndex||[]).find(p=>p.id===pid), st = raw ? statusProc(raw) : '';
+    return { chave:'proc:' + st, rotulo:'Processo em andamento — ' + (raw ? ((PROC_STATUS[st] || {}).label || st) : 'processo não encontrado') };
+  }
+  return { chave:'', rotulo:'Sem vínculo' };
+}
+const disponibilidadeVenda = v => [...new Set((v.itens||[]).filter(i=>i.descricao).map(i=>grupoItemVenda(i).rotulo))].join(' · ');
+function candidatosEstoque(){ return (state.estoque||[]).map(e=>{ const r = resumoEstoque(e); return { ref:e.id, nome:e.produto, disponivel:r.disponivel, rotulo:`${e.id} · ${e.produto} · ${fmtNum(r.disponivel, 0)} ${e.unidade||''} disponíveis (${e.processoId})` }; }); }
+function candidatosProcesso(){
+  const out = [];
+  (state.processosIndex||[]).forEach(raw=>{
+    let p; try{ p = procNorm(raw); }catch(e){ return; }
+    const st = statusProc(p); if(st==='finalizado' || st==='cancelado') return;
+    p.produto.fornecedores.forEach(fo=>(fo.itens||[]).forEach(it=>{ if(String(it.produto||'').trim()) out.push({ ref:`${p.id}|${fo.id}|${it.id}`, procId:p.id, nome:it.produto, status:st, rotulo:`${p.id} · ${it.produto} · ${fmtNum(numV(it.quantidade), 0)} ${it.unidade||''} · ${(PROC_STATUS[st]||{}).label || st}` }); }));
+  });
+  return out;
+}
+// Sugestão: mesmo nome do produto (estoque com saldo primeiro, depois processo em andamento)
+function sugerirOrigemItem(item){
+  const q = normBuscaV(item.descricao), qtd = numV(item.quantidade); if(!q) return { tipo:'', ref:'' };
+  const casa = n => { const x = normBuscaV(n); return x && (x===q || x.includes(q) || q.includes(x)); };
+  const est = candidatosEstoque().find(c=>casa(c.nome) && c.disponivel>=qtd) || candidatosEstoque().find(c=>casa(c.nome) && c.disponivel>0);
+  if(est) return { tipo:'estoque', ref:est.ref };
+  const pr = candidatosProcesso().find(c=>casa(c.nome)); return pr ? { tipo:'processo', ref:pr.ref } : { tipo:'', ref:'' };
+}
+function abrirVinculo(pedidoId){
+  const ped = (state.vendasPed||[]).find(x=>x.id===pedidoId); if(!ped){ toast('Pedido não encontrado.'); return; }
+  const escolhas = {}; ped.itens.forEach(i=>{ escolhas[i.id] = (i.origem && i.origem.tipo) ? { tipo:i.origem.tipo, ref:i.origem.ref } : sugerirOrigemItem(i); });
+  state.vinculo = { pedidoId, escolhas, aviso:null }; renderApp();
+}
+function gruposDoVinculo(ped, escolhas){
+  const mapa = new Map();
+  ped.itens.filter(i=>i.descricao).forEach(i=>{ const e = escolhas[i.id] || {}; const g = grupoItemVenda({ origem:e }); if(!g.chave) return; if(!mapa.has(g.chave)) mapa.set(g.chave, { chave:g.chave, rotulo:g.rotulo, itens:[] }); mapa.get(g.chave).itens.push(i); });
+  return [...mapa.values()];
+}
+function vinculoHtml(){
+  const v = state.vinculo; if(!v) return '';
+  const ped = (state.vendasPed||[]).find(x=>x.id===v.pedidoId); if(!ped){ state.vinculo = null; return ''; }
+  if(v.aviso){
+    return `<div class="proc-modal-fundo"><div class="proc-modal rel-escolha" data-action="proc-modal-nada" role="alertdialog" aria-modal="true" style="width:min(680px,100%);">
+      <div class="proc-modal-topo"><div class="proc-modal-titulo">Produtos com status diferentes no pedido ${esc(ped.id)}</div></div>
+      <p style="margin:0 0 12px; color:var(--ink-soft); line-height:1.5;">Os produtos deste pedido estão em situações diferentes. Você pode <b>manter tudo no mesmo pedido</b> ou fazer o <b>split</b>: o pedido é dividido em um pedido para cada situação.</p>
+      ${v.aviso.map(g=>`<div class="trk-linha-info" style="align-items:flex-start;"><span class="badge ${g.chave==='estoque' ? 'badge-green' : 'badge-amber'}">${esc(g.rotulo)}</span><span>${g.itens.map(i=>`${esc(i.descricao)} (${fmtNum(numV(i.quantidade), 0)} ${esc(i.un||'')})`).join(', ')}</span></div>`).join('')}
+      <p class="hint" style="margin:12px 0 0;">No split, o primeiro grupo continua em ${esc(ped.id)}; frete, despesas e desconto em valor ficam no pedido original.</p>
+      <div class="btn-row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:16px;"><button class="btn btn-ghost" data-action="vinc-voltar">Voltar</button><button class="btn btn-ghost" data-action="vinc-manter">Manter no mesmo pedido</button><button class="btn btn-primary" data-action="vinc-split">Fazer split do pedido</button></div>
+    </div></div>`;
+  }
+  const est = candidatosEstoque(), proc = candidatosProcesso();
+  const linhas = ped.itens.filter(i=>i.descricao).map(i=>{
+    const e = v.escolhas[i.id] || { tipo:'', ref:'' }, lista = e.tipo==='estoque' ? est : e.tipo==='processo' ? proc : [];
+    return `<tr><td><b>${esc(i.descricao)}</b><div class="membro-sub">${fmtNum(numV(i.quantidade), 0)} ${esc(i.un||'')}</div></td>
+      <td><select data-vinc-tipo="${i.id}"><option value="">Sem vínculo</option><option value="estoque" ${e.tipo==='estoque' ? 'selected' : ''}>Disponível em estoque</option><option value="processo" ${e.tipo==='processo' ? 'selected' : ''}>Processo em andamento</option></select></td>
+      <td>${e.tipo ? `<select data-vinc-ref="${i.id}" style="min-width:300px;"><option value="">Selecione…</option>${lista.map(c=>`<option value="${esc(c.ref)}" ${e.ref===c.ref ? 'selected' : ''}>${esc(c.rotulo)}</option>`).join('')}</select>${!lista.length ? `<div class="membro-sub">Nenhum ${e.tipo==='estoque' ? 'item em estoque' : 'processo em andamento'} cadastrado.</div>` : ''}` : '<span class="vazio">—</span>'}</td></tr>`;
+  }).join('');
+  return `<div class="proc-modal-fundo"><div class="proc-modal rel-escolha" data-action="proc-modal-nada" role="dialog" aria-modal="true" style="width:min(980px,100%);">
+    <div class="proc-modal-topo"><div class="proc-modal-titulo">Vincular produtos do pedido ${esc(ped.id)} — ${esc(ped.cliente)}</div><button class="btn btn-ghost btn-sm" data-action="vinc-cancelar">Cancelar</button></div>
+    <p style="margin:0 0 12px; color:var(--ink-soft); line-height:1.5;">Para cada produto, indique se ele está <b>disponível em estoque</b> ou se virá de um <b>processo em andamento</b>. Assim o cliente acompanha o status do pedido no Tracking.</p>
+    <div class="table-wrap"><table class="proc-itens"><thead><tr><th>Produto do pedido</th><th>Origem</th><th>Vínculo</th></tr></thead><tbody>${linhas || '<tr><td colspan="3">Este pedido não tem itens.</td></tr>'}</tbody></table></div>
+    <div class="btn-row" style="justify-content:flex-end; gap:8px; margin-top:16px;"><button class="btn btn-ghost" data-action="vinc-cancelar">Cancelar</button><button class="btn btn-primary" data-action="vinc-salvar">${ICONS.check} Salvar vínculos</button></div></div></div>`;
+}
+function onVinculoInput(el){
+  const v = state.vinculo; if(!v) return;
+  if(el.hasAttribute('data-vinc-tipo')){ const id = el.getAttribute('data-vinc-tipo'); v.escolhas[id] = { tipo:el.value, ref:'' }; }
+  else if(el.hasAttribute('data-vinc-ref')){ const id = el.getAttribute('data-vinc-ref'); v.escolhas[id] = { ...(v.escolhas[id]||{}), ref:el.value }; }
+  renderApp();
+}
+async function vinculoSalvar(modo){
+  const v = state.vinculo; if(!v) return;
+  const ped = state.vendasPed.find(x=>x.id===v.pedidoId); if(!ped){ state.vinculo = null; renderApp(); return; }
+  for(const i of ped.itens.filter(x=>x.descricao)){
+    const e = v.escolhas[i.id] || {};
+    if(e.tipo && !e.ref){ toast(`Escolha o vínculo de "${i.descricao}" ou marque "Sem vínculo".`); return; }
+    if(e.tipo==='estoque'){ const c = candidatosEstoque().find(x=>x.ref===e.ref); const ja = (i.origem && i.origem.tipo==='estoque' && i.origem.ref===e.ref) ? numV(i.quantidade) : 0;
+      if(c && c.disponivel + ja < numV(i.quantidade)){ toast(`Estoque insuficiente para "${i.descricao}": disponível ${fmtNum(c.disponivel + ja, 0)}, pedido ${fmtNum(numV(i.quantidade), 0)}.`); return; } }
+  }
+  const grupos = gruposDoVinculo(ped, v.escolhas);
+  if(grupos.length>1 && !modo){ v.aviso = grupos; renderApp(); return; }   // janela informativa: manter ou fazer split
+  ped.itens.forEach(i=>{ const e = v.escolhas[i.id]; i.origem = e && e.tipo ? { tipo:e.tipo, ref:e.ref } : { tipo:'', ref:'' }; });
+  const agora = new Date().toISOString(); ped.atualizadoEm = agora; ped.atualizadoPor = nomeUsuarioVenda();
+  let novos = [];
+  if(grupos.length>1 && modo==='split') novos = dividirPedidoPorGrupo(ped, grupos);
+  await persistVendas('ped'); state.vinculo = null;
+  toast(novos.length ? `Pedido dividido: ${[ped.id, ...novos].join(', ')}.` : 'Vínculos salvos.', 'ok'); renderApp();
+}
+// Split: o 1º grupo fica no pedido original (com os itens sem vínculo); cada outro grupo vira um novo pedido
+function dividirPedidoPorGrupo(ped, grupos){
+  const novos = [], agora = new Date().toISOString();
+  grupos.slice(1).forEach(g=>{
+    const ids = new Set(g.itens.map(i=>i.id)), seq = novoNumeroVenda('ped');
+    const copia = JSON.parse(JSON.stringify(ped));
+    const novo = normalizarVenda({ ...copia, id:idVenda('ped', seq), seq, criadoEm:agora, atualizadoEm:agora, criadoPor:nomeUsuarioVenda(), desdobradoDe:ped.id, pedidoId:'',
+      itens:copia.itens.filter(i=>ids.has(i.id)).map(i=>({ ...i, id:uid() })), fretePagoCliente:'', fretePagoEmpresa:'', despesas:'', desconto:String(ped.desconto||'').trim().endsWith('%') ? ped.desconto : '' }, 'ped');
+    state.vendasPed.push(novo); novos.push(novo.id);
+  });
+  const sai = new Set(grupos.slice(1).flatMap(g=>g.itens.map(i=>i.id))); ped.itens = ped.itens.filter(i=>!sai.has(i.id));
+  return novos;
+}
+async function acaoVinculo(cmd){
+  const v = state.vinculo; if(!v) return true;
+  if(cmd==='vinc-cancelar'){ state.vinculo = null; renderApp(); return true; }
+  if(cmd==='vinc-voltar'){ v.aviso = null; renderApp(); return true; }
+  if(cmd==='vinc-salvar'){ await vinculoSalvar(); return true; }
+  if(cmd==='vinc-manter'){ await vinculoSalvar('manter'); return true; }
+  if(cmd==='vinc-split'){ await vinculoSalvar('split'); return true; }
+  return false;
+}
+// Cartão "Disponibilidade dos produtos" do pedido (formulário)
+function vendaDisponibilidadeHtml(d){
+  if(d.tipo!=='ped') return '';
+  const itens = d.itens.filter(i=>i.descricao);
+  return `<div class="card"><div class="section-title" style="margin-bottom:6px;">Disponibilidade dos produtos</div>
+    <p class="hint" style="margin:0 0 10px; color:var(--ink-soft); font-size:12.5px;">Vincule cada produto a um item em <b>estoque</b> ou a um <b>processo em andamento</b>. O cliente acompanha o pedido em Tracking.${d.desdobradoDe ? ` Este pedido foi desdobrado de <b>${esc(d.desdobradoDe)}</b>.` : ''}</p>
+    <div class="trk-lista">${itens.map(i=>`<div class="trk-linha-info"><b>${esc(i.descricao)}</b><span>${fmtNum(numV(i.quantidade), 0)} ${esc(i.un||'')}</span>${statusItemVendaHtml(i)}</div>`).join('') || '<span class="membro-sub">Sem itens.</span>'}</div>
+    ${d.id && (state.vendasPed||[]).some(x=>x.id===d.id) ? `<div class="btn-row" style="margin-top:12px;"><button class="btn btn-ghost" data-action="vinc-abrir:${esc(d.id)}">${ICONS.plus} Vincular produtos a processo ou estoque</button></div>` : ''}</div>`;
 }
 
 /* =========================== Financeiro (resumo de custos de todos os processos) =========================== */
@@ -4925,6 +5379,7 @@ function onProcessoInput(el, evento){
   const path = el.getAttribute('data-proc');
   if(!path || !state.procDraft) return false;
   const valor = el.type==='checkbox' ? el.checked : el.value;
+  if(path==='status' && evento==='change' && valor==='finalizado' && state.procDraft.status!=='finalizado'){ state.estoquePergunta = { origem:'form' }; renderApp(); return true; }   // pergunta antes de finalizar
   setPath(state.procDraft, path, valor);
   // Autopreenchimento a partir dos cadastros
   const campoEmpresa = Object.entries(PROC_EMPRESA_CAMPOS).find(([,c])=>c.path===path);
@@ -4999,6 +5454,10 @@ async function salvarProcesso(){
   if(salvo){ state.procDraft = normalizarProcesso(JSON.parse(JSON.stringify(salvo))); }
   saveDraftProcesso();
   toast('Processo ' + state.currentProcessoId + ' salvo.', 'ok');
+  if(salvo && statusProc(salvo)==='finalizado' && salvo.cadastrarEstoque==='sim'){   // escolheu "Sim" na pergunta ao finalizar
+    const r = await cadastrarEstoqueDoProcesso(state.currentProcessoId);
+    if(r.criados) toast(`${r.criados} produto${r.criados===1 ? '' : 's'} cadastrado${r.criados===1 ? '' : 's'} em Estoque.`, 'ok');
+  }
   renderApp();
 }
 async function persistProcessosIndex(){ return storeSet('processos:index', state.processosIndex); }
@@ -5769,6 +6228,7 @@ function dadosExportacao(tela){
       filtros: resumoFiltrosTpl('cot', cards ? ['status'] : []) };
   }
   if(tela==='vcot' || tela==='vped') return dadosExportacaoVendas(tela);
+  if(tela==='est') return dadosExportacaoEstoque();
   if(tela==='prod'){
     const ls = producaoFiltradas(), f = state.prodFiltro || {}, campos = prefsProducao().lista.map(id=>PROD_CAMPO[id]);
     return { titulo:'Produção — produtos em produção', arquivo:'producao',
@@ -5900,6 +6360,8 @@ const ICONS = {
   download:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>`,
   filter:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 8v6l-4 2v-8L4 5Z"/></svg>`,
   edit:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+  pin:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  link:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
   cart:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>`,
   factory:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>`,
   trash:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 14h10l1-14"/></svg>`,
@@ -6522,6 +6984,7 @@ async function loadInitialData(){
   state.monitoramento = v['monitoramento:list'] || lerCopiaLocalMonitoramento() || [];
   state.vendasCot = (v['vendasCot:list'] || lerCopiaLocalVendas('cot') || []).map(x=>normalizarVenda(x, 'cot'));
   state.vendasPed = (v['vendasPed:list'] || lerCopiaLocalVendas('ped') || []).map(x=>normalizarVenda(x, 'ped'));
+  state.estoque = v['estoque:list'] || lerCopiaLocalEstoque() || [];
   if(v['processo:draft'] && v['processo:draft'].draft){
     state.procDraft = normalizarProcesso(v['processo:draft'].draft);
     state.currentProcessoId = v['processo:draft'].id || null;
@@ -7478,6 +7941,8 @@ const ROUTE_META = {
   'processoForm':   {group:'proc', label:'Cadastrar Novo Processo'},
   'producao':       {group:'prod', label:'Em produção'},
   'vendaCotacoes':  {group:'vendas', label:'Cotação'},
+  'vendaEstoque':   {group:'vendas', label:'Estoque'},
+  'tracking':       {group:'trk', label:'Rastrear'},
   'vendaPedidos':   {group:'vendas', label:'Pedidos'},
   'vendaForm':      {group:'vendas', label:'Cotação / Pedido de venda'},
   'financeiro':     {group:'fin', label:'Resumo de custos'},
@@ -7485,6 +7950,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
+state.estoque = []; state.estoqueUI = null; state.estoquePergunta = null; state.vinculo = null; state.trk = { q:'' }; state.currentEstoqueId = null;
 state.vendasCot = []; state.vendasPed = []; state.vendaForm = null; state.vendaUI = {}; state.currentVendaCotId = null; state.currentVendaPedId = null;
 state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.sairCotacao = null; state.sairSemConfirmar = false; state.prodFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.prodTemplateAberto = false; state.prodTemplateSel = null; state.finSel = {}; state.finEdit = null; state.finMassa = false; state.procFoco = null; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
 state.dash = { cot:{gran:'mes',ano:0,mes:0,comp:[]}, proc:{gran:'mes',ano:0,mes:0,comp:[]}, mon:{gran:'mes',ano:0,mes:0,comp:[],medida:'qtd'}, fin:{gran:'mes',ano:0,mes:0,comp:[],visao:'total'}, vcot:{gran:'mes',ano:0,mes:0,comp:[]}, vped:{gran:'mes',ano:0,mes:0,comp:[]} };
@@ -7598,7 +8064,10 @@ function sideNavHtml(){
       lk('go:monitoramentoCusto', ICONS.calc, 'Custo de Free Time', r==='monitoramentoCusto'))}
     ${grupo('vendas', ICONS.cart, 'Vendas',
       lk('go:vendaCotacoes', ICONS.file, 'Cotação', r==='vendaCotacoes' || (r==='vendaForm' && state.vendaForm && state.vendaForm.tipo==='cot')) +
-      lk('go:vendaPedidos', ICONS.product, 'Pedidos', r==='vendaPedidos' || (r==='vendaForm' && state.vendaForm && state.vendaForm.tipo==='ped')))}
+      lk('go:vendaPedidos', ICONS.product, 'Pedidos', r==='vendaPedidos' || (r==='vendaForm' && state.vendaForm && state.vendaForm.tipo==='ped')) +
+      lk('go:vendaEstoque', ICONS.cube, 'Estoque', r==='vendaEstoque'))}
+    ${grupo('trk', ICONS.pin, 'Tracking',
+      lk('go:tracking', ICONS.search || ICONS.pin, 'Rastrear', r==='tracking'))}
     ${grupo('sim', ICONS.cube, 'Simulador de Carga',
       lk('go:simInicio', ICONS.home, 'Início', r==='simInicio') +
       (nomeSim ? lk('go:simCarga', ICONS.cube, 'Dimensões da Carga', r==='simCarga') + lk('go:simCarregando', ICONS.ship, 'Carregando', r==='simCarregando') +
@@ -7617,6 +8086,8 @@ function viewFor(route){
     case 'producao': return renderProducao();
     case 'vendaCotacoes': return renderVendas('cot');
     case 'vendaPedidos': return renderVendas('ped');
+    case 'vendaEstoque': return renderEstoque();
+    case 'tracking': return renderTracking();
     case 'vendaForm': return state.vendaForm ? renderVendaForm() : renderVendas('cot');
     case 'financeiro': return renderFinanceiro();
     case 'monitoramento': return renderMonitoramento();
@@ -7646,7 +8117,7 @@ function renderApp(){
   const app = document.getElementById('app');
   if(perfilIncompleto()){ app.innerHTML = renderCompletarPerfil(); return; }
   // Telas de lista (e o formulário de cadastro) usam toda a largura disponível; as demais mantêm a coluna central
-  const ROTAS_LISTA = ['cotacoesTodas','processos','producao','financeiro','monitoramento','vendaCotacoes','vendaPedidos','cad-cliente','cad-produto'];
+  const ROTAS_LISTA = ['cotacoesTodas','processos','producao','financeiro','monitoramento','vendaCotacoes','vendaPedidos','vendaEstoque','tracking','cad-cliente','cad-produto'];
   const emLista = ROTAS_LISTA.includes(state.route) && !(state.cadView && state.route.startsWith('cad-'));
   const wide = state.route==='home' ? 'wide' : (emLista ? 'wide-lista' : '');
   const crumbs = state.route==='home' ? '' : `<div class="crumbs">${crumbsHtml()}</div>`;
@@ -7661,7 +8132,7 @@ function renderApp(){
   </div>` : '';
   const classesLayout = `layout ${state.sideCollapsed ? 'side-collapsed' : ''} ${state.sideMobile ? 'side-open' : ''}`;
   app.innerHTML = `<div class="${classesLayout}">${sideNavHtml()}<div class="side-backdrop" data-action="toggle-sidebar"></div>
-    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d + relEscolhaHtml() + confirmarSaidaCotacaoHtml();
+    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d + relEscolhaHtml() + confirmarSaidaCotacaoHtml() + estoquePerguntaHtml() + vinculoHtml();
   if(state.route==='dados') patchComputedDados();
   if(state.route==='dadosFormal') patchComputedDadosFormal();
   if(state.route==='simCarga') patchComputedSimCarga();
@@ -10640,6 +11111,7 @@ const REL_DOCS = {
   vendaPedido: { sessao:'vendas', nome:'Pedido de venda — documento', titulo:'Pedido de Venda', orient:'portrait',
     blocos:[['cliente','Cliente e operação',true,'Número, situação, cliente, vendedor, natureza, datas e endereço de entrega'], ['itens','Itens',true,'Descrição, código, quantidade, preço unitário e total'], ['totais','Totais',true,'Total dos produtos, desconto, impostos e total da venda'], ['detalhes','Detalhes da venda',true,'Entrega, envio, intermediador, frete, despesas e pesos'],
       ['pagamento','Pagamento',true,'Forma de recebimento e parcelas'], ['transporte','Transportador / Volumes',true,'Forma de envio, frete, rastreamento e volumes'], ['observacoes','Observações',true,'Observações impressas na venda'], ['observacoesInternas','Observações internas',false,'Uso interno: só aparece se for incluída']] },
+  listaEstoque: { sessao:'vendas', nome:'Estoque — lista exportada', titulo:'Estoque', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
   listaVendasCot: { sessao:'vendas', nome:'Cotações de venda — lista exportada', titulo:'Cotações de Venda', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
   listaVendasPed: { sessao:'vendas', nome:'Pedidos de venda — lista exportada', titulo:'Pedidos de Venda', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
   listaFinanceiro: { sessao:'fin', nome:'Financeiro — lista exportada', titulo:'Financeiro', orient:'landscape', blocos:[['filtros','Resumo dos filtros',true,'Linha com os filtros aplicados na tela']] },
@@ -10651,7 +11123,7 @@ const REL_DOCS = {
     blocos:[['kpis','Indicadores',true,'Quadros de resumo do dashboard'], ['graficos','Gráficos',true,'Gráfico por período e distribuição'], ['tabela','Tabela de dados',true,'Valores por período e categoria']] },
 };
 // Qual documento gera cada tela de exportação
-const REL_TELA_DOC = (tela)=>{ const t = String(tela||''); return t==='cot' ? 'listaCotacoes' : t==='proc' ? 'listaProcessos' : t==='fin' ? 'listaFinanceiro' : t==='vcot' ? 'listaVendasCot' : t==='vped' ? 'listaVendasPed' : t==='prod' ? 'listaProducao' : t==='mon' ? 'listaMonitoramento' : t.startsWith('cad') ? 'listaCadastros' : 'listaProcessos'; };
+const REL_TELA_DOC = (tela)=>{ const t = String(tela||''); return t==='cot' ? 'listaCotacoes' : t==='proc' ? 'listaProcessos' : t==='fin' ? 'listaFinanceiro' : t==='est' ? 'listaEstoque' : t==='vcot' ? 'listaVendasCot' : t==='vped' ? 'listaVendasPed' : t==='prod' ? 'listaProducao' : t==='mon' ? 'listaMonitoramento' : t.startsWith('cad') ? 'listaCadastros' : 'listaProcessos'; };
 // Modelos de visual (cada um tem uma prévia na tela de escolha)
 const REL_MODELOS = {
   classico:    { nome:'Clássico', desc:'Faixa colorida no topo e tabelas com grade. É o visual atual do ERP.', cab:'faixa', cabAltura:58, fonteTit:'helvetica', tema:'grid', cabTabela:'cor', kpi:'cartao', margem:28, escala:1, pad:1, fundo:true },
@@ -12029,6 +12501,11 @@ function onAppClick(e){
   if(cmd.startsWith('fin-') && acaoFin(cmd, a1)) return;
   if(cmd.startsWith('prod-') && acaoProd(cmd, a1, a2)) return;
   if(cmd.startsWith('venda-')){ acaoVenda(cmd, a1, a2, action); return; }
+  if(cmd.startsWith('est-perg-')){ acaoEstoquePergunta(cmd); return; }
+  if(cmd.startsWith('est-') && acaoEstoque(cmd, a1, a2)) return;
+  if(cmd.startsWith('trk-') && acaoTracking(cmd, a1)) return;
+  if(cmd==='vinc-abrir'){ abrirVinculo(a1); return; }
+  if(cmd.startsWith('vinc-')){ acaoVinculo(cmd); return; }
   if(cmd.startsWith('cot-') && acaoTemplateCotacoes(cmd, a1, a2)) return;
   if(cmd.startsWith('ftpl-') && acaoFiltrosTpl(cmd, a1)) return;
   if(cmd==='exportar'){ exportarTela(a1, a2); return; }
@@ -12250,6 +12727,9 @@ function onAppChange(e){
   const el = e.target;
   if(el.hasAttribute && el.hasAttribute('data-vf')){ onVendaInput(el, 'change'); return; }
   if(el.hasAttribute && el.hasAttribute('data-vtpl-campo')){ onVendaTemplateCampo(el); return; }
+  if(el.hasAttribute && el.hasAttribute('data-estpl-campo')){ onEstoqueTemplateCampo(el); return; }
+  if(el.hasAttribute && (el.hasAttribute('data-vinc-tipo') || el.hasAttribute('data-vinc-ref'))){ onVinculoInput(el); return; }
+  if(el.hasAttribute && el.hasAttribute('data-trk-q')){ state.trk = { q:el.value }; renderApp(); return; }
   if(el.hasAttribute && el.hasAttribute('data-cad-tipos')){ onCadTiposInput(el, true); return; }
   if(el.hasAttribute && (el.hasAttribute('data-rel') || el.hasAttribute('data-rel-bloco'))){ onRelInput(el); return; }
   if(onConfigChange(el)) return;
@@ -12438,7 +12918,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.43 · módulo Vendas (cotação e pedidos) · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.44 · tracking, vínculo de pedidos e estoque · build 15/10/2026</span></div>
   `;
 }
 
