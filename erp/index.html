@@ -1195,7 +1195,7 @@ async function storeSet(key, value){
     catch(e){ console.error('storage set failed', key, e); return false; }
   }
   const secao = SECAO_DA_CHAVE[key];
-  if(!(pode(secao, 'criar') || pode(secao, 'editar') || (key==='processos:index' && (pode('financeiro', 'editar') || pode('producao', 'editar'))))){
+  if(!(state.sincronizando || pode(secao, 'criar') || pode(secao, 'editar') || (key==='processos:index' && (pode('financeiro', 'editar') || pode('producao', 'editar'))))){
     toast('Você não tem permissão para salvar em ' + SECOES[secao] + '.');
     return false;
   }
@@ -3054,7 +3054,7 @@ function procCampo(path, label, opts){
   }
   if(o.textarea) return `<div class="field"${span}><label>${label}</label><textarea data-proc="${path}" rows="${o.rows||3}" placeholder="${esc(o.placeholder||'')}">${esc(v)}</textarea></div>`;
   return `<div class="field"${span}><label>${label}</label><input data-proc="${path}" value="${esc(v)}"
-    ${o.type ? `type="${o.type}"` : ''} ${o.list ? `list="${o.list}"` : ''} ${o.step ? `step="${o.step}"` : ''}
+    ${o.type ? `type="${o.type}"` : ''} ${o.ac ? `data-ac="${o.ac}"` : ''} ${o.step ? `step="${o.step}"` : ''}
     placeholder="${esc(o.placeholder||'')}" autocomplete="off" ${o.cls ? `class="${o.cls}"` : ''}>${o.hint ? `<span class="hint">${o.hint}</span>` : ''}</div>`;
 }
 const opcoes = obj => Object.entries(obj);
@@ -3142,7 +3142,7 @@ function procFornecedorHtml(fo, k, qtd){
   const base = `produto.fornecedores.${k}`, M = fo.moeda || 'USD', sub = totaisFornecedorProc(fo);
   const confirmando = state.pendingDelete === 'forn:' + fo.id;
   const linhas = fo.itens.map((it, n)=>{ const pi = `${base}.itens.${n}`; return `<tr>
-    <td><input data-proc="${pi}.produto" list="dl-proc-produtos" value="${esc(it.produto)}" placeholder="Produto" autocomplete="off"></td>
+    <td><input data-proc="${pi}.produto" data-ac="proc-produto" value="${esc(it.produto)}" placeholder="Digite 3 letras…" autocomplete="off"></td>
     <td><input data-proc="${pi}.ncm" value="${esc(it.ncm)}" placeholder="0000.00.00" style="min-width:100px;"></td>
     <td><input data-proc="${pi}.descricao" value="${esc(it.descricao)}" placeholder="Descrição"></td>
     <td><input data-proc="${pi}.quantidade" type="number" step="any" min="0" class="num-mono" value="${esc(it.quantidade)}" placeholder="0"></td>
@@ -3163,7 +3163,7 @@ function procFornecedorHtml(fo, k, qtd){
       </div>
     </div>
     <div class="field-row grid-3">
-      ${procCampo(base+'.fornecedor', 'Fornecedor / exportador', { list:'dl-proc-fornecedores', span:2 })}
+      ${procCampo(base+'.fornecedor', 'Fornecedor / exportador', { ac:'proc-fornecedor', span:2, placeholder:'Digite 3 letras para buscar…', hint:'Empresa cadastrada como Fornecedor ou Fabricante.' })}
       ${procCampo(base+'.paisOrigem', 'País de origem', { placeholder:'Ex.: China' })}
       ${procCampo(base+'.incoterm', 'Incoterm', { options: opcoesLista(PROC_INCOTERMS) })}
       ${procCampo(base+'.moeda', 'Moeda da mercadoria', { options: opcoesLista(PROC_MOEDAS) })}
@@ -3280,7 +3280,7 @@ function procLinhaCustoHtml(base, l, pathArray, o){
   const real = (l.moeda||'BRL')==='BRL', op = o || {};
   return `<tr>
     <td><input data-proc="${base}.descricao" value="${esc(l.descricao)}" placeholder="Descrição" style="min-width:130px;"></td>
-    ${op.prestador ? `<td><input data-proc="${base}.prestador" list="dl-proc-prestadores" value="${esc(l.prestador)}" placeholder="Prestador" autocomplete="off" style="min-width:130px;"></td>` : ''}
+    ${op.prestador ? `<td><input data-proc="${base}.prestador" data-ac="proc-prestador" value="${esc(l.prestador)}" placeholder="Prestador (3 letras)" autocomplete="off" style="min-width:130px;"></td>` : ''}
     <td><input data-proc="${base}.tarifa" type="number" step="any" min="0" class="num-mono" value="${esc(l.tarifa)}" placeholder="0,00"></td>
     <td><select data-proc="${base}.moeda">${optMoedasProc(l.moeda||'BRL')}</select></td>
     <td>${real ? '<span class="vazio">—</span>' : `<input data-proc="${base}.taxa" type="number" step="any" min="0" class="num-mono" value="${esc(l.taxa)}" placeholder="R$ por ${esc(l.moeda)}">`}</td>
@@ -3413,7 +3413,7 @@ function procAbaArmazenagem(){
   return `<div class="card">
     <div class="section-title" style="margin-bottom:6px;"><span class="num">04</span> Terminal portuário (a pagar)</div>
     <div class="field-row grid-3">
-      ${procCampo('armazenagem.terminal.nome', 'Terminal portuário', { span:2, list:'dl-proc-terminais', placeholder:'Ex.: Conexão Marítima – Serviços Logísticos S.A.' })}
+      ${procCampo('armazenagem.terminal.nome', 'Terminal portuário', { span:2, ac:'proc-terminal', placeholder:'Digite 3 letras para buscar…', hint:'Empresa cadastrada como Terminal Portuário.' })}
       <datalist id="dl-proc-terminais">${empresasDoTipo('terminal_portuario').map(e=>nomeEmpresaCad(e)).filter(Boolean).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
     </div>
   </div>
@@ -3439,7 +3439,7 @@ function procAbaFinanceiro(){
     const b = `outrasDespesas.lancamentos.${n}`, real = (d.moeda||'BRL')==='BRL', nac = d.origem!=='internacional';
     return `<tr>
       <td><input data-proc="${b}.descricao" value="${esc(d.descricao)}" placeholder="Ex.: Despachante, Siscomex, AFRMM" style="min-width:150px;"></td>
-      <td><input data-proc="${b}.prestador" list="dl-proc-prestadores" value="${esc(d.prestador)}" placeholder="Prestador de serviço" autocomplete="off" style="min-width:160px;"></td>
+      <td><input data-proc="${b}.prestador" data-ac="proc-prestador" value="${esc(d.prestador)}" placeholder="Prestador (3 letras)" autocomplete="off" style="min-width:160px;"></td>
       <td><select data-proc="${b}.origem"><option value="nacional" ${nac?'selected':''}>Nacional</option><option value="internacional" ${nac?'':'selected'}>Internacional</option></select></td>
       <td><select data-proc="${b}.moeda">${optMoedasProc(d.moeda||'BRL')}</select></td>
       <td>${real ? '<span class="vazio">—</span>' : `<input data-proc="${b}.taxa" type="number" step="any" min="0" class="num-mono" value="${esc(d.taxa)}" placeholder="R$ por ${esc(d.moeda)}">`}</td>
@@ -3895,12 +3895,21 @@ function acharClienteVenda(txt){
   return empresasDoTipo('cliente').find(e=>[nomeEmpresaCad(e), e.razaoSocial, e.nomeFantasia].some(n=>n && normBuscaV(n)===q) || (dig.length>=8 && String(e.cnpjCpf||'').replace(/\D/g, '')===dig)) || null;
 }
 /* --- Cotação aceita → Pedido --- */
+function pendenciasCadastroVenda(v){
+  const out = [], cli = acharClienteVenda(v.cliente); if(!cli) out.push(`cliente "${v.cliente || '(vazio)'}"`);
+  (v.itens||[]).filter(i=>String(i.descricao||'').trim()).forEach(i=>{ if(!produtoCadastradoVenda(i)) out.push(`produto "${i.descricao}"`); });
+  return out;
+}
 async function gerarPedidoDaCotacao(cotId){
   const cot = state.vendasCot.find(x=>x.id===cotId); if(!cot) return null;
   if(cot.pedidoId && state.vendasPed.some(p=>p.id===cot.pedidoId)) return state.vendasPed.find(p=>p.id===cot.pedidoId);   // já migrada
+  const falta = pendenciasCadastroVenda(cot);   // no pedido só vale o que está cadastrado
+  if(falta.length){ toast('Para gerar o pedido, cadastre antes em Cadastro: ' + falta.join('; ') + '.'); return null; }
   const seq = novoNumeroVenda('ped'), agora = new Date().toISOString();
   const ped = normalizarVenda({ ...JSON.parse(JSON.stringify(cot)), id:idVenda('ped', seq), seq, tipo:'ped', status:'aberto', cotacaoId:cot.id, pedidoId:'', criadoEm:agora, atualizadoEm:agora, criadoPor:nomeUsuarioVenda(), validade:'',
     itens:cot.itens.map(i=>({ ...JSON.parse(JSON.stringify(i)), id:uid() })) }, 'ped');
+  const cliCad = acharClienteVenda(cot.cliente); if(cliCad){ ped.clienteId = cliCad.id; ped.cliente = nomeEmpresaCad(cliCad); }
+  ped.itens.forEach(i=>{ const pr = produtoCadastradoVenda(i); if(pr){ i.produtoId = pr.id; i.descricao = pr.nome; i.sku = i.sku || pr.codigoInterno || ''; } });
   state.vendasPed.push(ped);
   cot.status = 'aceita'; cot.pedidoId = ped.id; cot.atualizadoEm = agora;
   await persistVendas('ped'); await persistVendas('cot');
@@ -3915,7 +3924,7 @@ function vf(path, label, o){
   let ctl;
   if(op.options) ctl = `<select data-vf="${path}">${op.options.map(([k, t])=>`<option value="${esc(k)}" ${String(v)===String(k) ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
   else if(op.textarea) ctl = `<textarea data-vf="${path}" rows="${op.rows || 4}" placeholder="${esc(op.placeholder||'')}">${esc(v)}</textarea>`;
-  else ctl = `<input data-vf="${path}" value="${esc(v)}" ${op.type ? `type="${op.type}"` : ''} ${op.step ? `step="${op.step}"` : ''} ${op.list ? `list="${op.list}"` : ''} placeholder="${esc(op.placeholder||'')}" autocomplete="off"${dis}${op.type==='number' ? ' min="0"' : ''}>`;
+  else ctl = `<input data-vf="${path}" value="${esc(v)}" ${op.type ? `type="${op.type}"` : ''} ${op.step ? `step="${op.step}"` : ''} ${op.list ? `list="${op.list}"` : ''} ${op.ac ? `data-ac="${op.ac}"` : ''} placeholder="${esc(op.placeholder||'')}" autocomplete="off"${dis}${op.type==='number' ? ' min="0"' : ''}>`;
   return `<div class="field"${span}><label>${label}</label>${op.prefixo ? `<div class="vf-pref"><span>${op.prefixo}</span>${ctl}</div>` : ctl}${op.hint ? `<span class="hint">${op.hint}</span>` : ''}</div>`;
 }
 const vfCalc = (chave, texto) => `<div class="vf-box" data-vf-calc="${chave}">${texto}</div>`;
@@ -3934,7 +3943,7 @@ function vendaTabItensHtml(d, c){
   const linhas = d.itens.map((it, n)=>{
     const p = `itens.${n}`, lin = c.linhas.find(l=>l.id===it.id);
     return `<tr><td>${n+1}</td>
-      <td><input data-vf="${p}.descricao" value="${esc(it.descricao)}" list="dl-venda-produtos" placeholder="Pesquise por descrição ou código (SKU)" autocomplete="off" style="min-width:260px;"></td>
+      <td><input data-vf="${p}.descricao" value="${esc(it.descricao)}" data-ac="venda-produto" placeholder="Digite 3 letras do nome, SKU ou NCM" autocomplete="off" style="min-width:260px;"></td>
       <td><input data-vf="${p}.sku" value="${esc(it.sku)}" placeholder="SKU"></td>
       <td><input data-vf="${p}.quantidade" type="number" step="any" min="0" class="num-mono" value="${esc(it.quantidade)}" placeholder="0" style="min-width:80px;"></td>
       <td><input data-vf="${p}.un" value="${esc(it.un)}" style="width:62px;"></td>
@@ -3983,7 +3992,7 @@ function renderVendaForm(){
       ${vf('natureza', 'Natureza da operação', { span:2, list:'dl-venda-naturezas' })}<datalist id="dl-venda-naturezas">${VENDA_NATUREZAS.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
       <div class="field"><label>Número</label><div class="vf-box">${d.id ? esc(d.id) : '<span class="vazio">gerado ao salvar</span>'}</div></div>
       ${vf('status', 'Situação', { options:stOpc })}
-      ${vf('cliente', 'Cliente', { span:2, list:'dl-venda-clientes', placeholder:'Pesquise pelas iniciais do nome, pelo CNPJ/CPF ou pelo e-mail', hint: cli ? `${esc(cli.cnpjCpf || 'sem CNPJ/CPF')}${cli.end && cli.end.municipio ? ' · ' + esc(cli.end.municipio) + (cli.end.uf ? '/' + esc(cli.end.uf) : '') : ''}` : (d.cliente ? '<span style="color:var(--red);">Cliente não cadastrado: escolha um da lista (Cadastro → Clientes e Empresas).</span>' : '') })}
+      ${vf('cliente', 'Cliente', { span:2, ac:'venda-cliente', placeholder:'Digite 3 letras do nome ou números do CNPJ/CPF', hint: cli ? `${esc(cli.cnpjCpf || 'sem CNPJ/CPF')}${cli.end && cli.end.municipio ? ' · ' + esc(cli.end.municipio) + (cli.end.uf ? '/' + esc(cli.end.uf) : '') : ''}` : (d.cliente ? (cot ? '<span class="aviso-lista">Cliente não cadastrado: na cotação pode ficar manual, mas para gerar o pedido é preciso cadastrar (Cadastro → Clientes e Empresas).</span>' : '<span style="color:var(--red);">Cliente não cadastrado: escolha um da lista (Cadastro → Clientes e Empresas).</span>') : '') })}
       ${vf('vendedor', 'Vendedor', { options:[['', vendedores.length ? 'Selecione…' : 'Nenhum cadastrado'], ...opcV(vendedores, d.vendedor).filter(([k])=>k)], hint:avisoListaPessoas('vendedores') })}
       ${cot ? vf('validade', 'Validade da cotação', { type:'date' }) : '<div></div>'}
       ${vf('listaPreco', 'Lista de preço', { options:[['Padrão','Padrão'], ['Atacado','Atacado'], ['Varejo','Varejo'], ['Especial','Especial']] })}
@@ -4037,16 +4046,32 @@ function vendaAtualizarTela(){
   const tb = document.getElementById('vf-parcelas'); if(tb) tb.innerHTML = vendaParcelasHtml(c, d);
 }
 const VENDA_REDESENHA = /^(entregaDiferente|parcelasQtd|status|cliente|itens\.\d+\.descricao)$/;
+// Preenche a linha do item com o que está no cadastro do produto
+function preencherItemVendaDoProduto(it, pr){
+  it.produtoId = pr.id; it.descricao = pr.nome; it.sku = pr.codigoInterno || it.sku; it.un = pr.unidadeMedida || it.un || 'UN'; it.ncm = pr.ncm || it.ncm;
+  if(!numV(it.precoUn) && numV(pr.precoSaida)) it.precoUn = strV(numV(pr.precoSaida));
+  if(!numV(it.pesoBruto)) it.pesoBruto = pr.pesoBruto || ''; if(!numV(it.pesoLiquido)) it.pesoLiquido = pr.pesoLiquido || '';
+}
+const produtoCadastradoVenda = i => (state.produtos||[]).find(p=>(i.produtoId && p.id===i.produtoId) || normBuscaV(p.nome)===normBuscaV(i.descricao) || (p.codigoInterno && normBuscaV(p.codigoInterno)===normBuscaV(i.descricao)));
 function onVendaInput(el, evento){
   const f = state.vendaForm; if(!f) return;
   const path = el.getAttribute('data-vf'); if(!path) return;
   setPath(f.draft, path, el.type==='checkbox' ? !!el.checked : el.value);
+  if(/^itens\.\d+\.descricao$/.test(path)) f.draft.itens[+path.split('.')[1]].produtoId = '';   // texto mudou: o vínculo com o cadastro é refeito pelo nome/SKU
+  const acTipo = el.getAttribute('data-ac');
+  if(acTipo && evento==='input'){ if(String(el.value).trim().length>=3) showAutocomplete(el, acTipo, path); else hideAutocomplete(); }
   if(evento==='change'){
-    if(path==='cliente'){ const cli = acharClienteVenda(el.value); f.draft.clienteId = cli ? cli.id : ''; if(cli) f.draft.cliente = nomeEmpresaCad(cli); }
+    const exige = f.tipo==='ped';   // só na cotação pode ficar manual; no pedido vale o cadastro
+    if(path==='cliente'){
+      const cli = acharClienteVenda(el.value); f.draft.clienteId = cli ? cli.id : '';
+      if(cli) f.draft.cliente = nomeEmpresaCad(cli);
+      else if(exige && String(el.value).trim()){ toast(`"${String(el.value).trim()}" não é um cliente cadastrado. Digite 3 letras e escolha na lista.`); f.draft.cliente = ''; }
+    }
     const mp = /^itens\.(\d+)\.descricao$/.exec(path);
-    if(mp){   // produto cadastrado: preenche código, unidade, preço e pesos
-      const it = f.draft.itens[+mp[1]], q = normBuscaV(it.descricao), pr = (state.produtos||[]).find(x=>normBuscaV(x.nome)===q || (x.codigoInterno && normBuscaV(x.codigoInterno)===q));
-      if(pr){ it.produtoId = pr.id; it.descricao = pr.nome; it.sku = pr.codigoInterno || it.sku; it.un = pr.unidadeMedida || it.un || 'UN'; it.ncm = pr.ncm || it.ncm; if(!numV(it.precoUn) && numV(pr.precoSaida)) it.precoUn = strV(numV(pr.precoSaida)); if(!numV(it.pesoBruto)) it.pesoBruto = pr.pesoBruto || ''; if(!numV(it.pesoLiquido)) it.pesoLiquido = pr.pesoLiquido || ''; }
+    if(mp){
+      const it = f.draft.itens[+mp[1]], pr = produtoCadastradoVenda(it);
+      if(pr) preencherItemVendaDoProduto(it, pr);
+      else{ it.produtoId = ''; if(exige && String(it.descricao||'').trim()){ toast(`"${String(it.descricao).trim()}" não é um produto cadastrado. Digite 3 letras e escolha na lista.`); it.descricao = ''; } }
     }
     if(VENDA_REDESENHA.test(path)){ renderApp(); return; }
   }
@@ -4062,8 +4087,10 @@ async function salvarVenda(){
   const f = state.vendaForm; if(!f) return false;
   const d = f.draft, cfg = VENDA_TIPOS[f.tipo];
   const cli = acharClienteVenda(d.cliente);
-  if(!cli){ toast('Escolha um cliente cadastrado (Cadastro → Clientes e Empresas, tipo Cliente).'); return false; }
-  d.clienteId = cli.id; d.cliente = nomeEmpresaCad(cli);
+  if(f.tipo==='ped' && !cli){ toast('Escolha um cliente cadastrado (Cadastro → Clientes e Empresas, tipo Cliente).'); return false; }
+  if(!String(d.cliente||'').trim()){ toast('Informe o cliente.'); return false; }
+  if(cli){ d.clienteId = cli.id; d.cliente = nomeEmpresaCad(cli); } else d.clienteId = '';
+  if(f.tipo==='ped'){ const sem = d.itens.filter(i=>String(i.descricao||'').trim() && !produtoCadastradoVenda(i)); if(sem.length){ toast('Produto não cadastrado: ' + sem.map(i=>i.descricao).join(', ') + '. Escolha na lista.'); return false; } }
   const c = calcVenda(d); if(!c.nItens){ toast('Adicione pelo menos um item (descrição, quantidade e preço).'); return false; }
   const lista = state[cfg.estado], agora = new Date().toISOString(), copia = JSON.parse(JSON.stringify(d));
   const i = d.id ? lista.findIndex(x=>x.id===d.id) : -1, novo = i<0;
@@ -4074,6 +4101,7 @@ async function salvarVenda(){
   d.id = copia.id; d.seq = copia.seq;
   if(f.tipo==='cot' && copia.status==='aceita' && !copia.pedidoId){
     const ped = await gerarPedidoDaCotacao(copia.id);
+    if(!ped){ const c2 = state.vendasCot.find(x=>x.id===copia.id); if(c2){ c2.status = 'em_andamento'; await persistVendas('cot'); } d.status = 'em_andamento'; renderApp(); return false; }   // faltou cadastro: continua na cotação
     toast(`Cotação ${copia.id} aceita: ${ped.id} gerado em Pedidos.`, 'ok'); state.vendaForm = null; navigate('vendaPedidos'); abrirVinculo(ped.id); return true;
   }
   toast(`${cfg.nome} ${copia.id} salva.`, 'ok'); state.vendaForm = null; navigate(cfg.rota); return true;
@@ -4674,7 +4702,7 @@ function trkPedidoHtml({ v, achou }){
   // os produtos DESTE pedido, agrupados pelo processo de onde vêm (ou estoque / sem vínculo)
   const porProc = new Map(), estoque = [], sem = [];
   itens.forEach(i=>{ const o = i.origem || {}; if(o.tipo==='processo' && o.ref){ const pid = String(o.ref).split('|')[0]; if(!porProc.has(pid)) porProc.set(pid, []); porProc.get(pid).push(i); } else if(o.tipo==='estoque' && o.ref) estoque.push(i); else sem.push(i); });
-  const listaItens = its => `<div class="trk-lista">${its.map(i=>`<div class="trk-linha-info"><b>${esc(i.descricao)}</b><span>${fmtNum(numV(i.quantidade), 0)} ${esc(i.un||'')}</span>${i.origem && i.origem.tipo==='estoque' ? `<span class="membro-sub">${esc(i.origem.ref)}</span>` : ''}</div>`).join('')}</div>`;
+  const listaItens = its => `<div class="trk-lista">${its.map(i=>`<div class="trk-linha-info"><b>${esc(i.descricao)}</b><span>SKU: ${i.sku ? esc(i.sku) : '—'}</span><span>Qtde: ${fmtNum(numV(i.quantidade), 0)}</span><span>Unid.: ${esc(i.un||'—')}</span><span>Preço de venda: <b>${rsV(numV(i.precoUn))}</b></span>${i.origem && i.origem.tipo==='estoque' ? `<span class="membro-sub">${esc(i.origem.ref)}</span>` : ''}</div>`).join('')}</div>`;
   const blocoProc = ([pid, its])=>{
     const raw = (state.processosIndex||[]).find(x=>x.id===pid);
     if(!raw) return `<div class="trk-proc-bloco"><div class="trk-proc-topo"><span class="lm-ref">${esc(pid)}</span><span class="badge badge-red">Processo não encontrado</span></div><div class="trk-sub">Produtos do pedido</div>${listaItens(its)}</div>`;
@@ -4828,6 +4856,91 @@ function vendaDisponibilidadeHtml(d){
     <p class="hint" style="margin:0 0 10px; color:var(--ink-soft); font-size:12.5px;">Vincule cada produto a um item em <b>estoque</b> ou a um <b>processo em andamento</b>. O cliente acompanha o pedido em Tracking.${d.desdobradoDe ? ` Este pedido foi desdobrado de <b>${esc(d.desdobradoDe)}</b>.` : ''}</p>
     <div class="trk-lista">${itens.map(i=>`<div class="trk-linha-info"><b>${esc(i.descricao)}</b><span>${fmtNum(numV(i.quantidade), 0)} ${esc(i.un||'')}</span>${statusItemVendaHtml(i)}</div>`).join('') || '<span class="membro-sub">Sem itens.</span>'}</div>
     ${d.id && (state.vendasPed||[]).some(x=>x.id===d.id) ? `<div class="btn-row" style="margin-top:12px;"><button class="btn btn-ghost" data-action="vinc-abrir:${esc(d.id)}">${ICONS.plus} Vincular produtos a processo ou estoque</button></div>` : ''}</div>`;
+}
+
+/* =========================== Cadastro → todo o site: sincronização =========================== */
+// Troca, em qualquer lugar do objeto, textos iguais a "de" nas chaves informadas
+function trocaTexto(obj, chaves, de, para){
+  let n = 0;
+  const visita = o=>{ if(Array.isArray(o)) return o.forEach(visita); if(o && typeof o==='object'){ for(const k of Object.keys(o)){ const v = o[k]; if(typeof v==='string'){ if(chaves.includes(k) && v===de){ o[k] = para; n++; } } else visita(v); } } };
+  visita(obj); return n;
+}
+const mudaCampo = (obj, k, v) => { if(v===undefined || v===null || String(v)==='' || obj[k]===v) return 0; obj[k] = v; return 1; };
+const contatoPrincipalEmpresa = e => ((e && e.enderecos || [])[0] || {}).contatos ? e.enderecos[0].contatos[0] : null;
+function aplicarEmpresaNoCliente(cli, empresa){   // CNPJ e primeiro contato do cadastro → bloco "Cliente" do processo
+  let m = mudaCampo(cli, 'cnpjCpf', empresa.cnpjCpf); const ct = contatoPrincipalEmpresa(empresa);
+  if(ct){ m += mudaCampo(cli, 'contato', ct.nome); m += mudaCampo(cli, 'email', ct.email); if(ct.telefone) m += mudaCampo(cli, 'telefone', [ct.ddd ? '(' + ct.ddd + ')' : '', ct.telefone].filter(Boolean).join(' ')); }
+  return m;
+}
+const snapshotProdutoCad = pr => ({ produtoId:pr.id, codigoInterno:pr.codigoInterno||'', categoria:pr.categoria||'', subcategoria:pr.subcategoria||'', descricao:pr.descricao||'', unidadeMedida:pr.unidadeMedida||'', pesoBruto:pr.pesoBruto||'', pesoLiquido:pr.pesoLiquido||'', cubagem:pr.cubagem||'',
+  altura:pr.altura||'', largura:pr.largura||'', comprimento:pr.comprimento||'', gtin:pr.codigoBarrasGtin||'', precoSaida:pr.precoSaida||'', embalagem:pr.embalagem||'' });
+const vendaAberta = v => v.tipo==='cot' ? (v.status==='em_andamento' || v.status==='enviada') : (v.status==='aberto' || v.status==='aprovado');
+// Grava as listas alteradas (quem edita o cadastro pode atualizar as cópias, mesmo sem permissão nas outras áreas)
+async function gravarSincronizado(tags){
+  const quem = { proc:()=>persistProcessosIndex(), cot:()=>persistCotacoesIndex(), cotf:()=>persistCotacoesFormalIndex(), vcot:()=>persistVendas('cot'), vped:()=>persistVendas('ped'), est:()=>persistEstoque(), mon:()=>persistMonitoramento(), prod:()=>persistCadastro('produto') };
+  state.sincronizando = true;
+  try{ for(const t of tags){ try{ await quem[t](); }catch(e){ console.error('sincronização', t, e); } } } finally { state.sincronizando = false; }
+}
+const ROTULO_SINC = { proc:['processo', 'processos'], cot:['cotação simplificada', 'cotações simplificadas'], cotf:['cotação formal', 'cotações formais'], vcot:['cotação de venda', 'cotações de venda'], vped:['pedido', 'pedidos'], est:['item de estoque', 'itens de estoque'], mon:['container monitorado', 'containers monitorados'], prod:['produto', 'produtos'] };
+const resumoSinc = cont => Object.entries(cont).filter(([, n])=>n>0).map(([t, n])=>`${n} ${ROTULO_SINC[t][n===1 ? 0 : 1]}`).join(', ');
+// Empresa (cliente, fornecedor, agente, despachante, terminal…) alterada no cadastro
+async function sincronizarEmpresa(antes, depois, opcoes){
+  const de = nomeEmpresaCad(antes), para = nomeEmpresaCad(depois), renomeou = !!de && de!==para, cont = {}, so = !!(opcoes && opcoes.soNome);
+  const conta = (tag, m)=>{ if(m>0) cont[tag] = (cont[tag]||0) + 1; };
+  const nosDados = d=>{ if(!d) return 0; let m = 0; if(renomeou){ if(d.cliente===de){ d.cliente = para; m++; } (d.produtos||[]).forEach(l=>{ if(l.fornecedor===de){ l.fornecedor = para; m++; } }); if(d.armazenagemTerminal===de){ d.armazenagemTerminal = para; m++; } }
+    if(!so && d.cliente===para && depois.cnpjCpf) m += mudaCampo(d, 'clienteCnpjCpf', depois.cnpjCpf); return m; };
+  (state.processosIndex||[]).forEach(p=>{ let m = 0;
+    if(renomeou){ m += trocaTexto(p, ['fornecedor', 'agenteCarga', 'despachante', 'prestador'], de, para); if(p.cliente && p.cliente.nome===de){ p.cliente.nome = para; m++; } if(p.armazenagem && p.armazenagem.terminal && p.armazenagem.terminal.nome===de){ p.armazenagem.terminal.nome = para; m++; } }
+    if(!so && p.cliente && p.cliente.nome===para) m += aplicarEmpresaNoCliente(p.cliente, depois);
+    conta('proc', m); });
+  (state.cotacoesIndex||[]).forEach(c=>conta('cot', nosDados(c.dados))); (state.cotacoesFormalIndex||[]).forEach(c=>conta('cotf', nosDados(c.dados)));
+  nosDados(state.dados); nosDados(state.dadosFormal); if(state.procDraft){ if(renomeou){ trocaTexto(state.procDraft, ['fornecedor', 'agenteCarga', 'despachante', 'prestador'], de, para); if(state.procDraft.cliente && state.procDraft.cliente.nome===de) state.procDraft.cliente.nome = para; } }
+  [['vcot', state.vendasCot], ['vped', state.vendasPed]].forEach(([tag, lista])=>(lista||[]).forEach(v=>{ let m = 0;
+    if(v.clienteId===depois.id || (renomeou && v.cliente===de)){ if(v.cliente!==para){ v.cliente = para; m++; } if(v.clienteId!==depois.id){ v.clienteId = depois.id; m++; } }
+    if(renomeou && v.transportadorNome===de){ v.transportadorNome = para; m++; }
+    conta(tag, m); }));
+  (state.estoque||[]).forEach(e=>{ let m = 0; if(renomeou){ ['cliente', 'fornecedor', 'terminal'].forEach(k=>{ if(e[k]===de){ e[k] = para; m++; } }); } conta('est', m); });
+  (state.monitoramento||[]).forEach(x=>{ let m = 0; if(renomeou && x.cliente===de){ x.cliente = para; m++; } conta('mon', m); });
+  (state.produtos||[]).forEach(pr=>{ let m = 0; if(renomeou && pr.fornecedorNome===de){ pr.fornecedorNome = para; m++; } conta('prod', m); });
+  if(Object.keys(cont).length && !(opcoes && opcoes.semGravar)) await gravarSincronizado(Object.keys(cont));
+  return cont;
+}
+// Produto alterado no cadastro
+async function sincronizarProduto(antes, depois, opcoes){
+  const de = String(antes.nome||'').trim(), para = String(depois.nome||'').trim(), cont = {}, so = !!(opcoes && opcoes.soNome);
+  const conta = (tag, m)=>{ if(m>0) cont[tag] = (cont[tag]||0) + 1; };
+  const casa = nome => nome===de || nome===para;
+  (state.processosIndex||[]).forEach(p=>{ let m = 0;
+    (((p.produto||{}).fornecedores)||[]).forEach(fo=>(fo.itens||[]).forEach(it=>{ if(!casa(it.produto)) return;
+      m += mudaCampo(it, 'produto', para); if(!so){ m += mudaCampo(it, 'ncm', depois.ncm); m += mudaCampo(it, 'unidade', depois.unidadeMedida); m += mudaCampo(it, 'descricao', depois.descricao); m += mudaCampo(it, 'pesoLiquido', depois.pesoLiquido); } }));
+    conta('proc', m); });
+  (state.cotacoesIndex||[]).forEach(c=>{ let m = 0; ((c.dados||{}).produtos||[]).forEach(l=>{ if(casa(l.produto)) m += mudaCampo(l, 'produto', para); }); conta('cot', m); });
+  (state.cotacoesFormalIndex||[]).forEach(c=>{ let m = 0; ((c.dados||{}).produtos||[]).forEach(l=>{ if(casa(l.produto)){ m += mudaCampo(l, 'produto', para); if(!so){ m += mudaCampo(l, 'ncm', depois.ncm); m += mudaCampo(l, 'pesoLiquido', depois.pesoLiquido); } } }); conta('cotf', m); });
+  [state.dados, state.dadosFormal].forEach(d=>((d||{}).produtos||[]).forEach(l=>{ if(casa(l.produto)) l.produto = para; }));
+  [['vcot', state.vendasCot], ['vped', state.vendasPed]].forEach(([tag, lista])=>(lista||[]).forEach(v=>{ let m = 0;
+    (v.itens||[]).forEach(i=>{ if(i.produtoId!==depois.id && !casa(i.descricao)) return;
+      m += mudaCampo(i, 'produtoId', depois.id); m += mudaCampo(i, 'descricao', para);
+      if(!so){ m += mudaCampo(i, 'sku', depois.codigoInterno); m += mudaCampo(i, 'un', depois.unidadeMedida); m += mudaCampo(i, 'ncm', depois.ncm); m += mudaCampo(i, 'pesoBruto', depois.pesoBruto); m += mudaCampo(i, 'pesoLiquido', depois.pesoLiquido);
+        if(vendaAberta(v) && numV(depois.precoSaida)>0) m += mudaCampo(i, 'precoUn', strV(numV(depois.precoSaida))); } });
+    conta(tag, m); }));
+  (state.estoque||[]).forEach(e=>{ if(!((e.cad && e.cad.produtoId===depois.id) || casa(e.produto))) return; let m = 0;
+    m += mudaCampo(e, 'produto', para);
+    if(!so){ m += mudaCampo(e, 'ncm', depois.ncm); m += mudaCampo(e, 'unidade', depois.unidadeMedida); m += mudaCampo(e, 'descricao', depois.descricao); const snap = snapshotProdutoCad(depois); if(JSON.stringify(e.cad)!==JSON.stringify(snap)){ e.cad = snap; m++; } }
+    conta('est', m); });
+  if(Object.keys(cont).length && !(opcoes && opcoes.semGravar)) await gravarSincronizado(Object.keys(cont));
+  return cont;
+}
+async function sincronizarCadastro(tipo, antes, depois){
+  const cont = tipo==='produto' ? await sincronizarProduto(antes, depois) : await sincronizarEmpresa(antes, depois);
+  return { cont, texto:resumoSinc(cont) };
+}
+// Quem não vê todas as áreas não consegue atualizar tudo na hora: o nome antigo fica no cadastro e é trocado por quem abrir o site depois
+async function reconciliarCadastros(){
+  const cont = {}; const soma = c=>Object.entries(c).forEach(([t, n])=>{ cont[t] = (cont[t]||0) + n; });
+  const nomesVivos = new Set([...(state.clientes||[]).map(nomeEmpresaCad), ...(state.produtos||[]).map(p=>p.nome)]);
+  for(const e of (state.clientes||[])) for(const velho of (e.nomesAnteriores||[])){ if(!velho || nomesVivos.has(velho)) continue; soma(await sincronizarEmpresa({ nomeFantasia:velho }, e, { soNome:true })); }
+  for(const pr of (state.produtos||[])) for(const velho of (pr.nomesAnteriores||[])){ if(!velho || nomesVivos.has(velho)) continue; soma(await sincronizarProduto({ nome:velho }, pr, { soNome:true })); }
+  return cont;
 }
 
 /* =========================== Financeiro (resumo de custos de todos os processos) =========================== */
@@ -5395,6 +5508,14 @@ function onProcessoInput(el, evento){
   const path = el.getAttribute('data-proc');
   if(!path || !state.procDraft) return false;
   const valor = el.type==='checkbox' ? el.checked : el.value;
+  const acTipo = el.getAttribute('data-ac');
+  if(acTipo && PROC_AC_TIPOS.includes(acTipo)){   // fornecedor, produto, prestador e terminal: mesma regra das 3 primeiras letras/números
+    if(evento==='input'){ setPath(state.procDraft, path, valor); if(String(valor).trim().length>=3) showAutocomplete(el, acTipo, path); else hideAutocomplete(); saveDraftProcesso(); return true; }
+    setPath(state.procDraft, path, valor);
+    const achadoAc = validarCampoProcAc(path, acTipo, true);
+    if(achadoAc && achadoAc!==true && aplicarCadastroNoCampoProc(acTipo, path, achadoAc)) renderApp();
+    saveDraftProcesso(); return true;
+  }
   if(path==='status' && evento==='change' && valor==='finalizado' && state.procDraft.status!=='finalizado'){ state.estoquePergunta = { origem:'form' }; renderApp(); return true; }   // pergunta antes de finalizar
   setPath(state.procDraft, path, valor);
   // Autopreenchimento a partir dos cadastros
@@ -8420,8 +8541,8 @@ function produtoRowHtmlFormal(p, idx, c){
   const linha = c.produtos[idx];
   return `
   <tr data-row="${idx}">
-    <td><input data-bind="produtos.${idx}.fornecedor" class="input-blue" value="${esc(p.fornecedor)}" placeholder="Fornecedor"></td>
-    <td><input data-bind="produtos.${idx}.produto" class="input-blue" value="${esc(p.produto)}" placeholder="Produto"></td>
+    <td><input data-ac="fornecedor" data-ac-idx="${idx}" data-bind="produtos.${idx}.fornecedor" class="input-blue" value="${esc(p.fornecedor)}" placeholder="Fornecedor" autocomplete="off"></td>
+    <td><input data-ac="produto" data-ac-idx="${idx}" data-bind="produtos.${idx}.produto" class="input-blue" value="${esc(p.produto)}" placeholder="Produto" autocomplete="off"></td>
     <td><input data-bind="produtos.${idx}.ncm" class="input-blue" value="${esc(p.ncm)}" placeholder="0000.00.00"></td>
     <td><input type="number" step="any" min="0" data-bind="produtos.${idx}.quantidade" class="input-blue num-mono" value="${esc(p.quantidade)}" placeholder="0"></td>
     <td><input type="number" step="any" min="0" data-bind="produtos.${idx}.valorUnit" class="input-blue num-mono" value="${esc(p.valorUnit)}" placeholder="0.00"></td>
@@ -8512,8 +8633,8 @@ function renderDadosFormal(){
     <div class="card">
       <div class="section-title"><span class="num">01</span> Cliente</div>
       <div class="field-row grid-3" style="margin-top:16px;">
-        <div class="field"><label>Nome Fantasia ou Razão Social</label><input data-bind="cliente" value="${esc(d.cliente)}" placeholder="Nome do cliente"></div>
-        <div class="field"><label>CNPJ/CPF</label><input data-bind="clienteCnpjCpf" value="${esc(d.clienteCnpjCpf)}" placeholder="00.000.000/0000-00"></div>
+        <div class="field"><label>Nome Fantasia ou Razão Social</label><input data-ac="cliente" data-bind="cliente" value="${esc(d.cliente)}" placeholder="Nome do cliente" autocomplete="off"></div>
+        <div class="field"><label>CNPJ/CPF</label><input data-ac="clienteCnpj" data-bind="clienteCnpjCpf" value="${esc(d.clienteCnpjCpf)}" placeholder="00.000.000/0000-00" autocomplete="off"></div>
         <div class="field"><label>Incoterm</label>
           <select data-bind="incoterm">
             ${['FOB','CIF','CFR','EXW','FCA','CPT','CIP'].map(i=>`<option value="${i}" ${d.incoterm===i?'selected':''}>${i}</option>`).join('')}
@@ -8746,32 +8867,73 @@ function patchComputedDadosFormal(){
 
 /* --------------------------- Autocomplete (Cadastro) ------------------------ */
 let acCurrentField = null; // {type, idx, inputEl}
+const acNum = x => String(x||'').replace(/\D/g, '');
+const PROC_AC_TIPOS = ['proc-fornecedor', 'proc-produto', 'proc-prestador', 'proc-terminal'];
+// Opções do cadastro a partir das 3 primeiras letras e/ou números (nome, razão social, CNPJ/CPF, SKU, NCM, código de barras)
+function acEmpresas(tipos, q){
+  const dig = acNum(q), lista = tipos ? empresasDoTipo(...tipos) : (state.clientes||[]);
+  return lista.filter(e=>[nomeEmpresaCad(e), e.razaoSocial, e.nomeFantasia].filter(Boolean).join(' ').toLowerCase().includes(q) || (dig.length>=3 && acNum(e.cnpjCpf).includes(dig)))
+    .slice(0, 8).map(e=>({ label:nomeEmpresaCad(e) || '(sem nome)', sub:[e.cnpjCpf, e.razaoSocial && e.razaoSocial!==e.nomeFantasia ? e.razaoSocial : ''].filter(Boolean).join(' · '), data:e }));
+}
+function acProdutos(q){
+  const dig = acNum(q);
+  return (state.produtos||[]).filter(p=>[p.nome, p.codigoInterno, p.ncm, p.codigoBarrasGtin, p.descricao].filter(Boolean).join(' ').toLowerCase().includes(q) || (dig.length>=3 && [p.ncm, p.codigoBarrasGtin].some(x=>acNum(x).includes(dig))))
+    .slice(0, 8).map(p=>({ label:p.nome || '(sem nome)', sub:[p.codigoInterno, p.ncm].filter(Boolean).join(' · '), data:p }));
+}
 function acSearch(type, query){
   const q = String(query||'').trim().toLowerCase();
   if(q.length<3) return [];
-  if(type==='cliente'){
-    return empresasDoTipo('cliente').filter(c=>((c.nomeFantasia||c.razaoSocial||'')).toLowerCase().includes(q))
-      .slice(0,6).map(c=>({label:c.nomeFantasia||c.razaoSocial||'(sem nome)', sub:c.cnpjCpf||'', data:c}));
-  }
+  if(type==='cliente' || type==='venda-cliente') return acEmpresas(['cliente'], q);
   if(type==='clienteCnpj'){
-    const qDigits = q.replace(/\D/g,'');
-    if(qDigits.length<3) return [];
-    return empresasDoTipo('cliente').filter(c=>(c.cnpjCpf||'').replace(/\D/g,'').includes(qDigits))
-      .slice(0,6).map(c=>({label:c.cnpjCpf, sub:c.nomeFantasia||c.razaoSocial||'', data:c}));
+    const qDigits = acNum(q); if(qDigits.length<3) return [];
+    return empresasDoTipo('cliente').filter(c=>acNum(c.cnpjCpf).includes(qDigits)).slice(0,6).map(c=>({ label:c.cnpjCpf, sub:c.nomeFantasia||c.razaoSocial||'', data:c }));
   }
-  if(type==='fornecedor'){
-    return state.fornecedores.filter(f=>((f.nomeFantasia||f.razaoSocial||'')).toLowerCase().includes(q))
-      .slice(0,6).map(f=>({label:f.nomeFantasia||f.razaoSocial||'(sem nome)', sub:f.cnpjCpf||'', data:f}));
-  }
-  if(PROC_EMPRESA_CAMPOS[type]){
-    return empresasDoTipo(PROC_EMPRESA_CAMPOS[type].tipo).filter(e=>nomeEmpresaCad(e).toLowerCase().includes(q))
-      .slice(0,8).map(e=>({label:nomeEmpresaCad(e), sub:[e.cnpjCpf, e.razaoSocial && e.razaoSocial!==e.nomeFantasia ? e.razaoSocial : ''].filter(Boolean).join(' · '), data:e}));
-  }
-  if(type==='produto'){
-    return state.produtos.filter(p=>(p.nome||'').toLowerCase().includes(q))
-      .slice(0,6).map(p=>({label:p.nome||'(sem nome)', sub:[p.codigoInterno,p.ncm].filter(Boolean).join(' · '), data:p}));
-  }
+  if(type==='fornecedor' || type==='proc-fornecedor' || type==='cad-fornecedor') return acEmpresas(['fornecedor', 'fabricante'], q);
+  if(PROC_EMPRESA_CAMPOS[type]) return acEmpresas([PROC_EMPRESA_CAMPOS[type].tipo], q);
+  if(type==='proc-prestador') return acEmpresas(null, q);
+  if(type==='proc-terminal') return acEmpresas(['terminal_portuario'], q);
+  if(type==='produto' || type==='proc-produto' || type==='venda-produto') return acProdutos(q);
   return [];
+}
+function escolherVendaAc(type, path, data){
+  const f = state.vendaForm; if(!f) return; const d = f.draft;
+  if(type==='venda-cliente'){ d.cliente = nomeEmpresaCad(data); d.clienteId = data.id; }
+  else{
+    const m = /^itens\.(\d+)\.descricao$/.exec(path), it = m && d.itens[+m[1]]; if(it) preencherItemVendaDoProduto(it, data);
+  }
+  hideAutocomplete(); renderApp();
+}
+// Empresa/produto escolhido na lista, nos campos do Processo
+// Aplica o que vem do cadastro (produto: NCM, unidade, descrição e peso; fornecedor: país de origem) nos campos vazios
+function aplicarCadastroNoCampoProc(type, path, data){
+  const d = state.procDraft; if(!d) return false; let mudou = false; const preenche = (o, k, v)=>{ if(!o[k] && v){ o[k] = v; mudou = true; } };
+  if(type==='proc-produto'){
+    const m = /^(produto\.fornecedores\.\d+\.itens\.\d+)\.produto$/.exec(path), it = m && getPath(d, m[1]);
+    if(it){ preenche(it, 'produtoId', data.id); preenche(it, 'ncm', data.ncm); preenche(it, 'unidade', data.unidadeMedida); preenche(it, 'descricao', data.descricao); preenche(it, 'pesoLiquido', data.pesoLiquido); }
+  }
+  if(type==='proc-fornecedor'){
+    const m = /^(produto\.fornecedores\.\d+)\.fornecedor$/.exec(path), fo = m && getPath(d, m[1]), pais = data.enderecos && data.enderecos[0] && data.enderecos[0].pais;
+    if(fo && pais && pais!=='Brasil') preenche(fo, 'paisOrigem', pais);
+  }
+  return mudou;
+}
+function escolherProcAc(type, path, data){
+  const d = state.procDraft; if(!d) return;
+  setPath(d, path, type==='proc-produto' ? (data.nome || '') : nomeEmpresaCad(data));
+  aplicarCadastroNoCampoProc(type, path, data);
+  saveDraftProcesso(); renderApp();
+}
+// Nos campos do Processo só vale o que está cadastrado: o que não for cadastrado é apagado (com aviso)
+function validarCampoProcAc(path, tipo, avisar){
+  const d = state.procDraft; if(!d) return true;
+  const v = String(getPath(d, path)||'').trim(); if(!v) return true;
+  const n = v.toLowerCase();
+  const achado = tipo==='proc-produto' ? (state.produtos||[]).find(x=>String(x.nome||'').trim().toLowerCase()===n)
+    : (tipo==='proc-fornecedor' ? empresasDoTipo('fornecedor', 'fabricante') : tipo==='proc-terminal' ? empresasDoTipo('terminal_portuario') : (state.clientes||[])).find(e=>nomeEmpresaCad(e).trim().toLowerCase()===n);
+  if(achado){ setPath(d, path, tipo==='proc-produto' ? achado.nome : nomeEmpresaCad(achado)); return achado; }
+  setPath(d, path, '');
+  if(avisar) toast(`"${v}" não está cadastrado${tipo==='proc-produto' ? ' em Cadastro → Produtos' : ' em Cadastro → Clientes e Empresas'}. Digite 3 letras e escolha na lista.`);
+  renderApp(); return false;
 }
 function showAutocomplete(inputEl, type, idx){
   const dd = document.getElementById('ac-dropdown');
@@ -8799,21 +8961,26 @@ function selectAutocomplete(optIdx){
   if(!dd || !dd._results || !acCurrentField) return;
   const r = dd._results[optIdx];
   if(!r) return;
-  const { type, idx } = acCurrentField;
+  const { type, idx, inputEl } = acCurrentField;
   const nome = r.data.nomeFantasia || r.data.razaoSocial || r.data.nome || '';
   if(PROC_EMPRESA_CAMPOS[type]){ escolherEmpresaProcesso(type, r.data); hideAutocomplete(); return; }
+  if(PROC_AC_TIPOS.includes(type)){ escolherProcAc(type, idx, r.data); hideAutocomplete(); return; }
+  if(type==='venda-cliente' || type==='venda-produto'){ escolherVendaAc(type, idx, r.data); hideAutocomplete(); return; }
+  if(type==='cad-fornecedor'){ if(state.cadDraft) setPath(state.cadDraft, idx, nome); hideAutocomplete(); renderApp(); return; }
+  const formal = !!(inputEl && inputEl.closest && inputEl.closest('#dadosFormal-form')), alvo = formal ? state.dadosFormal : state.dados;
   if(type==='cliente'){
-    state.dados.cliente = nome;
-    state.dados.clienteCnpjCpf = r.data.cnpjCpf || state.dados.clienteCnpjCpf;
+    alvo.cliente = nome;
+    alvo.clienteCnpjCpf = r.data.cnpjCpf || alvo.clienteCnpjCpf;
   } else if(type==='clienteCnpj'){
-    state.dados.clienteCnpjCpf = r.data.cnpjCpf || '';
-    state.dados.cliente = nome || state.dados.cliente;
+    alvo.clienteCnpjCpf = r.data.cnpjCpf || '';
+    alvo.cliente = nome || alvo.cliente;
   } else if(type==='fornecedor'){
-    state.dados.produtos[idx].fornecedor = nome;
+    alvo.produtos[idx].fornecedor = nome;
   } else if(type==='produto'){
-    state.dados.produtos[idx].produto = nome;
+    const l = alvo.produtos[idx]; l.produto = nome;
+    if(formal){ if(!l.ncm) l.ncm = r.data.ncm || ''; if(!l.pesoLiquido && r.data.pesoLiquido) l.pesoLiquido = r.data.pesoLiquido; }
   }
-  saveDraft();
+  if(formal) saveDraftFormal(); else saveDraft();
   hideAutocomplete();
   renderApp();
 }
@@ -10904,7 +11071,7 @@ function renderCadProdutoFornecedorTab(d){
   return `
     <datalist id="dl-fornecedores-produto">${datalistOptions(state.fornecedores.map(f=>({nome:f.nomeFantasia||f.razaoSocial})),'nome')}</datalist>
     <div class="field-row grid-3" style="margin-bottom:16px;">
-      <div class="field" style="grid-column:span 2;"><label>Nome da Empresa</label><input list="dl-fornecedores-produto" data-bind="fornecedorNome" value="${esc(d.fornecedorNome)}" placeholder="Nome do fornecedor/fabricante"></div>
+      <div class="field" style="grid-column:span 2;"><label>Nome da Empresa</label><input data-ac="cad-fornecedor" data-bind="fornecedorNome" value="${esc(d.fornecedorNome)}" placeholder="Digite 3 letras para buscar…" autocomplete="off"></div>
       <div class="field"><label>Tipo</label>
         <select data-bind="fornecedorTipo">
           <option value="FORNECEDOR" ${d.fornecedorTipo==='FORNECEDOR'?'selected':''}>Fornecedor</option>
@@ -12346,10 +12513,14 @@ async function cadSaveRico(tipo){
   }
   const list = state[cfg.stateKey];
   const idx = list.findIndex(x=>x.id===d.id);
+  const antes = idx>=0 ? JSON.parse(JSON.stringify(list[idx])) : null, ehProduto = cfg.richKind==='produto';
+  const nomeDe = antes ? (ehProduto ? antes.nome : nomeEmpresaCad(antes)) : '', nomePara = ehProduto ? d.nome : nomeEmpresaCad(d);
+  if(nomeDe && nomeDe!==nomePara) d.nomesAnteriores = [...new Set([...(d.nomesAnteriores||[]), nomeDe])];   // quem não vê todas as áreas atualiza depois
   if(idx>=0) list[idx] = d; else list.push(d);
   await persistCadastro(tipo);
   state.cadFormOpen = false; state.cadDraft = null; state.cadEdit = {tipo:null,id:null}; state.cadFormTab = 'geral';
-  toast('Salvo com sucesso.', 'ok');
+  let resumo = ''; if(antes){ try{ resumo = (await sincronizarCadastro(ehProduto ? 'produto' : 'empresa', antes, d)).texto; }catch(e){ console.error('sincronização do cadastro', e); } }
+  toast(resumo ? 'Salvo com sucesso. Atualizado também em: ' + resumo + '.' : 'Salvo com sucesso.', 'ok');
   renderApp();
 }
 function addEndereco(){
@@ -12711,10 +12882,16 @@ function onAppInput(e){
   let val = el.value;
   if(el.getAttribute('data-pct')){ setPath(target, bind, val===''?'':num(val)/100); }
   else { setPath(target, bind, val); }
-  if(inCadForm) return; // cadastro é salvo explicitamente pelo botão Salvar
+  if(inCadForm){ // cadastro é salvo explicitamente pelo botão Salvar
+    const acC = el.getAttribute('data-ac');
+    if(acC){ if(val.trim().length>=3) showAutocomplete(el, acC, bind); else hideAutocomplete(); }
+    return;
+  }
   if(inFormalForm){
     saveDraftFormal();
     patchComputedDadosFormal();
+    const acF = el.getAttribute('data-ac');
+    if(acF){ const iF = el.getAttribute('data-ac-idx'); if(val.trim().length>=3) showAutocomplete(el, acF, iF!==null ? Number(iF) : null); else hideAutocomplete(); }
     return;
   }
   if(inSim){
@@ -12934,7 +13111,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.45 · tracking por pedido · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.46 · cadastro sincronizado e autocompletar único · build 15/10/2026</span></div>
   `;
 }
 
