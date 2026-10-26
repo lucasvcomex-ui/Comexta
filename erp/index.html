@@ -937,6 +937,7 @@ tbody tr:hover{background:#F9FAFD;}
 .trk-cancelado{padding:8px 12px; border-radius:8px; background:#FBE9E7; color:var(--red); font-weight:700; font-size:13px;}
 .trk-fatos{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px 16px; margin-top:12px;} .trk-fatos > div:not(.trk-fato-t){display:flex; flex-direction:column;} .trk-fatos span{font-size:10.5px; color:var(--ink-soft);} .trk-fatos b{font-size:13px; color:var(--navy-deep);} .trk-fato-t{grid-column:1/-1; font-weight:700; color:var(--navy);}
 .trk-lista{display:flex; flex-direction:column; gap:6px;} .trk-linha-info{display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--paper); border:1px solid var(--line); border-radius:9px; padding:7px 11px; font-size:13px;}
+.trk-proc-bloco{border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:12px; background:#fff;} .trk-proc-topo{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -4625,9 +4626,6 @@ function trackingBuscar(q){
     if(casa(v.numeroPedidoCliente)) achou.push('Nº do pedido do cliente ' + v.numeroPedidoCliente); if(casa(v.idEcommerce)) achou.push('Pedido e-commerce ' + v.idEcommerce); if(casa(v.numeroCanal)) achou.push('Pedido no canal ' + v.numeroCanal); if(casa(v.id)) achou.push('Pedido ' + v.id);
     if(achou.length) peds.set(v.id, { v, achou });
   });
-  // processos ligados aos produtos dos pedidos encontrados, e pedidos ligados aos processos encontrados
-  peds.forEach(({ v })=>(v.itens||[]).forEach(i=>{ const o = i.origem || {}; if(o.tipo==='processo'){ const pid = String(o.ref).split('|')[0]; if(!procs.has(pid)){ const raw = (state.processosIndex||[]).find(x=>x.id===pid); if(raw) procs.set(pid, { p:procNorm(raw), achou:[`Produto do pedido ${v.id}`] }); } }
-    if(o.tipo==='estoque'){ const e = (state.estoque||[]).find(x=>x.id===o.ref); if(e && !procs.has(e.processoId)){ const raw = (state.processosIndex||[]).find(x=>x.id===e.processoId); if(raw) procs.set(e.processoId, { p:procNorm(raw), achou:[`Estoque ${e.id} do pedido ${v.id}`] }); } } }));
   res.processos = [...procs.values()]; res.pedidos = [...peds.values()];
   return res;
 }
@@ -4639,10 +4637,11 @@ function trkLinhaTempoHtml(st){
   if(st==='cancelado') return '<div class="trk-cancelado">Processo cancelado</div>';
   return `<div class="trk-linha">${fluxo.map(([k, v], i)=>`<div class="trk-passo${i<idx ? ' feito' : ''}${i===idx ? ' atual' : ''}"><i></i><span>${esc(v.label)}</span></div>`).join('')}</div>`;
 }
-function trkProcessoHtml({ p, achou }){
-  const st = statusProc(p), s = PROC_STATUS[st] || { label:st, cls:'badge-navy' }, ts = todosTransportesProc(p), peds = pedidosDoProcesso(p.id);
-  const mons = (state.monitoramento||[]).filter(m=>(m.processoId===p.id || m.referencia===p.id));
-  let podeAbrir = false; try{ podeAbrir = pode('processos', 'ver'); }catch(e){}
+// Só quem é administrador, ou foi convidado com Visualizar + Criar + Editar em Processos, vê o botão de abrir o processo (clientes não)
+const podeAbrirProcessoRastreio = () => { try{ return !!(pode('processos', 'ver') && pode('processos', 'criar') && pode('processos', 'editar')); }catch(e){ return false; } };
+// Status atual (linha do tempo), transporte e containers monitorados de um processo
+function trkProcessoCorpoHtml(p){
+  const st = statusProc(p), ts = todosTransportesProc(p), mons = (state.monitoramento||[]).filter(m=>(m.processoId===p.id || m.referencia===p.id));
   const transportes = ts.map((t, k)=>{ const r = trkRotulosTransporte(t);
     return `<div class="trk-fatos">${ts.length>1 ? `<div class="trk-fato-t">Transporte ${k+1} · ${esc(PROC_MODAIS[t.modal]||'')}</div>` : ''}
       <div><span>Modal</span><b>${esc(PROC_MODAIS[t.modal]||'—')}</b></div><div><span>Booking</span><b>${esc(t.booking||'—')}</b></div><div><span>${r.master}</span><b>${esc(t.conhecimentoMaster||'—')}</b></div><div><span>${r.house}</span><b>${esc(t.conhecimentoHouse||'—')}</b></div>
@@ -4650,13 +4649,17 @@ function trkProcessoHtml({ p, achou }){
       <div><span>ETD</span><b>${t.etd ? dtV(t.etd) : '—'}</b></div><div><span>ETA</span><b>${t.eta ? dtV(t.eta) : '—'}</b></div><div><span>Chegada efetiva</span><b>${t.chegada ? dtV(t.chegada) : '—'}</b></div></div>`; }).join('');
   const conts = mons.length ? `<div class="trk-sub">Containers monitorados</div><div class="trk-lista">${mons.map(m=>{ const c = monCalcular(m), r = m.rastreio || {}; const sit = MON_SITUACOES[c.situacao] || { rotulo:c.situacao, classe:'badge-navy' };
     return `<div class="trk-linha-info"><b>${esc(m.container||'sem número')}</b><span class="badge ${sit.classe}">${esc(sit.rotulo)}</span>${r.situacao ? `<span>Viagem: ${esc((typeof MON_SIT_VIAGEM!=='undefined' && MON_SIT_VIAGEM[r.situacao]) || r.situacao)}</span>` : ''}${r.atrasoDias!=null ? `<span>${r.atrasoDias>0 ? 'Atraso de ' + r.atrasoDias + ' dia(s)' : 'Sem atraso'}</span>` : ''}${r.atualizadoEm ? `<span class="membro-sub">consulta em ${fmtDate(r.atualizadoEm)}</span>` : ''}</div>`; }).join('')}</div>` : '';
+  return `<div class="trk-sub">Status atual do processo</div>${trkLinhaTempoHtml(st)}${transportes}${conts}`;
+}
+function trkBotaoProcessoHtml(procId){ return podeAbrirProcessoRastreio() ? `<button class="btn btn-ghost btn-sm" data-action="est-abrir-proc:${esc(procId)}">${ICONS.open} Abrir processo</button>` : ''; }
+// Resultado quando o número digitado é de um PROCESSO (Booking, MBL, HBL…): produtos do processo e pedidos que usam esse processo
+function trkProcessoHtml({ p, achou }){
+  const st = statusProc(p), s = PROC_STATUS[st] || { label:st, cls:'badge-navy' }, peds = pedidosDoProcesso(p.id);
   const prods = p.produto.fornecedores.flatMap(fo=>(fo.itens||[]).filter(i=>i.produto).map(i=>({ fo, i })));
   const tabProd = prods.length ? `<div class="trk-sub">Produtos do processo</div><div class="trk-lista">${prods.map(({ fo, i })=>`<div class="trk-linha-info"><b>${esc(i.produto)}</b><span>${fmtNum(numV(i.quantidade), 0)} ${esc(i.unidade||'')}</span><span class="membro-sub">${esc(fo.fornecedor||'')}</span>${i.producao && i.producao.ativo ? `<span class="badge ${i.producao.pronto ? 'badge-green' : 'badge-navy'}">${i.producao.pronto ? 'Produção pronta' : 'Em produção'}${i.producao.dataProntidao ? ' · prontidão ' + dtV(i.producao.dataProntidao) : ''}</span>` : ''}</div>`).join('')}</div>` : '';
   const tabPeds = peds.length ? `<div class="trk-sub">Pedidos de venda com produtos deste processo</div><div class="trk-lista">${peds.map(({ v, itens })=>`<div class="trk-linha-info"><button class="link-btn" data-action="trk-buscar-ref:${esc(v.id)}"><b>${esc(v.id)}</b></button><span>${esc(v.cliente)}</span>${v.numeroPedidoCliente ? `<span class="membro-sub">pedido do cliente ${esc(v.numeroPedidoCliente)}</span>` : ''}<span>${itens.map(i=>esc(i.descricao)).join(', ')}</span></div>`).join('')}</div>` : '';
-  return `<div class="card trk-card"><div class="trk-topo"><div><span class="lm-ref" style="font-size:15px;">${esc(p.id)}</span> <span class="badge ${s.cls}" style="margin-left:8px;">${esc(s.label)}</span><div class="trk-cli">${esc((p.cliente||{}).nome||'')}${(p.cliente||{}).referenciaCliente ? ' · ref. ' + esc(p.cliente.referenciaCliente) : ''}</div></div>
-      ${podeAbrir ? `<button class="btn btn-ghost btn-sm" data-action="est-abrir-proc:${esc(p.id)}">${ICONS.open} Abrir processo</button>` : ''}</div>
-    <div class="membro-sub" style="margin:4px 0 10px;">Encontrado por: ${achou.map(esc).join(' · ')}</div>
-    <div class="trk-sub">Status atual do processo</div>${trkLinhaTempoHtml(st)}${transportes}${conts}${tabProd}${tabPeds}</div>`;
+  return `<div class="card trk-card"><div class="trk-topo"><div><span class="lm-ref" style="font-size:15px;">${esc(p.id)}</span> <span class="badge ${s.cls}" style="margin-left:8px;">${esc(s.label)}</span><div class="trk-cli">${esc((p.cliente||{}).nome||'')}${(p.cliente||{}).referenciaCliente ? ' · ref. ' + esc(p.cliente.referenciaCliente) : ''}</div></div>${trkBotaoProcessoHtml(p.id)}</div>
+    <div class="membro-sub" style="margin:4px 0 10px;">Encontrado por: ${achou.map(esc).join(' · ')}</div>${trkProcessoCorpoHtml(p)}${tabProd}${tabPeds}</div>`;
 }
 function statusItemVendaHtml(i){
   const g = grupoItemVenda(i);
@@ -4667,11 +4670,24 @@ function statusItemVendaHtml(i){
   return `<span class="badge badge-amber">Processo em andamento</span> <span class="badge ${s.cls}">${esc(s.label)}</span> <button class="link-btn" data-action="trk-buscar-ref:${esc(pid)}">${esc(pid)}</button>`;
 }
 function trkPedidoHtml({ v, achou }){
-  const st = VENDA_TIPOS.ped.status[v.status] || ['', 'badge-navy'];
+  const st = VENDA_TIPOS.ped.status[v.status] || ['', 'badge-navy'], itens = (v.itens||[]).filter(i=>i.descricao);
+  // os produtos DESTE pedido, agrupados pelo processo de onde vêm (ou estoque / sem vínculo)
+  const porProc = new Map(), estoque = [], sem = [];
+  itens.forEach(i=>{ const o = i.origem || {}; if(o.tipo==='processo' && o.ref){ const pid = String(o.ref).split('|')[0]; if(!porProc.has(pid)) porProc.set(pid, []); porProc.get(pid).push(i); } else if(o.tipo==='estoque' && o.ref) estoque.push(i); else sem.push(i); });
+  const listaItens = its => `<div class="trk-lista">${its.map(i=>`<div class="trk-linha-info"><b>${esc(i.descricao)}</b><span>${fmtNum(numV(i.quantidade), 0)} ${esc(i.un||'')}</span>${i.origem && i.origem.tipo==='estoque' ? `<span class="membro-sub">${esc(i.origem.ref)}</span>` : ''}</div>`).join('')}</div>`;
+  const blocoProc = ([pid, its])=>{
+    const raw = (state.processosIndex||[]).find(x=>x.id===pid);
+    if(!raw) return `<div class="trk-proc-bloco"><div class="trk-proc-topo"><span class="lm-ref">${esc(pid)}</span><span class="badge badge-red">Processo não encontrado</span></div><div class="trk-sub">Produtos do pedido</div>${listaItens(its)}</div>`;
+    const p = procNorm(raw), s = PROC_STATUS[statusProc(p)] || { label:statusProc(p), cls:'badge-navy' };
+    return `<div class="trk-proc-bloco"><div class="trk-proc-topo"><div><span class="lm-ref">${esc(pid)}</span> <span class="badge ${s.cls}" style="margin-left:6px;">${esc(s.label)}</span></div>${trkBotaoProcessoHtml(pid)}</div>
+      ${trkProcessoCorpoHtml(p)}<div class="trk-sub">Produtos do pedido</div>${listaItens(its)}</div>`;
+  };
+  const blocoEstoque = estoque.length ? `<div class="trk-proc-bloco"><div class="trk-proc-topo"><span class="badge badge-green">Disponível em estoque</span></div><div class="trk-sub">Produtos do pedido</div>${listaItens(estoque)}</div>` : '';
+  const blocoSem = sem.length ? `<div class="trk-proc-bloco"><div class="trk-proc-topo"><span class="badge badge-navy">Sem vínculo com processo ou estoque</span></div><div class="trk-sub">Produtos do pedido</div>${listaItens(sem)}</div>` : '';
   return `<div class="card trk-card"><div class="trk-topo"><div><span class="lm-ref" style="font-size:15px;">${esc(v.id)}</span> <span class="badge ${st[1]}" style="margin-left:8px;">${esc(st[0])}</span><div class="trk-cli">${esc(v.cliente)}${v.numeroPedidoCliente ? ' · pedido do cliente ' + esc(v.numeroPedidoCliente) : ''}</div></div></div>
-    <div class="membro-sub" style="margin:4px 0 10px;">Encontrado por: ${achou.map(esc).join(' · ')}</div>
-    <div class="trk-sub">Produtos do pedido e situação de cada um</div>
-    <div class="trk-lista">${(v.itens||[]).filter(i=>i.descricao).map(i=>`<div class="trk-linha-info"><b>${esc(i.descricao)}</b><span>${fmtNum(numV(i.quantidade), 0)} ${esc(i.un||'')}</span>${statusItemVendaHtml(i)}</div>`).join('') || '<span class="membro-sub">Sem itens.</span>'}</div></div>`;
+    <div class="membro-sub" style="margin:4px 0 4px;">Encontrado por: ${achou.map(esc).join(' · ')}</div>
+    <div class="membro-sub">${itens.length} produto${itens.length===1 ? '' : 's'}${porProc.size ? ` em ${porProc.size} processo${porProc.size===1 ? '' : 's'}` : ''}${estoque.length ? ' · ' + estoque.length + ' em estoque' : ''}${sem.length ? ' · ' + sem.length + ' sem vínculo' : ''}</div>
+    ${[...porProc.entries()].map(blocoProc).join('')}${blocoEstoque}${blocoSem}${!itens.length ? '<div class="trk-sub">Este pedido não tem produtos.</div>' : ''}</div>`;
 }
 function renderTracking(){
   const t = state.trk = state.trk || { q:'' }, r = trackingBuscar(t.q), total = r.processos.length + r.pedidos.length;
@@ -12918,7 +12934,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.44 · tracking, vínculo de pedidos e estoque · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.45 · tracking por pedido · build 15/10/2026</span></div>
   `;
 }
 
