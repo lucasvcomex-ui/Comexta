@@ -1280,7 +1280,7 @@ const PERMISSAO_DA_ACAO = {
   'toggle-nav:cad':['cadastros','ver'], 'toggle-module:cad':['cadastros','ver'],
   'go:cad-cliente':['cadastros','ver'], 'go:cad-fornecedor':['cadastros','ver'], 'go:cad-produto':['cadastros','ver'],
   'cad-view':['cadastros','ver'], 'cad-open-form':['cadastros','criar'],
-  'cad-edit':['cadastros','editar'], 'cad-view-edit':['cadastros','editar'], 'cad-delete':['cadastros','editar'],
+  'cad-edit':['cadastros','editar'], 'cad-view-edit':['cadastros','editar'], 'cad-delete':['cadastros','editar'], 'cad-bloq-inativar':['cadastros','editar'], 'cad-sync-abrir':['cadastros','ver'], 'cad-sync-aplicar':['cadastros','ver'],
   'cad-save':['cadastros','salvar'], 'cad-tipo-toggle':['cadastros','salvar'],
   'cadtpl-modo':['cadastros','ver'], 'cadtpl-abrir':['cadastros','ver'],
   'exportar:cot':['cotacoes','ver'], 'exportar:proc':['processos','ver'], 'exportar:cad-cliente':['cadastros','ver'], 'exportar:cad-produto':['cadastros','ver'],
@@ -4460,6 +4460,10 @@ function enviarCopiasLocaisAoServidor(v){
     }catch(e){ console.error('envio das cópias locais', e); }
   }, 3000);
 }
+// Depois de carregar: troca nomes antigos deixados no cadastro e renova os documentos com o que mudou nos cadastros
+function agendarAtualizacaoDosCadastros(){
+  setTimeout(async ()=>{ try{ if(!podeAtualizarCadastros()) return; await reconciliarCadastros(); await atualizarCadastrosAlterados(); }catch(e){ console.error('atualização dos cadastros', e); } }, 5000);
+}
 /* --- catálogo, lista, cards e template --- */
 const dimEst = c => (c && (c.altura || c.largura || c.comprimento)) ? [c.altura, c.largura, c.comprimento].map(x=>x || '—').join(' × ') + ' cm' : '';
 const ESTOQUE_CAMPOS = [
@@ -4968,21 +4972,21 @@ async function sincronizarEmpresa(antes, depois, opcoes){
 }
 // Produto alterado no cadastro
 async function sincronizarProduto(antes, depois, opcoes){
-  const de = String(antes.nome||'').trim(), para = String(depois.nome||'').trim(), cont = {}, so = !!(opcoes && opcoes.soNome);
+  const de = String(antes.nome||'').trim(), para = String(depois.nome||'').trim(), cont = {}, so = !!(opcoes && opcoes.soNome), precoMudou = numV(antes.precoSaida)!==numV(depois.precoSaida);
   const conta = (tag, m)=>{ if(m>0) cont[tag] = (cont[tag]||0) + 1; };
   const casa = nome => nome===de || nome===para;
   (state.processosIndex||[]).forEach(p=>{ let m = 0;
-    (((p.produto||{}).fornecedores)||[]).forEach(fo=>(fo.itens||[]).forEach(it=>{ if(!casa(it.produto)) return;
-      m += mudaCampo(it, 'produto', para); if(!so){ m += mudaCampo(it, 'ncm', depois.ncm); m += mudaCampo(it, 'unidade', depois.unidadeMedida); m += mudaCampo(it, 'descricao', depois.descricao); m += mudaCampo(it, 'pesoLiquido', depois.pesoLiquido); } }));
+    (((p.produto||{}).fornecedores)||[]).forEach(fo=>(fo.itens||[]).forEach(it=>{ if(!(casa(it.produto) || (it.produtoId && it.produtoId===depois.id))) return;
+      m += mudaCampo(it, 'produto', para); m += mudaCampo(it, 'produtoId', depois.id); if(!so){ m += mudaCampo(it, 'ncm', depois.ncm); m += mudaCampo(it, 'unidade', depois.unidadeMedida); m += mudaCampo(it, 'descricao', depois.descricao); m += mudaCampo(it, 'pesoLiquido', depois.pesoLiquido); } }));
     conta('proc', m); });
   (state.cotacoesIndex||[]).forEach(c=>{ let m = 0; ((c.dados||{}).produtos||[]).forEach(l=>{ if(casa(l.produto)) m += mudaCampo(l, 'produto', para); }); conta('cot', m); });
   (state.cotacoesFormalIndex||[]).forEach(c=>{ let m = 0; ((c.dados||{}).produtos||[]).forEach(l=>{ if(casa(l.produto)){ m += mudaCampo(l, 'produto', para); if(!so){ m += mudaCampo(l, 'ncm', depois.ncm); m += mudaCampo(l, 'pesoLiquido', depois.pesoLiquido); } } }); conta('cotf', m); });
   [state.dados, state.dadosFormal].forEach(d=>((d||{}).produtos||[]).forEach(l=>{ if(casa(l.produto)) l.produto = para; }));
   [['vcot', state.vendasCot], ['vped', state.vendasPed]].forEach(([tag, lista])=>(lista||[]).forEach(v=>{ let m = 0;
-    (v.itens||[]).forEach(i=>{ if(i.produtoId!==depois.id && !casa(i.descricao)) return;
+    (v.itens||[]).forEach(i=>{ if(i.produtoId!==depois.id && !casa(i.descricao) && !(depois.codigoInterno && i.sku===depois.codigoInterno)) return;
       m += mudaCampo(i, 'produtoId', depois.id); m += mudaCampo(i, 'descricao', para);
       if(!so){ m += mudaCampo(i, 'sku', depois.codigoInterno); m += mudaCampo(i, 'un', depois.unidadeMedida); m += mudaCampo(i, 'ncm', depois.ncm); m += mudaCampo(i, 'pesoBruto', depois.pesoBruto); m += mudaCampo(i, 'pesoLiquido', depois.pesoLiquido);
-        if(vendaAberta(v) && numV(depois.precoSaida)>0) m += mudaCampo(i, 'precoUn', strV(numV(depois.precoSaida))); } });
+        if(precoMudou && vendaAberta(v) && numV(depois.precoSaida)>0 && (!numV(i.precoUn) || Math.abs(numV(i.precoUn) - numV(antes.precoSaida))<0.005)) m += mudaCampo(i, 'precoUn', strV(numV(depois.precoSaida))); } });   // preço negociado diferente do cadastro não é mexido
     conta(tag, m); }));
   (state.estoque||[]).forEach(e=>{ if(!((e.cad && e.cad.produtoId===depois.id) || casa(e.produto))) return; let m = 0;
     m += mudaCampo(e, 'produto', para);
@@ -5002,6 +5006,176 @@ async function reconciliarCadastros(){
   for(const e of (state.clientes||[])) for(const velho of (e.nomesAnteriores||[])){ if(!velho || nomesVivos.has(velho)) continue; soma(await sincronizarEmpresa({ nomeFantasia:velho }, e, { soNome:true })); }
   for(const pr of (state.produtos||[])) for(const velho of (pr.nomesAnteriores||[])){ if(!velho || nomesVivos.has(velho)) continue; soma(await sincronizarProduto({ nome:velho }, pr, { soNome:true })); }
   return cont;
+}
+
+/* =========================== Cadastros: atualizar tudo, vínculos e inativação =========================== */
+const ativoCad = e => String((e && e.status) || 'ATIVO').toUpperCase()!=='INATIVO';
+const chaveNome = x => normBuscaV(x).replace(/[^a-z0-9]/g, '');
+const tokensNome = x => new Set(normBuscaV(x).split(/[^a-z0-9]+/).filter(Boolean).map(t=>t.replace(/^(\d+)[a-z]{1,3}$/, '$1')));   // "1,80m" e "1,80" são o mesmo
+// 0 a 1: quanto dois nomes se parecem (um nome inteiro dentro do outro conta como 0,9)
+function similaridadeNomes(a, b){
+  const A = tokensNome(a), B = tokensNome(b); if(!A.size || !B.size) return 0;
+  const inter = [...A].filter(t=>B.has(t)).length, uniao = new Set([...A, ...B]).size;
+  return inter===Math.min(A.size, B.size) ? Math.max(inter/uniao, 0.9) : inter/uniao;
+}
+const nomesDaEmpresaCad = e => [nomeEmpresaCad(e), e.razaoSocial, e.nomeFantasia, ...(e.nomesAnteriores||[])].filter(Boolean);
+const nomesDoProdutoCad = p => [p.nome, ...(p.nomesAnteriores||[])].filter(Boolean);
+const CHAVES_EMPRESA_PROC = ['fornecedor', 'agenteCarga', 'despachante', 'prestador'];
+// Percorre os documentos e junta os nomes de empresas e de produtos que eles usam (e onde)
+function coletarNomesUsados(){
+  const emp = new Map(), prod = new Map();
+  const add = (m, nome, onde)=>{ const n = String(nome||'').trim(); if(!n) return; const x = m.get(n) || { nome:n, onde:new Set() }; x.onde.add(onde); m.set(n, x); };
+  const walk = (o, fn)=>{ if(Array.isArray(o)) return o.forEach(x=>walk(x, fn)); if(o && typeof o==='object') for(const k of Object.keys(o)){ if(typeof o[k]==='string') fn(k, o[k]); else walk(o[k], fn); } };
+  (state.processosIndex||[]).forEach(p=>{
+    add(emp, p.cliente && p.cliente.nome, p.id); add(emp, p.armazenagem && p.armazenagem.terminal && p.armazenagem.terminal.nome, p.id);
+    walk(p, (k, v)=>{ if(CHAVES_EMPRESA_PROC.includes(k)) add(emp, v, p.id); });
+    (((p.produto||{}).fornecedores)||[]).forEach(fo=>(fo.itens||[]).forEach(it=>add(prod, it.produto, p.id)));
+  });
+  [['COT', state.cotacoesIndex], ['COTF', state.cotacoesFormalIndex]].forEach(([pre, lista])=>(lista||[]).forEach(c=>{ const d = c.dados || {}, id = c.id || pre;
+    add(emp, d.cliente, id); add(emp, d.armazenagemTerminal, id); (d.produtos||[]).forEach(l=>{ add(emp, l.fornecedor, id); add(prod, l.produto, id); }); }));
+  [state.vendasCot, state.vendasPed].forEach(lista=>(lista||[]).forEach(v=>{
+    if(!(v.clienteId && (state.clientes||[]).some(c=>c.id===v.clienteId))) add(emp, v.cliente, v.id);   // com vínculo por id o nome é renovado pelo cadastro
+    add(emp, v.transportadorNome, v.id);
+    (v.itens||[]).forEach(i=>{ if((i.produtoId && (state.produtos||[]).some(p=>p.id===i.produtoId)) || (i.sku && (state.produtos||[]).some(p=>p.codigoInterno===i.sku))) return; add(prod, i.descricao, v.id); }); }));
+  (state.estoque||[]).forEach(e=>{ ['cliente', 'fornecedor', 'terminal'].forEach(k=>add(emp, e[k], e.id)); add(prod, e.produto, e.id); });
+  (state.monitoramento||[]).forEach(m=>add(emp, m.cliente, m.id || 'monitoramento'));
+  return { emp, prod };
+}
+const soDeCotacao = onde => [...onde].every(id=>/^(COT|COTF|VCOT)/.test(String(id)));
+// Compara os nomes usados nos documentos com o cadastro: o que é só outra grafia/nome anterior, o que é parecido (confirmar) e o que não tem cadastro
+function varrerCadastros(){
+  const usados = coletarNomesUsados(), tipos = { empresa:{ lista:state.clientes||[], nomes:nomesDaEmpresaCad, atual:nomeEmpresaCad, mapa:usados.emp }, produto:{ lista:state.produtos||[], nomes:nomesDoProdutoCad, atual:p=>p.nome, mapa:usados.prod } };
+  const exatos = [], aprox = [], semCadastro = [], ambiguos = [];
+  Object.entries(tipos).forEach(([tipo, t])=>{
+    const idx = new Map(); t.lista.forEach(e=>t.nomes(e).forEach(n=>{ const k = chaveNome(n); const l = idx.get(k) || []; if(!l.includes(e)) l.push(e); idx.set(k, l); }));
+    const achados = new Map(), pendentes = [];   // chave do nome → cadastro encontrado
+    [...t.mapa.values()].forEach(({ nome, onde })=>{
+      const k = chaveNome(nome), cand = idx.get(k);
+      if(cand && cand.length===1){ achados.set(k, { kind:'exato', entry:cand[0] }); if(t.atual(cand[0])!==nome) exatos.push({ tipo, de:nome, entry:cand[0], onde:[...onde] }); return; }
+      if(cand && cand.length>1){ ambiguos.push({ tipo, nome, onde:[...onde] }); return; }
+      if(soDeCotacao(onde)){ pendentes.push({ nome, onde }); return; }   // na cotação o nome pode ser digitado à mão
+      const pontos = t.lista.map(e=>({ e, s:Math.max(0, ...t.nomes(e).map(n=>similaridadeNomes(nome, n))) })).sort((a, b)=>b.s - a.s), m1 = pontos[0], m2 = pontos[1];
+      if(m1 && m1.s>=0.6 && (!m2 || m1.s - m2.s>=0.15)){ achados.set(k, { kind:'aprox', entry:m1.e, nota:m1.s }); aprox.push({ tipo, de:nome, entry:m1.e, nota:m1.s, onde:[...onde] }); }
+      else semCadastro.push({ tipo, nome, onde:[...onde] });
+    });
+    // o mesmo nome (só maiúsculas/acento diferentes) usado apenas em cotações acompanha a decisão tomada para os outros documentos
+    pendentes.forEach(({ nome, onde })=>{ const h = achados.get(chaveNome(nome)); if(h) (h.kind==='exato' ? exatos : aprox).push({ tipo, de:nome, entry:h.entry, nota:h.nota, onde:[...onde] }); });
+  });
+  return { exatos, aprox, semCadastro, ambiguos };
+}
+const todasEntradasCad = () => [...(state.clientes||[]).map(entry=>({ tipo:'empresa', entry })), ...(state.produtos||[]).map(entry=>({ tipo:'produto', entry }))];
+// Troca os nomes antigos/parecidos pelo nome do cadastro e renova, em todos os documentos, os dados que vêm do cadastro
+async function aplicarVarredura(v, op){
+  const total = {}, soma = c=>Object.entries(c).forEach(([t, n])=>{ total[t] = (total[t]||0) + n; });
+  const porEntrada = new Map(), juntar = l=>l.forEach(x=>{ const k = x.tipo + ':' + x.entry.id; const g = porEntrada.get(k) || { tipo:x.tipo, entry:x.entry, aliases:new Set() }; g.aliases.add(x.de); porEntrada.set(k, g); });
+  juntar(v.exatos); if(op.aproximados) juntar(v.aprox);
+  for(const g of porEntrada.values()) for(const alias of g.aliases)
+    soma(g.tipo==='empresa' ? await sincronizarEmpresa({ nomeFantasia:alias }, g.entry, { semGravar:true }) : await sincronizarProduto({ nome:alias, precoSaida:g.entry.precoSaida }, g.entry, { semGravar:true }));
+  for(const r of (op.renovar || []))
+    soma(r.tipo==='empresa' ? await sincronizarEmpresa(r.entry, r.entry, { semGravar:true }) : await sincronizarProduto(r.entry, r.entry, { semGravar:true }));
+  if(Object.keys(total).length) await gravarSincronizado(Object.keys(total));
+  return total;
+}
+/* --- impressão digital dos cadastros: só renova o que mudou desde a última vez neste computador --- */
+const hashSimples = str => { let h = 5381; for(let i=0; i<str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return String(h); };
+const fpEntradaCad = (tipo, e) => hashSimples(JSON.stringify(tipo==='empresa'
+  ? [nomeEmpresaCad(e), e.razaoSocial, e.nomeFantasia, e.cnpjCpf, e.status, e.tiposCadastro, contatoPrincipalEmpresa(e), (e.enderecos||[])[0] && e.enderecos[0].pais]
+  : [e.nome, e.codigoInterno, e.ncm, e.unidadeMedida, e.descricao, e.pesoBruto, e.pesoLiquido, e.status]));
+const lerFpCad = () => { try{ return JSON.parse(localStorage.getItem(chaveLocal('cad:fp')) || '{}'); }catch(e){ return {}; } };
+const gravarFpCad = mapa => { try{ localStorage.setItem(chaveLocal('cad:fp'), JSON.stringify(mapa)); }catch(e){} };
+const podeAtualizarCadastros = () => { try{ return !!(usuarioAtual && (usuarioAtual.papel==='admin' || pode('cadastros', 'editar'))); }catch(e){ return false; } };
+// Ao abrir o site: cadastros novos ou alterados são refletidos nos documentos (só nomes exatos; os parecidos pedem confirmação)
+async function atualizarCadastrosAlterados(){
+  if(!podeAtualizarCadastros()) return null;
+  const fp = lerFpCad(), todas = todasEntradasCad(), alteradas = todas.filter(r=>fp[r.tipo + ':' + r.entry.id]!==fpEntradaCad(r.tipo, r.entry));
+  if(!alteradas.length) return {};
+  const total = await aplicarVarredura(varrerCadastros(), { aproximados:false, renovar:alteradas });
+  const novo = {}; todas.forEach(r=>{ novo[r.tipo + ':' + r.entry.id] = fpEntradaCad(r.tipo, r.entry); }); gravarFpCad(novo);
+  return total;
+}
+/* --- vínculos: onde um cadastro é usado --- */
+function cadVinculos(tipo, item){
+  const r = { processos:[], cotacoes:[], pedidos:[], estoque:[], monitoramento:[] }, add = (l, id)=>{ if(id && !l.includes(id)) l.push(id); };
+  const produto = CAD_CONFIG[tipo].richKind==='produto';
+  const nomes = new Set((produto ? nomesDoProdutoCad(item) : nomesDaEmpresaCad(item)).map(chaveNome));
+  try{ const vr = varrerCadastros(); [...vr.exatos, ...vr.aprox].forEach(x=>{ if(x.entry.id===item.id && x.tipo===(produto ? 'produto' : 'empresa')) nomes.add(chaveNome(x.de)); }); }catch(e){}   // nomes antigos ou parecidos ainda não atualizados também contam como vínculo
+  const casa = n => !!n && nomes.has(chaveNome(n));
+  if(produto){
+    (state.processosIndex||[]).forEach(p=>(((p.produto||{}).fornecedores)||[]).forEach(fo=>(fo.itens||[]).forEach(it=>{ if((it.produtoId && it.produtoId===item.id) || casa(it.produto)) add(r.processos, p.id); })));
+    [state.cotacoesIndex, state.cotacoesFormalIndex].forEach(l=>(l||[]).forEach(c=>{ if(((c.dados||{}).produtos||[]).some(x=>casa(x.produto))) add(r.cotacoes, c.id); }));
+    (state.vendasCot||[]).forEach(v=>{ if((v.itens||[]).some(i=>i.produtoId===item.id || casa(i.descricao) || (item.codigoInterno && i.sku===item.codigoInterno))) add(r.cotacoes, v.id); });
+    (state.vendasPed||[]).forEach(v=>{ if((v.itens||[]).some(i=>i.produtoId===item.id || casa(i.descricao) || (item.codigoInterno && i.sku===item.codigoInterno))) add(r.pedidos, v.id); });
+    (state.estoque||[]).forEach(e=>{ if((e.cad && e.cad.produtoId===item.id) || casa(e.produto)) add(r.estoque, e.id); });
+  } else {
+    (state.processosIndex||[]).forEach(p=>{ let achou = casa(p.cliente && p.cliente.nome) || casa(p.armazenagem && p.armazenagem.terminal && p.armazenagem.terminal.nome);
+      if(!achou){ const walk = o=>{ if(achou) return; if(Array.isArray(o)) return o.forEach(walk); if(o && typeof o==='object') for(const k of Object.keys(o)){ if(typeof o[k]==='string'){ if(CHAVES_EMPRESA_PROC.includes(k) && casa(o[k])) achou = true; } else walk(o[k]); } }; walk(p); }
+      if(achou) add(r.processos, p.id); });
+    const dosDados = d => casa(d.cliente) || casa(d.armazenagemTerminal) || (d.produtos||[]).some(l=>casa(l.fornecedor));
+    [state.cotacoesIndex, state.cotacoesFormalIndex].forEach(l=>(l||[]).forEach(c=>{ if(dosDados(c.dados||{})) add(r.cotacoes, c.id); }));
+    (state.vendasCot||[]).forEach(v=>{ if(v.clienteId===item.id || casa(v.cliente) || casa(v.transportadorNome)) add(r.cotacoes, v.id); });
+    (state.vendasPed||[]).forEach(v=>{ if(v.clienteId===item.id || casa(v.cliente) || casa(v.transportadorNome)) add(r.pedidos, v.id); });
+    (state.estoque||[]).forEach(e=>{ if(casa(e.cliente) || casa(e.fornecedor) || casa(e.terminal)) add(r.estoque, e.id); });
+    (state.monitoramento||[]).forEach(m=>{ if(casa(m.cliente)) add(r.monitoramento, m.id || 'monitoramento'); });
+  }
+  r.total = r.processos.length + r.cotacoes.length + r.pedidos.length + r.estoque.length + r.monitoramento.length;
+  return r;
+}
+function cadBloqueioHtml(){
+  const b = state.cadBloqueio; if(!b) return '';
+  const v = b.vinc, linha = (rot, l)=>l.length ? `<div class="trk-linha-info"><b>${rot}</b><span>${l.slice(0, 8).map(esc).join(', ')}${l.length>8 ? ` e mais ${l.length - 8}` : ''}</span></div>` : '';
+  let ed = false; try{ ed = pode('cadastros', 'editar'); }catch(e){}
+  return `<div class="proc-modal-fundo" data-action="cad-bloq-fechar"><div class="proc-modal rel-escolha" data-action="proc-modal-nada" role="alertdialog" aria-modal="true" style="width:min(640px,100%);">
+    <div class="proc-modal-topo"><div class="proc-modal-titulo">Este cadastro não pode ser excluído</div></div>
+    <p style="margin:0 0 12px; color:var(--ink-soft); line-height:1.5;"><b>${esc(b.nome)}</b> está vinculado a documentos do sistema. Para manter o histórico, um cadastro vinculado <b>não pode ser excluído</b>, apenas <b>inativado</b>. Inativo, ele continua nos documentos que já existem, mas deixa de aparecer nas opções de preenchimento.</p>
+    <div class="trk-lista">${linha('Processos', v.processos)}${linha('Cotações', v.cotacoes)}${linha('Pedidos de venda', v.pedidos)}${linha('Estoque', v.estoque)}${linha('Monitoramento de Carga', v.monitoramento)}</div>
+    <div class="btn-row" style="justify-content:flex-end; gap:8px; margin-top:16px;"><button class="btn btn-ghost" data-action="cad-bloq-fechar">Entendi</button>${ed && b.ativo ? `<button class="btn btn-primary" data-action="cad-bloq-inativar">Inativar cadastro</button>` : ''}</div>
+  </div></div>`;
+}
+async function acaoCadBloqueio(cmd){
+  const b = state.cadBloqueio; if(!b) return true;
+  if(cmd==='cad-bloq-fechar'){ state.cadBloqueio = null; renderApp(); return true; }
+  if(cmd==='cad-bloq-inativar'){
+    const cfg = CAD_CONFIG[b.tipo], item = state[cfg.stateKey].find(x=>x.id===b.id); state.cadBloqueio = null;
+    if(item){ item.status = 'INATIVO'; await persistCadastro(b.tipo); toast(`"${b.nome}" foi inativado.`, 'ok'); }
+    renderApp(); return true;
+  }
+  return false;
+}
+/* --- janela "Atualizar documentos com o cadastro" (administrador) --- */
+const cadSyncBotaoHtml = () => (usuarioAtual && usuarioAtual.papel==='admin') ? `<button class="btn btn-ghost" data-action="cad-sync-abrir" title="Atualiza processos, produção, financeiro, vendas e tracking com os dados mais recentes dos cadastros">${ICONS.refresh || ICONS.check} Atualizar documentos com o cadastro</button>` : '';
+function cadSyncHtml(){
+  const c = state.cadSync; if(!c) return '';
+  const rot = x=>x.tipo==='empresa' ? 'empresa' : 'produto', ondeTxt = l=>l.slice(0, 4).map(esc).join(', ') + (l.length>4 ? ` +${l.length - 4}` : '');
+  let corpo, botoes;
+  if(c.fase==='executando'){ corpo = '<p>Atualizando os documentos…</p>'; botoes = ''; }
+  else if(c.fase==='resultado'){
+    const r = c.resultado, sem = c.v.semCadastro;
+    corpo = `<p style="margin:0 0 10px;">${resumoSinc(r) ? `Atualizado em: <b>${resumoSinc(r)}</b>.` : 'Os documentos já estavam de acordo com o cadastro.'}</p>
+      ${sem.length ? `<div class="trk-sub">Nomes usados em documentos que não existem no cadastro (${sem.length})</div><div class="trk-lista" style="max-height:220px; overflow:auto;">${sem.map(x=>`<div class="trk-linha-info"><b>${esc(x.nome)}</b><span class="membro-sub">${rot(x)} · ${ondeTxt(x.onde)}</span></div>`).join('')}</div><p class="hint" style="margin:8px 0 0; font-size:12px; color:var(--ink-soft);">Cadastre ou renomeie no cadastro; esses itens ficam como estão.</p>` : ''}`;
+    botoes = '<button class="btn btn-primary" data-action="cad-sync-fechar">Fechar</button>';
+  } else {
+    const v = c.v;
+    corpo = `<p style="margin:0 0 10px; color:var(--ink-soft); line-height:1.5;">Compara o que está escrito nos processos, cotações, pedidos, estoque e monitoramento com os cadastros de <b>Clientes e Empresas</b> e <b>Produtos</b>, e atualiza nomes, SKU, NCM, unidade, descrição, peso, CNPJ e contatos. Produção, Financeiro e Tracking acompanham os processos e pedidos.</p>
+      <div class="trk-linha-info"><b>${v.exatos.length}</b><span>nome${v.exatos.length===1 ? '' : 's'} com outra grafia ou nome anterior (atualização segura)</span></div>
+      ${v.aprox.length ? `<div class="trk-sub">Nomes parecidos — confirme (${v.aprox.length})</div><div class="trk-lista" style="max-height:230px; overflow:auto;">${v.aprox.map(x=>`<div class="trk-linha-info"><b>${esc(x.de)}</b><span>→</span><b>${esc(x.tipo==='empresa' ? nomeEmpresaCad(x.entry) : x.entry.nome)}</b><span class="membro-sub">${rot(x)} · usado em ${ondeTxt(x.onde)}</span></div>`).join('')}</div>` : '<p class="membro-sub" style="margin:8px 0 0;">Nenhum nome parecido para confirmar.</p>'}
+      ${v.semCadastro.length ? `<p class="membro-sub" style="margin:10px 0 0;">${v.semCadastro.length} nome${v.semCadastro.length===1 ? '' : 's'} sem correspondência no cadastro (aparecem no fim).</p>` : ''}`;
+    botoes = `<button class="btn btn-ghost" data-action="cad-sync-fechar">Cancelar</button><button class="btn ${v.aprox.length ? 'btn-ghost' : 'btn-primary'}" data-action="cad-sync-aplicar:exatos">Atualizar${v.aprox.length ? ' só os seguros' : ''}</button>${v.aprox.length ? '<button class="btn btn-primary" data-action="cad-sync-aplicar:todos">Atualizar também os parecidos</button>' : ''}`;
+  }
+  return `<div class="proc-modal-fundo" data-action="${c.fase==='executando' ? 'proc-modal-nada' : 'cad-sync-fechar'}"><div class="proc-modal rel-escolha" data-action="proc-modal-nada" role="dialog" aria-modal="true" style="width:min(760px,100%);">
+    <div class="proc-modal-topo"><div class="proc-modal-titulo">Atualizar documentos com o cadastro</div></div>${corpo}
+    <div class="btn-row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:16px;">${botoes}</div></div></div>`;
+}
+async function acaoCadSync(cmd, a1){
+  if(!(usuarioAtual && usuarioAtual.papel==='admin')) return true;
+  if(cmd==='cad-sync-abrir'){ state.cadSync = { fase:'previa', v:varrerCadastros() }; renderApp(); return true; }
+  if(cmd==='cad-sync-fechar'){ state.cadSync = null; renderApp(); return true; }
+  if(cmd==='cad-sync-aplicar'){
+    const c = state.cadSync; if(!c) return true; const v = c.v; c.fase = 'executando'; renderApp();
+    try{ c.resultado = await aplicarVarredura(v, { aproximados:a1==='todos', renovar:todasEntradasCad() }); }catch(e){ console.error(e); c.resultado = {}; toast('Não foi possível atualizar tudo. Tente de novo.'); }
+    const novo = {}; todasEntradasCad().forEach(r=>{ novo[r.tipo + ':' + r.entry.id] = fpEntradaCad(r.tipo, r.entry); }); gravarFpCad(novo);
+    c.v = varrerCadastros(); c.fase = 'resultado'; renderApp(); return true;
+  }
+  return false;
 }
 
 /* =========================== Financeiro (resumo de custos de todos os processos) =========================== */
@@ -6267,7 +6441,7 @@ function barraCadastroTpl(tipo, total, filtrados){
   const algum = filtros.some(f=>filtroCadAtivo(tipo, f));
   const aberto = state.cadTemplateAberto===tipo;
   return `<div class="proc-barra">
-    <div class="btn-row">${!state.cadFormOpen ? `<button class="btn btn-primary" data-action="cad-open-form:${tipo}">${ICONS.plus} Novo ${CAD_CONFIG[tipo].singular}</button>` : ''}</div>
+    <div class="btn-row">${!state.cadFormOpen ? `${cadSyncBotaoHtml()}<button class="btn btn-primary" data-action="cad-open-form:${tipo}">${ICONS.plus} Novo ${CAD_CONFIG[tipo].singular}</button>` : ''}</div>
     <div class="btn-row proc-barra-dir">
       <div class="modo-toggle" role="group" aria-label="Formato de visualização">
         <button class="${prefs.modo==='lista'?'active':''}" data-action="cadtpl-modo:${tipo}:lista">Lista</button>
@@ -7184,6 +7358,7 @@ async function loadInitialData(){
   state.vendasPed = (v['vendasPed:list'] || lerCopiaLocalVendas('ped') || []).map(x=>normalizarVenda(x, 'ped'));
   state.estoque = v['estoque:list'] || lerCopiaLocalEstoque() || [];
   enviarCopiasLocaisAoServidor(v);
+  agendarAtualizacaoDosCadastros();
   if(v['processo:draft'] && v['processo:draft'].draft){
     state.procDraft = normalizarProcesso(v['processo:draft'].draft);
     state.currentProcessoId = v['processo:draft'].id || null;
@@ -8149,7 +8324,7 @@ const ROUTE_META = {
   'monitoramentoCusto': {group:'mon', label:'Custo de Free Time'},
 };
 try{ if(typeof state!=='undefined' && localStorage.getItem('comexta:sideCollapsed')==='1') state.sideCollapsed = true; }catch(e){}
-state.estoque = []; state.estoqueUI = null; state.estoquePergunta = null; state.vinculo = null; state.trk = { q:'' }; state.currentEstoqueId = null;
+state.cadBloqueio = null; state.cadSync = null; state.estoque = []; state.estoqueUI = null; state.estoquePergunta = null; state.vinculo = null; state.trk = { q:'' }; state.currentEstoqueId = null;
 state.vendasCot = []; state.vendasPed = []; state.vendaForm = null; state.vendaUI = {}; state.currentVendaCotId = null; state.currentVendaPedId = null;
 state.monitoramento = []; state.monFiltro = { texto:'', sit:'' }; state.finFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.sairCotacao = null; state.sairSemConfirmar = false; state.prodFiltro = { busca:'', situacao:'', de:'', ate:'' }; state.prodTemplateAberto = false; state.prodTemplateSel = null; state.finSel = {}; state.finEdit = null; state.finMassa = false; state.procFoco = null; state.procModal = null; state.monRastreando = {}; state.monLote = null; state.monDiag = null; state.monTemplateAberto = false; state.monTemplateAba = 'card'; state.monTemplateSel = null; state.monFoco = null;
 state.dash = { cot:{gran:'mes',ano:0,mes:0,comp:[]}, proc:{gran:'mes',ano:0,mes:0,comp:[]}, mon:{gran:'mes',ano:0,mes:0,comp:[],medida:'qtd'}, fin:{gran:'mes',ano:0,mes:0,comp:[],visao:'total'}, vcot:{gran:'mes',ano:0,mes:0,comp:[]}, vped:{gran:'mes',ano:0,mes:0,comp:[]} };
@@ -8331,7 +8506,7 @@ function renderApp(){
   </div>` : '';
   const classesLayout = `layout ${state.sideCollapsed ? 'side-collapsed' : ''} ${state.sideMobile ? 'side-open' : ''}`;
   app.innerHTML = `<div class="${classesLayout}">${sideNavHtml()}<div class="side-backdrop" data-action="toggle-sidebar"></div>
-    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d + relEscolhaHtml() + confirmarSaidaCotacaoHtml() + estoquePerguntaHtml() + vinculoHtml();
+    <div class="content">${topbarHtml()}<div class="shell"><div class="main ${wide}">${crumbs}${viewFor(state.route)}</div></div></div></div>` + lightbox + lightbox3d + relEscolhaHtml() + confirmarSaidaCotacaoHtml() + estoquePerguntaHtml() + vinculoHtml() + cadBloqueioHtml() + cadSyncHtml();
   if(state.route==='dados') patchComputedDados();
   if(state.route==='dadosFormal') patchComputedDadosFormal();
   if(state.route==='simCarga') patchComputedSimCarga();
@@ -8934,12 +9109,12 @@ const PROC_AC_TIPOS = ['proc-fornecedor', 'proc-produto', 'proc-prestador', 'pro
 // Opções do cadastro a partir das 3 primeiras letras e/ou números (nome, razão social, CNPJ/CPF, SKU, NCM, código de barras)
 function acEmpresas(tipos, q){
   const dig = acNum(q), lista = tipos ? empresasDoTipo(...tipos) : (state.clientes||[]);
-  return lista.filter(e=>[nomeEmpresaCad(e), e.razaoSocial, e.nomeFantasia].filter(Boolean).join(' ').toLowerCase().includes(q) || (dig.length>=3 && acNum(e.cnpjCpf).includes(dig)))
+  return lista.filter(e=>ativoCad(e) && [nomeEmpresaCad(e), e.razaoSocial, e.nomeFantasia].filter(Boolean).join(' ').toLowerCase().includes(q) || (dig.length>=3 && acNum(e.cnpjCpf).includes(dig)))
     .slice(0, 8).map(e=>({ label:nomeEmpresaCad(e) || '(sem nome)', sub:[e.cnpjCpf, e.razaoSocial && e.razaoSocial!==e.nomeFantasia ? e.razaoSocial : ''].filter(Boolean).join(' · '), data:e }));
 }
 function acProdutos(q){
   const dig = acNum(q);
-  return (state.produtos||[]).filter(p=>[p.nome, p.codigoInterno, p.ncm, p.codigoBarrasGtin, p.descricao].filter(Boolean).join(' ').toLowerCase().includes(q) || (dig.length>=3 && [p.ncm, p.codigoBarrasGtin].some(x=>acNum(x).includes(dig))))
+  return (state.produtos||[]).filter(p=>ativoCad(p) && [p.nome, p.codigoInterno, p.ncm, p.codigoBarrasGtin, p.descricao].filter(Boolean).join(' ').toLowerCase().includes(q) || (dig.length>=3 && [p.ncm, p.codigoBarrasGtin].some(x=>acNum(x).includes(dig))))
     .slice(0, 8).map(p=>({ label:p.nome || '(sem nome)', sub:[p.codigoInterno, p.ncm].filter(Boolean).join(' · '), data:p }));
 }
 function acSearch(type, query){
@@ -8948,7 +9123,7 @@ function acSearch(type, query){
   if(type==='cliente' || type==='venda-cliente') return acEmpresas(['cliente'], q);
   if(type==='clienteCnpj'){
     const qDigits = acNum(q); if(qDigits.length<3) return [];
-    return empresasDoTipo('cliente').filter(c=>acNum(c.cnpjCpf).includes(qDigits)).slice(0,6).map(c=>({ label:c.cnpjCpf, sub:c.nomeFantasia||c.razaoSocial||'', data:c }));
+    return empresasDoTipo('cliente').filter(c=>ativoCad(c) && acNum(c.cnpjCpf).includes(qDigits)).slice(0,6).map(c=>({ label:c.cnpjCpf, sub:c.nomeFantasia||c.razaoSocial||'', data:c }));
   }
   if(type==='fornecedor' || type==='proc-fornecedor' || type==='cad-fornecedor') return acEmpresas(['fornecedor', 'fabricante'], q);
   if(PROC_EMPRESA_CAMPOS[type]) return acEmpresas([PROC_EMPRESA_CAMPOS[type].tipo], q);
@@ -10797,7 +10972,7 @@ function renderCadastroSimples(tipo){
   <div class="page-title">Cadastro — ${cfg.titulo}</div>
   <div class="page-sub">Base usada para preencher rapidamente fornecedores e produtos na aba Dados.</div>
   <hr class="hairline">
-  ${!state.cadFormOpen ? `<div class="btn-row" style="margin-bottom:18px;"><button class="btn btn-primary" data-action="cad-open-form:${tipo}">${ICONS.plus} Novo ${cfg.singular}</button></div>` : ''}
+  ${!state.cadFormOpen ? `<div class="btn-row" style="margin-bottom:18px;">${cadSyncBotaoHtml()}<button class="btn btn-primary" data-action="cad-open-form:${tipo}">${ICONS.plus} Novo ${cfg.singular}</button></div>` : ''}
   ${formHtml}
   ${itemsHtml}
   `;
@@ -12534,6 +12709,11 @@ async function cadSave(tipo){
   renderApp();
 }
 async function cadDelete(tipo,id){
+  const item0 = (state[CAD_CONFIG[tipo].stateKey]||[]).find(x=>x.id===id);
+  if(item0){   // vinculado a processo, cotação ou pedido: não exclui, só inativa (janela informativa)
+    const vinc = cadVinculos(tipo, item0);
+    if(vinc.total){ state.pendingDelete = null; state.cadBloqueio = { tipo, id, nome:(CAD_CONFIG[tipo].richKind==='produto' ? item0.nome : nomeEmpresaCad(item0)) || '(sem nome)', vinc, ativo:ativoCad(item0) }; renderApp(); return; }
+  }
   if(!requestDelete('cad-'+tipo, id)) return;
   const cfg = CAD_CONFIG[tipo];
   state[cfg.stateKey] = state[cfg.stateKey].filter(x=>x.id!==id);
@@ -12750,6 +12930,8 @@ function onAppClick(e){
   if(cmd.startsWith('fin-') && acaoFin(cmd, a1)) return;
   if(cmd.startsWith('prod-') && acaoProd(cmd, a1, a2)) return;
   if(cmd.startsWith('venda-')){ acaoVenda(cmd, a1, a2, action); return; }
+  if(cmd.startsWith('cad-bloq-')){ acaoCadBloqueio(cmd); return; }
+  if(cmd.startsWith('cad-sync-')){ acaoCadSync(cmd, a1); return; }
   if(cmd.startsWith('est-perg-')){ acaoEstoquePergunta(cmd); return; }
   if(cmd.startsWith('est-') && acaoEstoque(cmd, a1, a2)) return;
   if(cmd.startsWith('trk-') && acaoTracking(cmd, a1)) return;
@@ -13173,7 +13355,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.50 · diagnóstico da rota /api mais claro · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.51 · cadastros: atualizar tudo e inativar · build 15/10/2026</span></div>
   `;
 }
 
