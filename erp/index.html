@@ -4755,7 +4755,11 @@ async function fetchApi(caminho, opcoes){
   return r;
 }
 async function sondarFuncaoApi(caminho){
-  const sonda = async c=>{ try{ const r = await fetch(c, { method:'GET', headers:{ Accept:'application/json' } }); const json = /json/i.test(r.headers.get('content-type')||''); return `${r.status}${json ? ' (função respondeu)' : ''}`; }catch(e){ return 'sem resposta'; } };
+  const sonda = async c=>{ try{
+    const r = await fetch(c, { method:'GET', headers:{ Accept:'application/json' } }); let j = null; try{ j = await r.json(); }catch(e){}
+    const nossa = !!(j && (j.erro==='metodo' || j.funcao));   // só a nossa função devolve isso; a Vercel devolve a própria página de erro
+    return `${r.status}${nossa ? ' (a função respondeu)' : (r.status===404 ? ' (a Vercel não achou a função)' : '')}`;
+  }catch(e){ return 'sem resposta'; } };
   return `sem barra: ${await sonda(caminho)} · com barra: ${await sonda(caminho + '/')}`;
 }
 function renderTracking(){
@@ -13169,7 +13173,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.49 · rota /api com barra final · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.50 · diagnóstico da rota /api mais claro · build 15/10/2026</span></div>
   `;
 }
 
