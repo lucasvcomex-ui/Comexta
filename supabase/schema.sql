@@ -1,4 +1,4 @@
--- Comexta · estrutura do banco no Supabase (v2: empresas, equipe e permissões)
+-- Comexta · estrutura do banco no Supabase (v3: + Monitoramento, Vendas (cotações e pedidos), Estoque e Tracking)
 -- Rode em: Supabase → SQL Editor → New query → cole este arquivo → Run.
 -- Pode rodar de novo sem perder dados.
 --
@@ -7,7 +7,7 @@
 --   perfis          um por usuário: nome, telefone, cargo, foto, empresa, papel (admin|membro) e permissões
 --   convites        convites pendentes (link com token) criados pelo administrador
 --   dados_empresa   dados do ERP compartilhados pela equipe (cotações, simulações, cadastros), com versão
--- Permissões por área ('cadastros', 'cotacoes', 'simulador', 'processos'): { "ver": bool, "criar": bool, "editar": bool }.
+-- Permissões por área ('cadastros', 'cotacoes', 'simulador', 'processos', 'producao', 'financeiro', 'monitoramento', 'vendas', 'tracking'): { "ver": bool, "criar": bool, "editar": bool }.
 -- Administradores podem tudo, inclusive editar a empresa e gerenciar a equipe.
 
 -- ============================================================ Tabelas
@@ -77,7 +77,8 @@ create table if not exists public.dados_empresa (
   empresa_id     uuid not null references public.empresas (id) on delete cascade,
   chave          text not null check (chave in (
                    'cotacoes:index', 'cotacoesFormal:index', 'simulacoes:index',
-                   'clientes:list', 'fornecedores:list', 'produtos:list', 'processos:index')),
+                   'clientes:list', 'fornecedores:list', 'produtos:list', 'processos:index',
+                   'monitoramento:list', 'vendasCot:list', 'vendasPed:list', 'estoque:list')),
   valor          jsonb,
   versao         integer not null default 1,
   atualizado_por uuid references auth.users (id) on delete set null,
@@ -88,7 +89,8 @@ create table if not exists public.dados_empresa (
 alter table public.dados_empresa drop constraint if exists dados_empresa_chave_check;
 alter table public.dados_empresa add constraint dados_empresa_chave_check check (chave in (
   'cotacoes:index', 'cotacoesFormal:index', 'simulacoes:index',
-  'clientes:list', 'fornecedores:list', 'produtos:list', 'processos:index'));
+  'clientes:list', 'fornecedores:list', 'produtos:list', 'processos:index',
+  'monitoramento:list', 'vendasCot:list', 'vendasPed:list', 'estoque:list'));
 
 -- ============================================================ Funções auxiliares
 -- security definer: leem perfis sem cair nas próprias regras RLS (evita recursão).
@@ -109,6 +111,8 @@ language sql immutable as $$
     when p_chave in ('cotacoes:index', 'cotacoesFormal:index') then 'cotacoes'
     when p_chave = 'simulacoes:index' then 'simulador'
     when p_chave = 'processos:index' then 'processos'
+    when p_chave = 'monitoramento:list' then 'monitoramento'
+    when p_chave in ('vendasCot:list', 'vendasPed:list', 'estoque:list') then 'vendas'
   end
 $$;
 
@@ -120,13 +124,36 @@ language sql stable security definer set search_path = public as $$
   ), false)
 $$;
 
+-- Quem pode ver / gravar / apagar cada lista (o ERP herda acessos entre áreas: Financeiro, Produção, Vendas e Tracking leem os processos;
+-- o Tracking também lê pedidos, estoque e monitoramento). Ações: 'ver', 'gravar' (criar ou editar) e 'apagar' (editar).
+create or replace function public.pode_chave(p_chave text, p_acao text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when p_chave = 'processos:index' and p_acao = 'ver' then
+      public.pode('processos', 'ver') or public.pode('financeiro', 'ver') or public.pode('producao', 'ver')
+      or public.pode('vendas', 'ver') or public.pode('tracking', 'ver')
+    when p_chave = 'processos:index' and p_acao = 'gravar' then
+      public.pode('processos', 'criar') or public.pode('processos', 'editar') or public.pode('financeiro', 'editar') or public.pode('producao', 'editar')
+    when p_chave in ('vendasPed:list', 'estoque:list', 'monitoramento:list') and p_acao = 'ver' then
+      public.pode(public.secao_da_chave(p_chave), 'ver') or public.pode('tracking', 'ver')
+    when p_acao = 'ver' then public.pode(public.secao_da_chave(p_chave), 'ver')
+    when p_acao = 'gravar' then public.pode(public.secao_da_chave(p_chave), 'criar') or public.pode(public.secao_da_chave(p_chave), 'editar')
+    else public.pode(public.secao_da_chave(p_chave), 'editar')
+  end
+$$;
+
 -- Permissões completas (usadas para administradores e como referência).
 create or replace function public.permissoes_totais() returns jsonb
 language sql immutable as $$
   select '{"cadastros":{"ver":true,"criar":true,"editar":true},
            "cotacoes":{"ver":true,"criar":true,"editar":true},
            "simulador":{"ver":true,"criar":true,"editar":true},
-           "processos":{"ver":true,"criar":true,"editar":true}}'::jsonb
+           "processos":{"ver":true,"criar":true,"editar":true},
+           "producao":{"ver":true,"criar":true,"editar":true},
+           "financeiro":{"ver":true,"criar":true,"editar":true},
+           "monitoramento":{"ver":true,"criar":true,"editar":true},
+           "vendas":{"ver":true,"criar":true,"editar":true},
+           "tracking":{"ver":true,"criar":true,"editar":true}}'::jsonb
 $$;
 
 -- Deixa só as áreas/ações conhecidas, com valores booleanos; "criar"/"editar" implicam "ver".
@@ -137,7 +164,9 @@ declare
   secao text;
   ver boolean; criar boolean; editar boolean;
 begin
-  foreach secao in array array['cadastros','cotacoes','simulador','processos'] loop
+  foreach secao in array array['cadastros','cotacoes','simulador','processos','producao','financeiro','monitoramento','vendas','tracking'] loop
+    -- áreas criadas depois só são gravadas se vierem no pedido (sem a chave, o ERP continua herdando de outra área)
+    if secao not in ('cadastros','cotacoes','simulador','processos') and not (p ? secao) then continue; end if;
     criar  := coalesce((p -> secao ->> 'criar')::boolean, false);
     editar := coalesce((p -> secao ->> 'editar')::boolean, false);
     ver    := coalesce((p -> secao ->> 'ver')::boolean, false) or criar or editar;
@@ -277,7 +306,7 @@ declare
   v integer;
 begin
   if secao is null then raise exception 'chave_invalida'; end if;
-  if not (public.pode(secao, 'criar') or public.pode(secao, 'editar')) then
+  if not public.pode_chave(p_chave, 'gravar') then
     raise exception 'sem_permissao' using hint = 'Você não tem permissão para salvar nesta área.';
   end if;
   if coalesce(p_versao, 0) = 0 then
@@ -331,19 +360,17 @@ drop policy if exists "alterar dados da empresa"   on public.dados_empresa;
 drop policy if exists "apagar dados da empresa"    on public.dados_empresa;
 create policy "ver dados da empresa" on public.dados_empresa
   for select to authenticated
-  using (empresa_id = public.minha_empresa() and public.pode(public.secao_da_chave(chave), 'ver'));
+  using (empresa_id = public.minha_empresa() and public.pode_chave(chave, 'ver'));
 create policy "criar dados da empresa" on public.dados_empresa
   for insert to authenticated
-  with check (empresa_id = public.minha_empresa()
-              and (public.pode(public.secao_da_chave(chave), 'criar') or public.pode(public.secao_da_chave(chave), 'editar')));
+  with check (empresa_id = public.minha_empresa() and public.pode_chave(chave, 'gravar'));
 create policy "alterar dados da empresa" on public.dados_empresa
   for update to authenticated
-  using (empresa_id = public.minha_empresa() and public.pode(public.secao_da_chave(chave), 'ver'))
-  with check (empresa_id = public.minha_empresa()
-              and (public.pode(public.secao_da_chave(chave), 'criar') or public.pode(public.secao_da_chave(chave), 'editar')));
+  using (empresa_id = public.minha_empresa() and public.pode_chave(chave, 'ver'))
+  with check (empresa_id = public.minha_empresa() and public.pode_chave(chave, 'gravar'));
 create policy "apagar dados da empresa" on public.dados_empresa
   for delete to authenticated
-  using (empresa_id = public.minha_empresa() and public.pode(public.secao_da_chave(chave), 'editar'));
+  using (empresa_id = public.minha_empresa() and public.pode_chave(chave, 'apagar'));
 
 -- Colunas que cada um pode alterar no próprio perfil (papel, permissões e empresa só pelas funções acima).
 revoke all on public.empresas, public.perfis, public.convites, public.dados_empresa from anon;
@@ -361,7 +388,7 @@ revoke execute on function public.ao_criar_usuario() from public, anon, authenti
 grant execute on function public.ver_convite(text) to anon, authenticated;
 grant execute on function public.aceitar_convite(text), public.definir_acesso(uuid, text, jsonb),
                            public.remover_membro(uuid), public.salvar_dado(text, jsonb, integer),
-                           public.minha_empresa(), public.sou_admin(), public.pode(text, text)
+                           public.minha_empresa(), public.sou_admin(), public.pode(text, text), public.pode_chave(text, text)
   to authenticated;
 
 -- ============================================================ Migração da v1
