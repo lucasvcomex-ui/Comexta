@@ -113,7 +113,7 @@ if(typeof document!=='undefined' && document.getElementById('form')){
     try{
       const r = await fetch('/api/rastreio-pedido', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ referencia:ref, cnpj }) });
       let j = {}; try{ j = await r.json(); }catch(_){ }
-      if(!r.ok || !j.ok){ erro.textContent = j.mensagem || (r.status===404 ? 'Não encontramos um pedido com essa referência para este CNPJ.' : 'Não foi possível consultar agora. Tente novamente em instantes.'); erro.style.display = 'block'; }
+      if(!r.ok || !j.ok){ erro.textContent = j.mensagem || ('O serviço de consulta não respondeu (código ' + r.status + '). Tente novamente em instantes ou fale com o seu vendedor.'); erro.style.display = 'block'; }
       else{ $('resultado').innerHTML = renderResultado(j); $('resultado').scrollIntoView({ behavior:'smooth', block:'start' }); }
     }catch(_){ erro.textContent = 'Sem conexão com o servidor. Verifique sua internet e tente novamente.'; erro.style.display = 'block'; }
     finally{ b.disabled = false; b.textContent = 'Rastrear'; }
