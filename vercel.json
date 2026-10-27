@@ -1,1 +1,14 @@
-{ "cleanUrls": true, "trailingSlash": true }
+{
+  "cleanUrls": true,
+  "trailingSlash": true,
+  "rewrites": [
+    {
+      "source": "/api/rastreio-pedido/",
+      "destination": "/api/rastreio-pedido"
+    },
+    {
+      "source": "/api/rastreio/",
+      "destination": "/api/rastreio"
+    }
+  ]
+}

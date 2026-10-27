@@ -111,7 +111,9 @@ if(typeof document!=='undefined' && document.getElementById('form')){
     if(!/^\d{11}$|^\d{14}$/.test(cnpj.replace(/\D/g, ''))){ erro.textContent = 'Informe o CNPJ completo (14 números) ou CPF (11 números).'; erro.style.display = 'block'; return; }
     const b = $('go'); b.disabled = true; b.textContent = 'Consultando…';
     try{
-      const r = await fetch('/api/rastreio-pedido', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ referencia:ref, cnpj }) });
+      const opc = { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ referencia:ref, cnpj }) };
+      let r = await fetch('/api/rastreio-pedido', opc);
+      if(r.status===404){ const r2 = await fetch('/api/rastreio-pedido/', opc); if(r2.status!==404) r = r2; }   // com trailingSlash a Vercel pode exigir a barra final
       let j = {}; try{ j = await r.json(); }catch(_){ }
       if(!r.ok || !j.ok){ erro.textContent = j.mensagem || ('O serviço de consulta não respondeu (código ' + r.status + '). Tente novamente em instantes ou fale com o seu vendedor.'); erro.style.display = 'block'; }
       else{ $('resultado').innerHTML = renderResultado(j); $('resultado').scrollIntoView({ behavior:'smooth', block:'start' }); }

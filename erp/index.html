@@ -4748,6 +4748,16 @@ function trkDiagnosticoHtml(){
       <div class="trk-sub">Pedidos</div><div class="trk-linha-info"><span>No servidor: <b>${r.pedidos.total}</b></span><span>Do cliente: <b>${r.pedidos.doCliente}</b></span><span>Com essa referência: <b>${r.pedidos.comEssaReferencia}</b></span></div>
       ${r.pedidos.referenciasDoCliente.length ? `<div class="trk-sub">Referências dos pedidos desse cliente</div><div class="trk-lista">${r.pedidos.referenciasDoCliente.map(x=>`<div class="trk-linha-info">${esc(x)}</div>`).join('')}</div>` : ''}</div>` : ''}</div>`;
 }
+// Com "trailingSlash" no vercel.json, a Vercel pode só entregar a função com a barra final: tenta sem e, se der 404, com barra
+async function fetchApi(caminho, opcoes){
+  const r = await fetch(caminho, opcoes);
+  if(r.status===404){ try{ const r2 = await fetch(caminho + '/', opcoes); if(r2.status!==404) return r2; }catch(e){} }
+  return r;
+}
+async function sondarFuncaoApi(caminho){
+  const sonda = async c=>{ try{ const r = await fetch(c, { method:'GET', headers:{ Accept:'application/json' } }); const json = /json/i.test(r.headers.get('content-type')||''); return `${r.status}${json ? ' (função respondeu)' : ''}`; }catch(e){ return 'sem resposta'; } };
+  return `sem barra: ${await sonda(caminho)} · com barra: ${await sonda(caminho + '/')}`;
+}
 function renderTracking(){
   const t = state.trk = state.trk || { q:'' }, r = trackingBuscar(t.q), total = r.processos.length + r.pedidos.length;
   const msg = !String(t.q||'').trim() ? '' : normTrk(t.q).length<3 ? '<div class="empty"><h3>Digite pelo menos 3 caracteres</h3></div>' : !total ? `<div class="empty">${ICONS.search || ''}<h3>Nada encontrado para "${esc(t.q)}"</h3><p>Confira o número do Booking, MBL, HBL, MAWB, HAWB ou do pedido do cliente.</p></div>` : '';
@@ -4773,9 +4783,9 @@ function acaoTracking(cmd, a1){
     (async()=>{
       try{
         const { data } = await sb.auth.getSession(), token = data && data.session ? data.session.access_token : '';
-        const resp = await fetch('/api/rastreio-pedido', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + token }, body:JSON.stringify({ diagnostico:true, referencia:ref, cnpj }) });
+        const resp = await fetchApi('/api/rastreio-pedido', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + token }, body:JSON.stringify({ diagnostico:true, referencia:ref, cnpj }) });
         let j = {}; try{ j = await resp.json(); }catch(e){}
-        state.trkDiag = j && j.ok ? { ref, cnpj, dados:j } : { ref, cnpj, erro: (j && j.mensagem) || (resp.status===404 ? 'A função /api/rastreio-pedido não está publicada (erro 404). Rode o publicar.bat e confira o deploy na Vercel.' : 'A função não respondeu (código ' + resp.status + ').') };
+        state.trkDiag = j && j.ok ? { ref, cnpj, dados:j } : { ref, cnpj, erro: (j && j.mensagem) || (resp.status===404 ? 'A função /api/rastreio-pedido não foi encontrada (erro 404; ' + await sondarFuncaoApi('/api/rastreio-pedido') + '). Confira se api/rastreio-pedido.mjs está no GitHub e se o vercel.json tem as regras de /api (rode o publicar.bat do pacote mais novo).' : 'A função não respondeu (código ' + resp.status + ').') };
       }catch(e){ state.trkDiag = { ref, cnpj, erro:'Não foi possível chamar a função: ' + (e && e.message ? e.message : e) }; }
       renderApp();
     })();
@@ -7412,7 +7422,7 @@ const monPaisPt = n => MON_PAISES[n] || n || '';
 async function monChamarApi(m){
   const { data } = await sb.auth.getSession();
   const token = data && data.session && data.session.access_token;
-  const r = await fetch('/api/rastreio', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + (token||'') },
+  const r = await fetchApi('/api/rastreio', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + (token||'') },
     body: JSON.stringify({ container: monNumero(m), scac: String(m.scac||'AUTO').toUpperCase().trim() || 'AUTO' }) });
   let corpo = null; try{ corpo = await r.json(); }catch(e){}
   let destino = ''; try{ destino = new URL(r.url).pathname; }catch(e){}
@@ -7492,7 +7502,7 @@ async function monRastrearTodos(){
 async function monTestarApi(){
   state.monDiag = { ok:null, texto:'Testando a função de rastreio…' }; renderApp();
   try{
-    const r = await fetch('/api/rastreio', { method:'GET', headers:{ Accept:'application/json' } });
+    const r = await fetchApi('/api/rastreio', { method:'GET', headers:{ Accept:'application/json' } });
     const tipo = r.headers.get('content-type') || '';
     let j = null; if(/json/i.test(tipo)){ try{ j = await r.json(); }catch(e){} }
     let destino = ''; try{ destino = new URL(r.url).pathname; }catch(e){}
@@ -13159,7 +13169,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.48 · diagnóstico do rastreio de pedido · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.49 · rota /api com barra final · build 15/10/2026</span></div>
   `;
 }
 
