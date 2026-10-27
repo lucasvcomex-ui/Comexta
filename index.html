@@ -4448,6 +4448,18 @@ async function cadastrarEstoqueDoProcesso(procId){
   if(criados) await persistEstoque();
   return { criados, existentes };
 }
+// Listas que só existiam neste navegador (o banco ainda não aceitava a chave) sobem sozinhas para o servidor
+function enviarCopiasLocaisAoServidor(v){
+  setTimeout(async ()=>{
+    const grava = k => { try{ return podeVerChave(k) && (pode(SECAO_DA_CHAVE[k], 'criar') || pode(SECAO_DA_CHAVE[k], 'editar')); }catch(e){ return false; } };
+    try{
+      if(!v['vendasCot:list'] && (state.vendasCot||[]).length && grava('vendasCot:list')) await persistVendas('cot');
+      if(!v['vendasPed:list'] && (state.vendasPed||[]).length && grava('vendasPed:list')) await persistVendas('ped');
+      if(!v['estoque:list'] && (state.estoque||[]).length && grava('estoque:list')) await persistEstoque();
+      if(!v['monitoramento:list'] && (state.monitoramento||[]).length && grava('monitoramento:list')) await persistMonitoramento();
+    }catch(e){ console.error('envio das cópias locais', e); }
+  }, 3000);
+}
 /* --- catálogo, lista, cards e template --- */
 const dimEst = c => (c && (c.altura || c.largura || c.comprimento)) ? [c.altura, c.largura, c.comprimento].map(x=>x || '—').join(' × ') + ' cm' : '';
 const ESTOQUE_CAMPOS = [
@@ -7122,6 +7134,7 @@ async function loadInitialData(){
   state.vendasCot = (v['vendasCot:list'] || lerCopiaLocalVendas('cot') || []).map(x=>normalizarVenda(x, 'cot'));
   state.vendasPed = (v['vendasPed:list'] || lerCopiaLocalVendas('ped') || []).map(x=>normalizarVenda(x, 'ped'));
   state.estoque = v['estoque:list'] || lerCopiaLocalEstoque() || [];
+  enviarCopiasLocaisAoServidor(v);
   if(v['processo:draft'] && v['processo:draft'].draft){
     state.procDraft = normalizarProcesso(v['processo:draft'].draft);
     state.currentProcessoId = v['processo:draft'].id || null;
@@ -13111,7 +13124,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.46 · cadastro sincronizado e autocompletar único · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.47 · cópias locais sobem ao servidor · build 15/10/2026</span></div>
   `;
 }
 
