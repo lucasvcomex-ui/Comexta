@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comexta · Rastreio de Pedido</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{ --navy:#173A5E; --navy-deep:#0D2740; --sky-100:#EAF2FC; --sky-50:#F5F9FE; --line:#DCE6F1; --ink:#16222E; --ink-soft:#5B6B79; --accent:#2F6FC4; --green:#2F6B4F; --amber:#C07A25; --red:#B23A32; --radius:16px; --shadow:0 1px 2px rgba(13,39,64,.04), 0 24px 60px -20px rgba(13,39,64,.35); }
+*{box-sizing:border-box;} html,body{margin:0;padding:0;}
+body{ min-height:100vh; font-family:'Inter',ui-sans-serif,system-ui,sans-serif; color:var(--ink); background:linear-gradient(165deg,var(--navy) 0%,var(--navy-deep) 100%); padding:32px 16px 48px; }
+.wrap{ max-width:860px; margin:0 auto; }
+.topo{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; color:#fff; }
+.marca{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:22px; letter-spacing:.02em; }
+.voltar{ color:#fff; text-decoration:none; font-size:13px; font-weight:600; border:1px solid rgba(255,255,255,.4); padding:8px 14px; border-radius:10px; }
+.voltar:hover{ background:rgba(255,255,255,.12); }
+.card{ background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:26px 28px; margin-bottom:16px; }
+h1{ font-family:'Space Grotesk',sans-serif; font-size:24px; margin:0 0 6px; color:var(--navy-deep); }
+.sub{ margin:0 0 20px; color:var(--ink-soft); font-size:14px; line-height:1.5; }
+form{ display:grid; grid-template-columns:1fr 1fr auto; gap:14px; align-items:end; }
+label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
+input{ width:100%; font:inherit; font-size:15px; padding:12px 14px; border:1.5px solid var(--line); border-radius:12px; background:var(--sky-50); color:var(--ink); }
+input:focus{ outline:none; border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(47,111,196,.15); }
+button.go{ font:inherit; font-weight:600; font-size:15px; color:#fff; background:var(--navy); border:0; border-radius:12px; padding:13px 26px; cursor:pointer; }
+button.go:hover{ background:var(--navy-deep); } button.go[disabled]{ opacity:.6; cursor:wait; }
+.erro{ margin-top:14px; padding:12px 14px; border-radius:10px; background:#FBE9E7; color:var(--red); font-size:14px; font-weight:500; }
+.dica{ margin:14px 0 0; font-size:12.5px; color:var(--ink-soft); }
+.ped-topo{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+.ped-id{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:20px; color:var(--navy-deep); }
+.cli{ color:var(--ink-soft); font-size:13.5px; margin-top:3px; }
+.badge{ display:inline-block; padding:4px 12px; border-radius:999px; font-size:12px; font-weight:700; background:var(--sky-100); color:var(--navy); } .b-verde{ background:#E3F2EA; color:var(--green); } .b-ambar{ background:#FBF0DC; color:#8F5A17; } .b-verm{ background:#FBE9E7; color:var(--red); }
+.resumo{ margin:10px 0 0; font-size:13px; color:var(--ink-soft); }
+.bloco{ border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-top:16px; }
+.bloco-topo{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; } .proc{ font-weight:700; color:var(--navy-deep); }
+.sub-t{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:16px 0 8px; }
+.linha{ display:flex; gap:4px; flex-wrap:wrap; }
+.passo{ flex:1 1 84px; min-width:76px; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; font-size:11px; color:var(--ink-soft); }
+.passo i{ width:15px; height:15px; border-radius:50%; background:#DDE2EC; border:2px solid #fff; box-shadow:0 0 0 1px #DDE2EC; display:block; }
+.passo.feito i{ background:var(--green); box-shadow:0 0 0 1px var(--green); } .passo.feito span{ color:var(--green); }
+.passo.atual i{ background:#C9A227; box-shadow:0 0 0 4px rgba(201,162,39,.28); } .passo.atual span{ color:var(--navy-deep); font-weight:700; }
+.fatos{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px 18px; margin-top:6px; }
+.fatos div{ display:flex; flex-direction:column; } .fatos span{ font-size:11px; color:var(--ink-soft); } .fatos b{ font-size:14px; color:var(--navy-deep); }
+.fato-t{ grid-column:1/-1; font-weight:700; color:var(--navy); font-size:13px; }
+.lista{ display:flex; flex-direction:column; gap:6px; } .item{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--sky-50); border:1px solid var(--line); border-radius:10px; padding:9px 12px; font-size:14px; } .item b{ color:var(--navy-deep); } .item span{ color:var(--ink-soft); }
+.rod{ text-align:center; color:rgba(255,255,255,.7); font-size:12px; margin-top:22px; }
+@media (max-width:720px){ form{ grid-template-columns:1fr; } .card{ padding:20px 18px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topo"><div class="marca">Comexta</div><a class="voltar" href="/login/">← Voltar ao login</a></div>
+  <div class="card">
+    <h1>Rastreio de Pedido</h1>
+    <p class="sub">Informe a <b>referência do pedido</b> (o número do seu pedido de compra) e o <b>CNPJ</b> cadastrado na Comexta para acompanhar o status do seu pedido.</p>
+    <form id="form" autocomplete="off" novalidate>
+      <div><label for="ref">Referência do pedido</label><input id="ref" name="ref" placeholder="Ex.: OC-4455" maxlength="80" required></div>
+      <div><label for="cnpj">CNPJ</label><input id="cnpj" name="cnpj" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" required></div>
+      <button class="go" id="go" type="submit">Rastrear</button>
+    </form>
+    <div class="erro" id="erro" role="alert" style="display:none;"></div>
+    <p class="dica">Seus dados são consultados apenas para mostrar o seu pedido. Se não encontrar, confira a referência e o CNPJ ou fale com o seu vendedor.</p>
+  </div>
+  <div id="resultado" aria-live="polite"></div>
+  <div class="rod">© <span id="ano"></span> <b>Comexta</b> · Soluções em importação</div>
+</div>
+<script>
+const esc = x => String(x ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const dt = v => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v||'')); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
+const qtd = n => new Intl.NumberFormat('pt-BR', { maximumFractionDigits:2 }).format(n || 0);
+const mascara = v => { const d = String(v).replace(/\D/g, '').slice(0, 14);
+  if(d.length<=11) return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2');
+  return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2'); };
+const classeStatus = r => /entreg|finaliz|desembara[cç]ado|destino/i.test(r) ? 'b-verde' : /cancel/i.test(r) ? 'b-verm' : /produ|tr[aâ]nsito|porto|desembara|warehouse|aberto|aprovado|faturado|enviado/i.test(r) ? 'b-ambar' : '';
+const brl = n => new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' }).format(n || 0);
+const itens = its => `<div class="lista">${its.map(i=>`<div class="item"><b>${esc(i.descricao)}</b><span>SKU: ${i.sku ? esc(i.sku) : '—'}</span><span>Qtde: ${qtd(i.quantidade)}</span><span>Unid.: ${esc(i.un||'—')}</span><span>Preço de venda: <b>${brl(i.precoVenda)}</b></span></div>`).join('')}</div>`;
+function renderTransportes(ts){
+  return ts.map((t, k)=>{ const m = t.aereo ? 'MAWB' : 'MBL', h = t.aereo ? 'HAWB' : 'HBL';
+    return `<div class="fatos">${ts.length>1 ? `<div class="fato-t">Transporte ${k+1}${t.modal ? ' · ' + esc(t.modal) : ''}</div>` : ''}
+      ${t.modal ? `<div><span>Modal</span><b>${esc(t.modal)}</b></div>` : ''}${t.booking ? `<div><span>Booking</span><b>${esc(t.booking)}</b></div>` : ''}${t.master ? `<div><span>${m}</span><b>${esc(t.master)}</b></div>` : ''}${t.house ? `<div><span>${h}</span><b>${esc(t.house)}</b></div>` : ''}
+      ${t.navio ? `<div><span>${t.aereo ? 'Voo' : 'Navio / viagem'}</span><b>${esc(t.navio)}</b></div>` : ''}${t.origem || t.destino ? `<div><span>Origem → destino</span><b>${esc(t.origem||'—')} → ${esc(t.destino||'—')}</b></div>` : ''}
+      ${t.etd ? `<div><span>Saída prevista (ETD)</span><b>${dt(t.etd)}</b></div>` : ''}${t.eta ? `<div><span>Chegada prevista (ETA)</span><b>${dt(t.eta)}</b></div>` : ''}${t.chegada ? `<div><span>Chegada efetiva</span><b>${dt(t.chegada)}</b></div>` : ''}
+      ${(t.containers||[]).length ? `<div><span>Container(s)</span><b>${t.containers.map(esc).join(', ')}</b></div>` : ''}</div>`; }).join('');
+}
+function renderResultado(d){
+  return d.pedidos.map(p=>{
+    const nProc = p.processos.length, nProd = p.processos.reduce((s, x)=>s + x.produtos.length, 0) + p.estoque.length + p.semVinculo.length;
+    const blocos = p.processos.map(x=>x.naoEncontrado
+      ? `<div class="bloco"><div class="bloco-topo"><span class="proc">${esc(x.id)}</span><span class="badge b-verm">Informação indisponível</span></div><div class="sub-t">Produtos do pedido</div>${itens(x.produtos)}</div>`
+      : `<div class="bloco"><div class="bloco-topo"><span class="proc">Processo ${esc(x.id)}</span><span class="badge ${x.cancelado ? 'b-verm' : classeStatus(x.status)}">${esc(x.status)}</span></div>
+          ${x.cancelado ? '' : `<div class="sub-t">Andamento</div><div class="linha">${x.passos.map(s=>`<div class="passo${s.feito ? ' feito' : ''}${s.atual ? ' atual' : ''}"><i></i><span>${esc(s.rotulo)}</span></div>`).join('')}</div>`}
+          ${x.transportes.length ? `<div class="sub-t">Transporte</div>${renderTransportes(x.transportes)}` : ''}
+          ${x.containers.length ? `<div class="sub-t">Containers</div><div class="lista">${x.containers.map(c=>`<div class="item"><b>${esc(c.container||'—')}</b>${c.situacao ? `<span>${esc(c.situacao)}</span>` : ''}${c.atrasoDias!=null ? `<span>${c.atrasoDias>0 ? 'Atraso de ' + c.atrasoDias + ' dia(s)' : 'Sem atraso'}</span>` : ''}</div>`).join('')}</div>` : ''}
+          <div class="sub-t">Produtos do pedido</div>${itens(x.produtos)}</div>`).join('');
+    return `<div class="card"><div class="ped-topo"><div><div class="ped-id">Pedido ${esc(p.referencia || p.id)}</div><div class="cli">${esc(d.cliente||'')}${p.referencia && p.id ? ' · nº ' + esc(p.id) : ''}${p.dataPrevistaEntrega ? ' · entrega prevista ' + dt(p.dataPrevistaEntrega) : ''}</div></div><span class="badge ${classeStatus(p.status)}">${esc(p.status)}</span></div>
+      <p class="resumo">${nProd} produto${nProd===1 ? '' : 's'}${nProc ? ` em ${nProc} processo${nProc===1 ? '' : 's'}` : ''}</p>
+      ${blocos}
+      ${p.estoque.length ? `<div class="bloco"><div class="bloco-topo"><span class="badge b-verde">Disponível em estoque</span></div><div class="sub-t">Produtos do pedido</div>${itens(p.estoque)}</div>` : ''}
+      ${p.semVinculo.length ? `<div class="bloco"><div class="bloco-topo"><span class="badge">Em preparação</span></div><div class="sub-t">Produtos do pedido</div>${itens(p.semVinculo)}</div>` : ''}</div>`;
+  }).join('');
+}
+if(typeof document!=='undefined' && document.getElementById('form')){
+  const $ = id => document.getElementById(id), erro = $('erro');
+  $('ano').textContent = new Date().getFullYear();
+  $('cnpj').addEventListener('input', e=>{ e.target.value = mascara(e.target.value); });
+  $('form').addEventListener('submit', async e=>{
+    e.preventDefault(); erro.style.display = 'none'; $('resultado').innerHTML = '';
+    const ref = $('ref').value.trim(), cnpj = $('cnpj').value;
+    if(!ref){ erro.textContent = 'Informe a referência do pedido.'; erro.style.display = 'block'; return; }
+    if(!/^\d{11}$|^\d{14}$/.test(cnpj.replace(/\D/g, ''))){ erro.textContent = 'Informe o CNPJ completo (14 números) ou CPF (11 números).'; erro.style.display = 'block'; return; }
+    const b = $('go'); b.disabled = true; b.textContent = 'Consultando…';
+    try{
+      const r = await fetch('/api/rastreio-pedido', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ referencia:ref, cnpj }) });
+      let j = {}; try{ j = await r.json(); }catch(_){ }
+      if(!r.ok || !j.ok){ erro.textContent = j.mensagem || (r.status===404 ? 'Não encontramos um pedido com essa referência para este CNPJ.' : 'Não foi possível consultar agora. Tente novamente em instantes.'); erro.style.display = 'block'; }
+      else{ $('resultado').innerHTML = renderResultado(j); $('resultado').scrollIntoView({ behavior:'smooth', block:'start' }); }
+    }catch(_){ erro.textContent = 'Sem conexão com o servidor. Verifique sua internet e tente novamente.'; erro.style.display = 'block'; }
+    finally{ b.disabled = false; b.textContent = 'Rastrear'; }
+  });
+}
+</script>
+</body>
+</html>
