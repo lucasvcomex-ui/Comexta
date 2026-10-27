@@ -4729,6 +4729,25 @@ function trkPedidoHtml({ v, achou }){
     <div class="membro-sub">${itens.length} produto${itens.length===1 ? '' : 's'}${porProc.size ? ` em ${porProc.size} processo${porProc.size===1 ? '' : 's'}` : ''}${estoque.length ? ' · ' + estoque.length + ' em estoque' : ''}${sem.length ? ' · ' + sem.length + ' sem vínculo' : ''}</div>
     ${[...porProc.entries()].map(blocoProc).join('')}${blocoEstoque}${blocoSem}${!itens.length ? '<div class="trk-sub">Este pedido não tem produtos.</div>' : ''}</div>`;
 }
+// Diagnóstico (administrador): mostra, passo a passo, por que o Rastreio de Pedido público acharia ou não um pedido
+function trkDiagnosticoHtml(){
+  if(!(usuarioAtual && usuarioAtual.papel==='admin')) return '';
+  const d = state.trkDiag || {}, r = d.dados;
+  const lista = r ? Object.entries(r.listas||{}).map(([k, n])=>`<div class="trk-linha-info"><b>${esc(k)}</b><span>${n===null ? '<span class="badge badge-red">não existe no servidor</span>' : n + ' registro' + (n===1 ? '' : 's')}</span></div>`).join('') : '';
+  return `<div class="card trk-diag"><div class="section-title" style="margin-bottom:6px;">Diagnóstico do Rastreio de Pedido <span class="membro-sub">(só administrador)</span></div>
+    <p class="hint" style="margin:0 0 12px; color:var(--ink-soft); font-size:12.5px;">Digite os mesmos dados que o cliente digita na tela de login. O teste diz se o pedido seria encontrado e, se não, o que está faltando.</p>
+    <div class="field-row" style="grid-template-columns:1fr 1fr auto; align-items:flex-end;">
+      <div class="field"><label>Referência do pedido</label><input data-trk-diag="ref" value="${esc(d.ref||'')}" placeholder="Ex.: PED-0001 ou nº do pedido do cliente" autocomplete="off"></div>
+      <div class="field"><label>CNPJ / CPF do cliente</label><input data-trk-diag="cnpj" value="${esc(d.cnpj||'')}" placeholder="00.000.000/0000-00" autocomplete="off"></div>
+      <div class="btn-row"><button class="btn btn-primary" data-action="trk-diag">${d.carregando ? 'Testando…' : 'Testar'}</button></div></div>
+    ${d.erro ? `<div class="trk-cancelado" style="margin-top:12px;">${esc(d.erro)}</div>` : ''}
+    ${r ? `<div class="trk-proc-bloco"><div class="trk-proc-topo"><span class="badge ${/^Tudo certo/.test(r.motivo) ? 'badge-green' : 'badge-amber'}">${/^Tudo certo/.test(r.motivo) ? 'Pedido seria encontrado' : 'Motivo'}</span></div><p style="margin:10px 0 0; line-height:1.5;">${esc(r.motivo)}</p>
+      <div class="trk-sub">Chave do servidor</div><div class="trk-linha-info"><b>${esc((r.chave||{}).tipo||'')}</b></div>
+      <div class="trk-sub">Listas gravadas no servidor</div><div class="trk-lista">${lista}</div>
+      <div class="trk-sub">CNPJ informado</div><div class="trk-linha-info"><span>Cadastros com esse CNPJ: <b>${r.cnpj.cadastrosComEsseCnpj}</b></span><span>Como Cliente: <b>${r.cnpj.comTipoCliente}</b></span>${r.cnpj.nomes.length ? `<span class="membro-sub">${r.cnpj.nomes.map(esc).join(', ')}</span>` : ''}</div>
+      <div class="trk-sub">Pedidos</div><div class="trk-linha-info"><span>No servidor: <b>${r.pedidos.total}</b></span><span>Do cliente: <b>${r.pedidos.doCliente}</b></span><span>Com essa referência: <b>${r.pedidos.comEssaReferencia}</b></span></div>
+      ${r.pedidos.referenciasDoCliente.length ? `<div class="trk-sub">Referências dos pedidos desse cliente</div><div class="trk-lista">${r.pedidos.referenciasDoCliente.map(x=>`<div class="trk-linha-info">${esc(x)}</div>`).join('')}</div>` : ''}</div>` : ''}</div>`;
+}
 function renderTracking(){
   const t = state.trk = state.trk || { q:'' }, r = trackingBuscar(t.q), total = r.processos.length + r.pedidos.length;
   const msg = !String(t.q||'').trim() ? '' : normTrk(t.q).length<3 ? '<div class="empty"><h3>Digite pelo menos 3 caracteres</h3></div>' : !total ? `<div class="empty">${ICONS.search || ''}<h3>Nada encontrado para "${esc(t.q)}"</h3><p>Confira o número do Booking, MBL, HBL, MAWB, HAWB ou do pedido do cliente.</p></div>` : '';
@@ -4741,11 +4760,27 @@ function renderTracking(){
     <div class="btn-row"><button class="btn btn-primary" data-action="trk-buscar">${ICONS.search || ''} Rastrear</button><button class="btn btn-ghost" data-action="trk-limpar">Limpar</button></div></div></div>
   ${msg}
   ${r.pedidos.length ? `<div class="trk-bloco">${r.pedidos.map(trkPedidoHtml).join('')}</div>` : ''}
-  ${r.processos.length ? `<div class="trk-bloco">${r.processos.map(trkProcessoHtml).join('')}</div>` : ''}`;
+  ${r.processos.length ? `<div class="trk-bloco">${r.processos.map(trkProcessoHtml).join('')}</div>` : ''}
+  ${trkDiagnosticoHtml()}`;
 }
 function acaoTracking(cmd, a1){
   if(cmd==='trk-buscar'){ const el = document.querySelector('[data-trk-q]'); state.trk = { q:el ? el.value : (state.trk||{}).q || '' }; renderApp(); return true; }
   if(cmd==='trk-limpar'){ state.trk = { q:'' }; renderApp(); return true; }
+  if(cmd==='trk-diag'){
+    if(!(usuarioAtual && usuarioAtual.papel==='admin')) return true;
+    const v = k => { const el = document.querySelector(`[data-trk-diag="${k}"]`); return el ? el.value : ''; };
+    const ref = v('ref'), cnpj = v('cnpj'); state.trkDiag = { ref, cnpj, carregando:true }; renderApp();
+    (async()=>{
+      try{
+        const { data } = await sb.auth.getSession(), token = data && data.session ? data.session.access_token : '';
+        const resp = await fetch('/api/rastreio-pedido', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + token }, body:JSON.stringify({ diagnostico:true, referencia:ref, cnpj }) });
+        let j = {}; try{ j = await resp.json(); }catch(e){}
+        state.trkDiag = j && j.ok ? { ref, cnpj, dados:j } : { ref, cnpj, erro: (j && j.mensagem) || (resp.status===404 ? 'A função /api/rastreio-pedido não está publicada (erro 404). Rode o publicar.bat e confira o deploy na Vercel.' : 'A função não respondeu (código ' + resp.status + ').') };
+      }catch(e){ state.trkDiag = { ref, cnpj, erro:'Não foi possível chamar a função: ' + (e && e.message ? e.message : e) }; }
+      renderApp();
+    })();
+    return true;
+  }
   if(cmd==='trk-buscar-ref'){ state.trk = { q:a1 }; renderApp(); try{ window.scrollTo(0, 0); }catch(e){} return true; }
   return false;
 }
@@ -13124,7 +13159,7 @@ function renderHome(){
     </div>
   </div>
 
-  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.47 · cópias locais sobem ao servidor · build 15/10/2026</span></div>
+  <div class="footer-note"><span>Comexta · valores de referência, confira sempre a legislação aduaneira vigente.</span><span>v2.48 · diagnóstico do rastreio de pedido · build 15/10/2026</span></div>
   `;
 }
 
